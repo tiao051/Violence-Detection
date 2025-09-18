@@ -224,7 +224,7 @@ Historical Video Playback + Pre-processed Overlay
 }
 ```
 
-## 🔄 Pipeline Flow Example
+## Pipeline Flow Example
 
 ```
 Frame Sequence: 0 → 5 → 10 → 15
