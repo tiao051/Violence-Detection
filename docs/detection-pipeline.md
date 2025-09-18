@@ -15,7 +15,7 @@ The core preprocessing steps ensure that raw frames are aligned with the model�
 
 - **Resize**  
   - Scale input image to the target model size.  
-  - Example: `640x640` (YOLOv5) or `416x416` (MobileNet).
+  - Example: `640x640` (YOLO) or `416x416` (MobileNet).
 
 - **Normalize**  
   - Convert pixel values from `0–255` range to `0–1`.  
