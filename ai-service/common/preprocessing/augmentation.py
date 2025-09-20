@@ -228,3 +228,34 @@ class Normalize:
         
         data["image"] = normalized_image
         return data
+
+
+class ToCHWImage:
+    """Convert HWC image to CHW image (for YOLO models)"""
+    
+    def __init__(self):
+        pass
+    
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Args:
+            data (dict): {"image": np.ndarray (HWC), ...}
+        Returns:
+            dict: {"image": np.ndarray (CHW), ...}
+        """
+        img = data["image"]
+        
+        # Handle different input types
+        if hasattr(img, 'transpose'):  # NumPy array or similar
+            if len(img.shape) == 3:
+                # Convert HWC to CHW
+                data["image"] = img.transpose((2, 0, 1))
+            elif len(img.shape) == 2:
+                # Grayscale: add channel dimension and move to front
+                data["image"] = img[np.newaxis, :, :]  # (1, H, W)
+            else:
+                raise ValueError(f"Unsupported image shape: {img.shape}")
+        else:
+            raise ValueError(f"Unsupported image type: {type(img)}")
+        
+        return data
