@@ -175,3 +175,56 @@ class Resize:
         }
         
         return resized_image, metadata
+
+
+class Normalize:
+    """Normalize image for different models"""
+    
+    # Constants for PyTorch ImageNet normalization
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]  # RGB
+    IMAGENET_STD = [0.229, 0.224, 0.225]   # RGB
+    
+    def __init__(self, model_type="yolo", mean=None, std=None):
+        """
+        Args:
+            model_type (str): "yolo" or "ssd"
+            mean (list): Custom mean values, overrides default
+            std (list): Custom std values, overrides default
+        """
+        self.model_type = model_type.lower()
+        
+        if "yolo" in self.model_type:
+            # YOLO: Simple /255.0 normalization
+            self.mean = None
+            self.std = None
+            self.scale = 1.0 / 255.0
+        elif "ssd" in self.model_type:
+            # SSD: PyTorch ImageNet normalization
+            self.mean = np.array(mean if mean is not None else self.IMAGENET_MEAN, dtype=np.float32)
+            self.std = np.array(std if std is not None else self.IMAGENET_STD, dtype=np.float32)
+            self.scale = 1.0 / 255.0
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
+    
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Args:
+            data (dict): {"image": np.ndarray (uint8), ...}
+        Returns:
+            dict: {"image": np.ndarray (float32), ...}
+        """
+        image = data["image"]
+        
+        # Convert to float32 and scale to [0, 1]
+        normalized_image = image.astype(np.float32) * self.scale
+        
+        if "yolo" in self.model_type:
+            # YOLO: Just scale to [0, 1]
+            pass  # Already done above
+        elif "ssd" in self.model_type:
+            # SSD: Apply ImageNet normalization
+            # Formula: (pixel/255.0 - mean) / std
+            normalized_image = (normalized_image - self.mean) / self.std
+        
+        data["image"] = normalized_image
+        return data
