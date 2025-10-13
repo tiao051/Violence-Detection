@@ -147,8 +147,7 @@ The system follows a microservices architecture with Docker containerization:
 
 ## Features
 
-<details open>
-<summary><b>AI Detection</b></summary>
+### AI Detection
 
 **Real-time Processing**: Stream processing with low latency (<2s)
 
@@ -166,10 +165,7 @@ The system follows a microservices architecture with Docker containerization:
 - False Positive Reduction: Multi-stage validation
 - Continuous Learning: Improve from user feedback
 
-</details>
-
-<details>
-<summary><b>Mobile Application (Flutter)</b></summary>
+### Mobile Application (Flutter)
 
 | Feature | Description |
 |---------|-------------|
@@ -181,10 +177,7 @@ The system follows a microservices architecture with Docker containerization:
 | **Offline Mode** | Cache data when connection lost |
 | **Multi-language** | Vietnamese + English |
 
-</details>
-
-<details>
-<summary><b>Web Dashboard (React)</b></summary>
+### Web Dashboard (React)
 
 **Core Features**:
 - Real-time Dashboard: Grid view for multiple cameras
@@ -195,10 +188,7 @@ The system follows a microservices architecture with Docker containerization:
 - Report Generation: Export PDF/Excel reports
 - Map Integration: Display camera locations on map
 
-</details>
-
-<details>
-<summary><b>Advanced Features</b></summary>
+### Advanced Features
 
 ```mermaid
 graph LR
@@ -217,8 +207,6 @@ graph LR
 - **Face Blurring**: Automatic privacy protection
 - **Audio Analysis**: Detect screams, gunshots
 - **Integration APIs**: Webhook, REST API for third-party systems
-
-</details>
 
 ---
 
@@ -296,47 +284,6 @@ Video:       WebRTC
 
 ## AI Model
 
-### Architecture
-
-> **Evolution**: From multi-phase pipeline to unified approach for 3x better performance
-
-<table>
-<tr>
-<td width="50%">
-
-**❌ Previous Architecture (Deprecated)**
-```
-Phase 1: Object Detection
-   ↓
-Phase 2: Feature Recognition  
-   ↓
-Phase 3: Violence Classification
-```
-**Issues**: 
-- 3x latency
-- 3x memory usage
-- Complex pipeline management
-
-</td>
-<td width="50%">
-
-**✅ Current Architecture (Unified)**
-```
-Single fine-tuned YOLO model
-   ↓
-Detection + Classification
-   ↓
-One-pass inference
-```
-**Benefits**:
-- 3x faster processing
-- 66% less memory
-- Simplified deployment
-
-</td>
-</tr>
-</table>
-
 ### Pipeline
 
 ```mermaid
@@ -347,11 +294,6 @@ graph LR
     D --> E[Alert]
     style C fill:#EE4C2C
     style E fill:#FF6B6B
-```
-
-**Simplified Flow**:
-```
-Input Video → Frame Extraction → YOLO Inference → Postprocessing → Alert
 ```
 
 ### Training Datasets
