@@ -2,24 +2,6 @@
 
 > AI-powered real-time violence detection system with web dashboard and mobile application
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Flutter](https://img.shields.io/badge/flutter-3.0%2B-blue.svg)](https://flutter.dev/)
-[![React](https://img.shields.io/badge/react-18.0%2B-blue.svg)](https://reactjs.org/)
-
-## Table of Contents
-
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Features](#features)
-- [Technology Stack](#technology-stack)
-- [AI Model](#ai-model)
-- [API Documentation](#api-documentation)
-- [Security](#security)
-- [Monitoring & Analytics](#monitoring--analytics)
-- [Documentation](#documentation)
-- [License](#license)
-
 ## Overview
 
 This project is a comprehensive violence detection system that leverages AI to identify violent behavior in real-time video streams. The system provides:
@@ -50,32 +32,35 @@ This project is a comprehensive violence detection system that leverages AI to i
 The system follows a microservices architecture with Docker containerization:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        INPUT SOURCES                             │
-│  IP Cameras (RTSP/ONVIF) │ Webcams │ File Upload                 │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────────────┐
-│                   MEDIA PROCESSING LAYER                         │
-│  FFmpeg Service │ Streaming Server │ MinIO Storage              │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────────────┐
-│                    AI DETECTION SERVICE (GPU)                    │
-│  YOLO Fine-tuned Model │ OpenCV │ TensorRT/ONNX Runtime         │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────────────┐
-│                      BACKEND SERVICES                            │
-│  Auth │ Kafka/RabbitMQ │ PostgreSQL/MongoDB/Redis               │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-┌───────────────┐          ┌──────────────────┐
-│  MOBILE       │          │  WEB             │
-│  Flutter App  │          │  React Dashboard │
-└───────────────┘          └──────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         INPUT SOURCES                            │
+│     IP Cameras (RTSP/ONVIF) │ Webcams │ File Upload              │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    MEDIA PROCESSING LAYER                        │
+│        FFmpeg Service │ Streaming Server │ MinIO Storage         │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                   AI DETECTION SERVICE (GPU)                     │
+│     YOLO Fine-tuned Model │ OpenCV │ TensorRT/ONNX Runtime       │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       BACKEND SERVICES                           │
+│       Auth │ Kafka/RabbitMQ │ PostgreSQL/MongoDB/Redis           │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                ┌──────────────┴──────────────┐
+                ▼                             ▼
+        ┌───────────────┐            ┌──────────────────┐
+        │    MOBILE     │            │       WEB        │
+        │  Flutter App  │            │ React Dashboard  │
+        └───────────────┘            └──────────────────┘
 ```
 
 ### Components
@@ -215,11 +200,6 @@ The system uses a **unified YOLO-based approach** for violence detection, replac
 
 **Current Architecture (Unified):**
 - **Single fine-tuned YOLO model** handles detection and classification in one pass
-- **Benefits**: 
-  - 3x faster processing
-  - 66% less memory usage
-  - Simpler deployment
-  - Easier maintenance
 
 ### Pipeline
 
@@ -247,69 +227,6 @@ Input Video → Frame Extraction → YOLO Inference → Postprocessing → Alert
 
 See [`ai-service/README.md`](ai-service/README.md) for detailed AI service documentation.
 
-## API Documentation
-
-### REST API
-
-Base URL: `http://localhost:8000/api/v1`
-
-#### Authentication
-```http
-POST /auth/login
-POST /auth/register
-POST /auth/refresh
-```
-
-#### Video Streams
-```http
-GET    /streams              # List all streams
-POST   /streams              # Add new stream
-GET    /streams/{id}         # Get stream details
-PUT    /streams/{id}         # Update stream
-DELETE /streams/{id}         # Delete stream
-```
-
-#### Violence Events
-```http
-GET    /events               # List violence events
-GET    /events/{id}          # Get event details
-PUT    /events/{id}/status   # Update event status
-GET    /events/stats         # Get statistics
-```
-
-#### Alerts
-```http
-GET    /alerts               # List alerts
-POST   /alerts/acknowledge   # Acknowledge alert
-GET    /alerts/active        # Get active alerts
-```
-
-### WebSocket API
-
-```javascript
-// Connect to WebSocket
-const ws = new WebSocket('ws://localhost:8000/ws');
-
-// Listen for violence alerts
-ws.onmessage = (event) => {
-  const alert = JSON.parse(event.data);
-  console.log('Violence detected:', alert);
-};
-```
-
-### Webhook Integration
-
-Configure webhooks to receive violence alerts:
-
-```json
-POST /webhooks/configure
-{
-  "url": "https://your-server.com/violence-alert",
-  "events": ["violence_detected", "weapon_detected"],
-  "secret": "your-secret-key"
-}
-```
-
 ## Security
 
 - **Authentication**: JWT-based authentication with refresh tokens
@@ -326,26 +243,6 @@ POST /webhooks/configure
 - **Business Metrics**: Total alerts, response time, resolution rate
 - **Dashboards**: Grafana dashboards for real-time monitoring
 - **Alerts**: Prometheus alerting for system issues
-
-## Testing
-
-```bash
-# AI Service tests
-cd ai-service
-pytest tests/
-
-# Backend tests
-cd backend
-pytest tests/
-
-# Frontend tests
-cd admin-dashboard
-npm test
-
-# Mobile app tests
-cd flutter-app
-flutter test
-```
 
 ## Documentation
 
@@ -365,13 +262,9 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## Authors
 
-- **tiao051** - *Initial work* - [GitHub](https://github.com/tiao051)
+- **tiao051** - *Initial work* -
 
 ## Acknowledgments
 
@@ -380,12 +273,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - OpenCV community
 - Flutter and React communities
 
-## Support
-
-For issues and questions:
-- Create an issue: [GitHub Issues](https://github.com/tiao051/violence-detection/issues)
-- Email: [your-email@example.com]
-
----
-
-**Note**: This system is designed for security and safety purposes. Please ensure compliance with local privacy laws and regulations when deploying surveillance systems.
