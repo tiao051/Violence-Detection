@@ -26,6 +26,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
 
 # Virtual Environment
 venv/
@@ -94,3 +95,9 @@ build/
 results/
 outputs/
 checkpoints/
+/training_runs/
+/evaluation_results/
+
+# Datasets
+/datasets/
+/test-data/
