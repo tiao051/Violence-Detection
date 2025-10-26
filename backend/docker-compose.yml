@@ -1,5 +1,3 @@
-version: '3.8'
-
 name: violence-detection
 
 services:
@@ -8,9 +6,9 @@ services:
     image: postgres:16-alpine
     container_name: violence-detection-db
     environment:
-      POSTGRES_DB: violence_detection
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-violence_detection}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -40,7 +38,6 @@ services:
     networks:
       - backend-network
 
-  # Backend API Service
   backend:
     build:
       context: .
@@ -48,14 +45,14 @@ services:
     container_name: violence-detection-backend
     environment:
       # Database
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/violence_detection
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-violence_detection}
       
       # Redis
       REDIS_URL: redis://redis:6379/0
       
       # Application
-      APP_ENV: development
-      DEBUG: "true"
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-true}
       API_V1_PREFIX: /api/v1
       
       # Server
