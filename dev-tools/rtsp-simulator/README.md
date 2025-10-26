@@ -1,102 +1,75 @@
 # RTSP Simulator
 
-RTSP server with 4 specialized cameras for comprehensive violence detection testing.
+RTSP server with 4 cameras for violence detection testing.
 
 ## Camera Setup
 
-| Camera | Purpose | Input Source | RTSP URL |
-|--------|---------|--------------|----------|
-| **Camera 1** | Violence Detection | Video file (dataset sample) | `rtsp://localhost:8554/camera1` |
-| **Camera 2** | False Positive Test | Video file (normal activity) | `rtsp://localhost:8554/camera2` |
-| **Camera 3** | Live Stream Test | Webcam (continuous data) | `rtsp://localhost:8554/camera3` |
-| **Camera 4** | Custom Dataset Test | Video file (your dataset) | `rtsp://localhost:8554/camera4` |
+| Camera | Input File | RTSP URL |
+|--------|------------|----------|
+| **Camera 1** | `violence_1.gif` | `rtsp://localhost:8554/cam1` |
+| **Camera 2** | `violence_2.gif` | `rtsp://localhost:8554/cam2` |
+| **Camera 3** | `no_violence_1.gif` | `rtsp://localhost:8554/cam3` |
+| **Camera 4** | `violence_3.gif` | `rtsp://localhost:8554/cam4` |
 
-## Setup Instructions
+## Quick Start
 
-### Step 1: Prepare Video Files
+### 1. Place video files in `test-videos/` folder:
+- `violence_1.gif`
+- `violence_2.gif`
+- `no_violence_1.gif`
+- `violence_3.gif`
 
-Place your videos in `test-videos/` directory:
-- `violence_sample.mp4` - Violence detection dataset sample
-- `normal_activity.mp4` - Normal human activities  
-- `custom_dataset.mp4` - Your custom dataset
-
-### Step 2: Start RTSP Server and Cameras
-
+### 2. Start cameras:
 ```bash
-# Start all services
 docker-compose up -d
+```
 
-# Check status
-docker-compose ps
+### 3. View cameras:
+```bash
+# View with ffplay
+ffplay rtsp://localhost:8554/cam1 -rtsp_transport tcp
+ffplay rtsp://localhost:8554/cam2 -rtsp_transport tcp
+ffplay rtsp://localhost:8554/cam3 -rtsp_transport tcp
+ffplay rtsp://localhost:8554/cam4 -rtsp_transport tcp
 
-# View logs
-docker-compose logs -f
+# Or use VLC
+vlc rtsp://localhost:8554/cam1
+```
 
-# Stop all
+### 4. Stop cameras:
+```bash
 docker-compose down
 ```
 
-**Note**: Camera 3 (webcam) currently shows test pattern. For webcam streaming on Windows, you'll need to implement your own solution as Docker Desktop doesn't support direct webcam access.
-
-## Testing
-
-### Test with VLC
-
-```bash
-vlc rtsp://localhost:8554/camera1
-```
-
-### Test with FFplay
-
-```bash
-ffplay rtsp://localhost:8554/camera1
-```
-
-### Test with Python Script
-
-```bash
-python test-cameras.py
-```
-
-This will test all 4 cameras and show the results.
-
-## Alternative Protocols
-
-MediaMTX also provides:
-- **HLS**: `http://localhost:8888/camera1/index.m3u8`
-- **RTMP**: `rtmp://localhost:1935/camera1`
-
 ## Troubleshooting
 
-### Cameras not streaming
-
+### Check status
 ```bash
-# Check logs
-docker-compose logs
+docker-compose ps
+```
 
-# Restart specific camera
+### View logs
+```bash
+docker-compose logs -f
+```
+
+### Restart specific camera
+```bash
 docker-compose restart camera-1
 ```
 
 ### Port already in use
-
-Edit `docker-compose.yml` and change port 8554 to another port:
-
+Edit `docker-compose.yml`:
 ```yaml
 ports:
-  - "8555:8554"  # Use 8555 instead
+  - "8555:8554"  # Change to 8555
 ```
-
-Then use: `rtsp://localhost:8555/camera1`
-
-### High CPU usage
-
-Use real video files instead of test patterns - they're less CPU intensive when looping.
+Then use: `rtsp://localhost:8555/cam1`
 
 ## Specifications
 
-- **Resolution**: 1280x720
+- **Resolution**: 640x360
 - **Frame rate**: 25 fps
-- **Bitrate**: 2000 kbps
 - **Codec**: H.264
+- **Transport**: TCP
 

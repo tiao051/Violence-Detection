@@ -10,9 +10,9 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-1
     command: >
-      -re -stream_loop -1 -i /videos/violence_sample.mp4
-      -vf "drawtext=text='CAM1 - VIOLENCE - %{localtime}':x=10:y=10:fontsize=20:fontcolor=white:box=1"
-      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0
+      -re -stream_loop -1 -i /videos/violence_1.gif
+      -vf "scale=640:360"
+      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0 -r 25
       -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
       - ./test-videos:/videos
@@ -23,9 +23,9 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-2
     command: >
-      -re -stream_loop -1 -i /videos/normal_activity.mp4
-      -vf "drawtext=text='CAM2 - NORMAL - %{localtime}':x=10:y=10:fontsize=20:fontcolor=white:box=1"
-      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0
+      -re -stream_loop -1 -i /videos/violence_2.gif
+      -vf "scale=640:360"
+      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0 -r 25
       -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
       - ./test-videos:/videos
@@ -36,10 +36,25 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-3
     command: >
-      -re -f lavfi -i testsrc=size=1280x720:rate=25
-      -vf "drawtext=text='CAM3 - TESTSRC - %{localtime}':x=10:y=10:fontsize=20:fontcolor=white:box=1"
-      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0
+      -re -stream_loop -1 -i /videos/no_violence_1.gif
+      -vf "scale=640:360"
+      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0 -r 25
       -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
+    volumes:
+      - ./test-videos:/videos
+    depends_on: [rtsp-server]
+    networks: [rtsp-network]
+
+  camera-4:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-4
+    command: >
+      -re -stream_loop -1 -i /videos/violence_3.gif
+      -vf "scale=640:360"
+      -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -bf 0 -r 25
+      -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
+    volumes:
+      - ./test-videos:/videos
     depends_on: [rtsp-server]
     networks: [rtsp-network]
 
