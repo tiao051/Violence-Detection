@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # RTSP Server
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-server
+    ports:
+      - "8554:8554"    # RTSP
+      - "1935:1935"    # RTMP (optional)
+      - "8888:8888"    # HLS (optional)
+    restart: no
+    networks:
+      - rtsp-network
+
+  # Camera 1 - Entrance
+  camera-1:
+    image: linuxserver/ffmpeg:latest
+    container_name: camera-1-entrance
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=25
+      -vf "drawtext=text='Camera 1 - Entrance - %{localtime}':x=10:y=10:fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5"
+      -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2000k
+      -f rtsp rtsp://rtsp-server:8554/camera1
+    depends_on:
+      - rtsp-server
+    restart: no
+    networks:
+      - rtsp-network
+
+  # Camera 2 - Parking Lot
+  camera-2:
+    image: linuxserver/ffmpeg:latest
+    container_name: camera-2-parking
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=25
+      -vf "drawtext=text='Camera 2 - Parking Lot - %{localtime}':x=10:y=10:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5"
+      -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2000k
+      -f rtsp rtsp://rtsp-server:8554/camera2
+    depends_on:
+      - rtsp-server
+    restart: no
+    networks:
+      - rtsp-network
+
+  # Camera 3 - Hallway
+  camera-3:
+    image: linuxserver/ffmpeg:latest
+    container_name: camera-3-hallway
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=25
+      -vf "drawtext=text='Camera 3 - Hallway - %{localtime}':x=10:y=10:fontsize=24:fontcolor=cyan:box=1:boxcolor=black@0.5"
+      -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2000k
+      -f rtsp rtsp://rtsp-server:8554/camera3
+    depends_on:
+      - rtsp-server
+    restart: no
+    networks:
+      - rtsp-network
+
+  # Camera 4 - Storage Room
+  camera-4:
+    image: linuxserver/ffmpeg:latest
+    container_name: camera-4-storage
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=25
+      -vf "drawtext=text='Camera 4 - Storage Room - %{localtime}':x=10:y=10:fontsize=24:fontcolor=green:box=1:boxcolor=black@0.5"
+      -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2000k
+      -f rtsp rtsp://rtsp-server:8554/camera4
+    depends_on:
+      - rtsp-server
+    restart: no
+    networks:
+      - rtsp-network
+
+networks:
+  rtsp-network:
+    driver: bridge

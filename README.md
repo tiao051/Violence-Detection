@@ -388,6 +388,7 @@ FPS:                10-30 fps (hardware dependent)
 | [AI Pipeline Details](docs/ai-pipeline.md) | AI model and pipeline |
 | [Detection Pipeline](docs/detection-pipeline.md) | Violence detection workflow |
 | [AI Service README](ai-service/README.md) | AI service implementation |
+| [RTSP Simulator](dev-tools/rtsp-simulator/README.md) | Test RTSP cameras for development |
 | [API Documentation](http://localhost:8000/docs) | Interactive API docs (when running) |
 
 ---
