@@ -1,11 +1,29 @@
 # RTSP Simulator
 
-Simple RTSP server with 4 virtual cameras for testing the violence detection system.
+RTSP server with 4 specialized cameras for comprehensive violence detection testing.
 
-## Quick Start
+## Camera Setup
+
+| Camera | Purpose | Input Source | RTSP URL |
+|--------|---------|--------------|----------|
+| **Camera 1** | Violence Detection | Video file (dataset sample) | `rtsp://localhost:8554/camera1` |
+| **Camera 2** | False Positive Test | Video file (normal activity) | `rtsp://localhost:8554/camera2` |
+| **Camera 3** | Live Stream Test | Webcam (continuous data) | `rtsp://localhost:8554/camera3` |
+| **Camera 4** | Custom Dataset Test | Video file (your dataset) | `rtsp://localhost:8554/camera4` |
+
+## Setup Instructions
+
+### Step 1: Prepare Video Files
+
+Place your videos in `test-videos/` directory:
+- `violence_sample.mp4` - Violence detection dataset sample
+- `normal_activity.mp4` - Normal human activities  
+- `custom_dataset.mp4` - Your custom dataset
+
+### Step 2: Start RTSP Server and Cameras
 
 ```bash
-# Start RTSP server and 4 cameras
+# Start all services
 docker-compose up -d
 
 # Check status
@@ -18,14 +36,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## Camera URLs
-
-| Camera | Location | RTSP URL |
-|--------|----------|----------|
-| Camera 1 | Entrance | `rtsp://localhost:8554/camera1` |
-| Camera 2 | Parking Lot | `rtsp://localhost:8554/camera2` |
-| Camera 3 | Hallway | `rtsp://localhost:8554/camera3` |
-| Camera 4 | Storage Room | `rtsp://localhost:8554/camera4` |
+**Note**: Camera 3 (webcam) currently shows test pattern. For webcam streaming on Windows, you'll need to implement your own solution as Docker Desktop doesn't support direct webcam access.
 
 ## Testing
 
@@ -52,27 +63,8 @@ This will test all 4 cameras and show the results.
 ## Alternative Protocols
 
 MediaMTX also provides:
-
 - **HLS**: `http://localhost:8888/camera1/index.m3u8`
 - **RTMP**: `rtmp://localhost:1935/camera1`
-
-## Using Custom Video Files
-
-To use real video files instead of test patterns:
-
-1. Create a `test-videos` folder
-2. Place your video files there (e.g., `entrance.mp4`)
-3. Modify `docker-compose.yml`:
-
-```yaml
-camera-1:
-  image: linuxserver/ffmpeg:latest
-  command: >
-    -re -stream_loop -1 -i /videos/entrance.mp4
-    -c:v libx264 -preset ultrafast -f rtsp rtsp://rtsp-server:8554/camera1
-  volumes:
-    - ./test-videos:/videos
-```
 
 ## Troubleshooting
 
@@ -99,11 +91,7 @@ Then use: `rtsp://localhost:8555/camera1`
 
 ### High CPU usage
 
-The test pattern encoding can use significant CPU. To reduce:
-
-1. Lower the resolution in `docker-compose.yml`
-2. Reduce frame rate
-3. Or use real video files which are less CPU intensive when looping
+Use real video files instead of test patterns - they're less CPU intensive when looping.
 
 ## Specifications
 
@@ -111,7 +99,4 @@ The test pattern encoding can use significant CPU. To reduce:
 - **Frame rate**: 25 fps
 - **Bitrate**: 2000 kbps
 - **Codec**: H.264
-- **Container**: RTSP
-
-All settings can be adjusted in `docker-compose.yml` as needed.
 
