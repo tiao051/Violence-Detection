@@ -98,6 +98,3 @@ checkpoints/
 # Docker volumes and data
 docker-data/
 *.volume/
-
-# Dev tools - test videos (if large)
-dev-tools/rtsp-simulator/test-videos/
