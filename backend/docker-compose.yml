@@ -19,9 +19,9 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend-network
+      - app-network
 
-  # Redis Cache & Message Queue
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: violence-detection-redis
@@ -36,26 +36,21 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend-network
+      - app-network
 
+  # Backend
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: violence-detection-backend
     environment:
-      # Database
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-violence_detection}
-      
-      # Redis
       REDIS_URL: redis://redis:6379/0
-      
-      # Application
+      RTSP_BASE_URL: rtsp://rtsp-server:8554
       APP_ENV: ${APP_ENV:-development}
       DEBUG: ${DEBUG:-true}
       API_V1_PREFIX: /api/v1
-      
-      # Server
       HOST: 0.0.0.0
       PORT: 8000
     ports:
@@ -68,16 +63,76 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - backend-network
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
+
+  # RTSP Server
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-server
+    ports:
+      - "8554:8554"
+    networks:
+      - app-network
+
+  # Cameras (FFmpeg)
+  camera-1:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-1
+    command: >
+      -re -stream_loop -1 -i /videos/violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-2:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-2
+    command: >
+      -re -stream_loop -1 -i /videos/violence_2.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-3:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-3
+    command: >
+      -re -stream_loop -1 -i /videos/non_violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-4:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-4
+    command: >
+      -re -stream_loop -1 -i /videos/violence_3.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
-
-networks:
-  backend-network:
-    driver: bridge
