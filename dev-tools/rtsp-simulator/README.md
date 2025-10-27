@@ -32,10 +32,6 @@ ffplay rtsp://localhost:8554/cam2 -rtsp_transport tcp
 ffplay rtsp://localhost:8554/cam3 -rtsp_transport tcp
 ffplay rtsp://localhost:8554/cam4 -rtsp_transport tcp
 
-# Or use VLC
-vlc rtsp://localhost:8554/cam1
-```
-
 ### 4. Stop cameras:
 ```bash
 docker-compose down
