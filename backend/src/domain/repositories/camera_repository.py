@@ -1,9 +1,16 @@
-"""Camera Repository Interface"""
+"""Camera Repository Interface
+
+NOTE: This is an interface/abstract contract. 
+No concrete implementation has been created yet.
+To use this, create a concrete implementation (e.g., DatabaseCameraRepository, RedisRepository)
+and implement the abstract methods.
+"""
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from ..entities import Camera
 
 
+"""
 class ICameraRepository(ABC):
     """
     Camera Repository Interface
@@ -41,3 +48,4 @@ class ICameraRepository(ABC):
     async def exists(self, camera_id: str) -> bool:
         """Check if camera exists"""
         pass
+"""

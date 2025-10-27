@@ -43,22 +43,3 @@ class Camera:
         
         if not self.location or len(self.location.strip()) == 0:
             raise ValueError("Camera location cannot be empty")
-    
-    def activate(self) -> None:
-        """Activate camera"""
-        self.status = CameraStatus.ACTIVE
-        self.updated_at = datetime.utcnow()
-    
-    def deactivate(self) -> None:
-        """Deactivate camera"""
-        self.status = CameraStatus.INACTIVE
-        self.updated_at = datetime.utcnow()
-    
-    def mark_error(self) -> None:
-        """Mark camera as error state"""
-        self.status = CameraStatus.ERROR
-        self.updated_at = datetime.utcnow()
-    
-    def is_operational(self) -> bool:
-        """Check if camera is operational"""
-        return self.status == CameraStatus.ACTIVE
