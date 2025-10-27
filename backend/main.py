@@ -53,7 +53,7 @@ async def startup() -> None:
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
-        logger.info("Redis connected ✓")
+        logger.info("Redis connected")
         
         # Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
@@ -80,7 +80,7 @@ async def startup() -> None:
                 
                 logger.info(f"Camera worker started: {camera_id}")
             
-            logger.info(f"All {len(camera_workers)} camera workers started ✓")
+            logger.info(f"All {len(camera_workers)} camera workers started")
         else:
             logger.warning("RTSP is disabled")
     
@@ -103,13 +103,13 @@ async def shutdown() -> None:
                 stats = worker.get_stats()
                 logger.info(f"Worker stats: {worker.camera_id} - {stats}")
             
-            logger.info("All camera workers stopped ✓")
+            logger.info("All camera workers stopped")
         
         # Close Redis connection
         if redis_client:
             logger.info("Closing Redis connection...")
             await redis_client.close()
-            logger.info("Redis closed ✓")
+            logger.info("Redis closed")
     
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}", exc_info=True)

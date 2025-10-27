@@ -1,9 +1,16 @@
-"""Stream Repository Interface"""
+"""Stream Repository Interface
+
+NOTE: This is an interface/abstract contract. 
+No concrete implementation has been created yet.
+To use this, create a concrete implementation (e.g., DatabaseStreamRepository, RedisRepository)
+and implement the abstract methods.
+"""
 from abc import ABC, abstractmethod
 from typing import Optional, List
 from ..entities import StreamSession
 
 
+"""
 class IStreamRepository(ABC):
     """
     Stream Repository Interface
@@ -35,3 +42,4 @@ class IStreamRepository(ABC):
     async def get_sessions_by_camera(self, camera_id: str) -> List[StreamSession]:
         """Get all sessions for a camera"""
         pass
+"""

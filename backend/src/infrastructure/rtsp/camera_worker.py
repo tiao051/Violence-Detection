@@ -10,7 +10,6 @@ from typing import Optional, Dict, Any
 import cv2
 
 from .rtsp_client import RTSPClient
-from .frame_processor import FrameProcessor
 from ..memory import get_frame_buffer
 
 logger = logging.getLogger(__name__)

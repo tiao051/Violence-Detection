@@ -1,4 +1,11 @@
-"""Stream Use Cases - Streaming business logic"""
+"""Stream Use Cases - Streaming business logic
+
+NOTE: These use cases are not currently connected to any API endpoints.
+They are kept for potential future use or reference.
+If you need to use them, implement the corresponding API routers in src/presentation/api/
+
+To enable these use cases, uncomment the classes below and create the corresponding API endpoints.
+"""
 from typing import Optional
 from uuid import uuid4
 
@@ -6,6 +13,7 @@ from ...domain.entities import StreamSession, StreamStatus
 from ...domain.repositories import ICameraRepository, IStreamRepository
 
 
+"""
 class StartStreamUseCase:
     """Use case for starting a camera stream"""
     
@@ -85,3 +93,4 @@ class GetStreamStatusUseCase:
     async def execute(self, camera_id: str) -> Optional[StreamSession]:
         """Execute get stream status use case"""
         return await self.stream_repository.get_active_session_by_camera(camera_id)
+"""

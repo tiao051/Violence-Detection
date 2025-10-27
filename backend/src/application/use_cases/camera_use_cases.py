@@ -1,4 +1,11 @@
-"""Camera Use Cases - Application business logic"""
+"""Camera Use Cases - Application business logic
+
+NOTE: These use cases are not currently connected to any API endpoints.
+They are kept for potential future use or reference.
+If you need to use them, implement the corresponding API routers in src/presentation/api/
+
+To enable these use cases, uncomment the classes below and create the corresponding API endpoints.
+"""
 from typing import List, Optional
 from uuid import uuid4
 from datetime import datetime
@@ -7,6 +14,7 @@ from ...domain.entities import Camera, CameraStatus
 from ...domain.repositories import ICameraRepository
 
 
+"""
 class AddCameraUseCase:
     """Use case for adding a new camera"""
     
@@ -98,3 +106,4 @@ class DeleteCameraUseCase:
     async def execute(self, camera_id: str) -> bool:
         """Execute delete camera use case"""
         return await self.camera_repository.delete(camera_id)
+"""
