@@ -67,12 +67,23 @@ services:
     networks:
       - app-network
 
-  # RTSP Server
+  # RTSP Server (MediaMTX) - with USB camera support
   rtsp-server:
     image: bluenviron/mediamtx:latest
     container_name: rtsp-server
     ports:
-      - "8554:8554"
+      - "8554:8554"        # RTSP
+      - "8888:8888"        # HLS
+      - "9998:9998"        # Metrics
+    volumes:
+      - ./mediamtx.yml:/etc/mediamtx/mediamtx.yml:ro
+    environment:
+      MEDIAMTX_LOGFILE: ""  # Log to stdout
+    # USB device access for real webcam
+    devices:
+      - /dev/video0:/dev/video0    # USB camera device (Linux)
+    # Uncomment for Mac: /dev/video* (check with: ls /dev/video*)
+    # Uncomment for Windows: may need special handling or use dshow
     networks:
       - app-network
 

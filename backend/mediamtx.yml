@@ -1,0 +1,56 @@
+# MediaMTX Configuration for USB Webcam Streaming
+# https://github.com/bluenviron/mediamtx
+
+# Global configuration
+logLevel: info
+metrics: yes
+metricsAddress: :9998
+
+# WebRTC configuration
+webrtcAddress: :8189
+
+# RTSP server configuration
+rtspAddress: :8554
+rtspEnabled: yes
+
+# RTMP server configuration (optional)
+rtmpAddress: :1935
+rtmpEnabled: no
+
+# HLS server configuration (optional)
+hlsAddress: :8888
+hlsEnabled: no
+
+# Path configurations
+paths:
+  # USB Webcam - capture from /dev/video0 (change camera name for Windows)
+  usb-cam:
+    runOnInit: ffmpeg -f dshow -i video="USB Camera" -c:v libx264 -preset veryfast -tune zerolatency -g 30 -b:v 2000k -an -f rtsp -rtsp_transport tcp rtsp://localhost:8554/usb-cam
+    runOnInitRestart: yes
+    readTimeout: 30s
+    writeTimeout: 30s
+
+  # Existing simulated cameras
+  cam1:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i /videos/violence_1.mp4 -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p -an -f rtsp -rtsp_transport tcp rtsp://localhost:8554/cam1
+    runOnDemandRestart: yes
+    readTimeout: 30s
+    writeTimeout: 30s
+
+  cam2:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i /videos/violence_2.mp4 -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p -an -f rtsp -rtsp_transport tcp rtsp://localhost:8554/cam2
+    runOnDemandRestart: yes
+    readTimeout: 30s
+    writeTimeout: 30s
+
+  cam3:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i /videos/non_violence_1.mp4 -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p -an -f rtsp -rtsp_transport tcp rtsp://localhost:8554/cam3
+    runOnDemandRestart: yes
+    readTimeout: 30s
+    writeTimeout: 30s
+
+  cam4:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i /videos/violence_3.mp4 -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p -an -f rtsp -rtsp_transport tcp rtsp://localhost:8554/cam4
+    runOnDemandRestart: yes
+    readTimeout: 30s
+    writeTimeout: 30s

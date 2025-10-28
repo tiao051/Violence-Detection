@@ -58,16 +58,16 @@ async def startup() -> None:
         # Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
         
-        # Start camera workers if RTSP is enabled
+        # Start RTSP camera workers if enabled
         if settings.rtsp_enabled:
-            logger.info(f"Starting {len(settings.rtsp_cameras)} camera workers...")
+            logger.info(f"Starting {len(settings.rtsp_cameras)} RTSP camera workers...")
             
             for camera_id in settings.rtsp_cameras:
                 rtsp_url = f"{settings.rtsp_base_url}/{camera_id}"
                 
                 worker = CameraWorker(
                     camera_id=camera_id,
-                    rtsp_url=rtsp_url,
+                    stream_url=rtsp_url,
                     redis_producer=redis_producer,
                     sample_rate=settings.rtsp_sample_rate,
                     frame_width=settings.rtsp_frame_width,
@@ -80,7 +80,7 @@ async def startup() -> None:
                 
                 logger.info(f"Camera worker started: {camera_id}")
             
-            logger.info(f"All {len(camera_workers)} camera workers started")
+            logger.info(f"All {len(camera_workers)} RTSP camera workers started ✓")
         else:
             logger.warning("RTSP is disabled")
     
