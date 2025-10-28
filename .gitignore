@@ -101,3 +101,7 @@ checkpoints/
 # Datasets
 /datasets/
 /test-data/
+
+# Docker volumes and data
+docker-data/
+*.volume/

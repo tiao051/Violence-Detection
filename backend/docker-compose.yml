@@ -1,0 +1,138 @@
+name: violence-detection
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: violence-detection-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-violence_detection}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: violence-detection-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: violence-detection-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-violence_detection}
+      REDIS_URL: redis://redis:6379/0
+      RTSP_BASE_URL: rtsp://rtsp-server:8554
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-true}
+      API_V1_PREFIX: /api/v1
+      HOST: 0.0.0.0
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
+
+  # RTSP Server
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-server
+    ports:
+      - "8554:8554"
+    networks:
+      - app-network
+
+  # Cameras (FFmpeg)
+  camera-1:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-1
+    command: >
+      -re -stream_loop -1 -i /videos/violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-2:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-2
+    command: >
+      -re -stream_loop -1 -i /videos/violence_2.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-3:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-3
+    command: >
+      -re -stream_loop -1 -i /videos/non_violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+  camera-4:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-4
+    command: >
+      -re -stream_loop -1 -i /videos/violence_3.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
+    volumes:
+      - ./tests/rtsp-simulator/test-videos:/videos
+    depends_on: [rtsp-server]
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
