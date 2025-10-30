@@ -98,3 +98,10 @@ checkpoints/
 # Docker volumes and data
 docker-data/
 *.volume/
+
+# Datasets
+/datasets/
+data-preparation/
+
+# Evaluation results
+/evaluation_results/
