@@ -56,13 +56,13 @@ def run_ffmpeg_usb_stream():
             stderr=subprocess.PIPE,
             text=True
         )
-        print("✓ FFmpeg started successfully")
+        print("FFmpeg started successfully")
         
         # Keep process running
         ffmpeg_process.wait()
         
     except Exception as e:
-        print(f"✗ Error running FFmpeg: {e}")
+        print(f"Error running FFmpeg: {e}")
 
 def main():
     global ffmpeg_process
@@ -73,7 +73,7 @@ def main():
     has_usb = check_usb_camera()
     
     if has_usb:
-        print("✓ USB camera detected")
+        print("USB camera detected")
         print("Starting FFmpeg stream to rtsp://localhost:8554/usb-cam")
         
         # Run FFmpeg in background thread
@@ -98,7 +98,7 @@ def main():
             print("Goodbye!")
             sys.exit(0)
     else:
-        print("ℹ No USB camera detected")
+        print("No USB camera detected")
         print("You can run: docker-compose up -d")
         print("Will use simulated cameras (cam1-4)")
 
