@@ -67,12 +67,14 @@ services:
     networks:
       - app-network
 
-  # RTSP Server
+  # RTSP Server (MediaMTX)
   rtsp-server:
     image: bluenviron/mediamtx:latest
     container_name: rtsp-server
     ports:
-      - "8554:8554"
+      - "8554:8554"        # RTSP
+    environment:
+      MEDIAMTX_LOGFILE: ""  # Log to stdout
     networks:
       - app-network
 

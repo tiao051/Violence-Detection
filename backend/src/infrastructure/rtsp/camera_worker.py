@@ -1,4 +1,4 @@
-"""Camera worker for continuous RTSP stream processing."""
+    """Camera worker for continuous RTSP stream processing."""
 
 import asyncio
 import logging
@@ -31,7 +31,7 @@ class CameraWorker:
     def __init__(
         self,
         camera_id: str,
-        rtsp_url: str,
+        stream_url: str,
         redis_producer,
         sample_rate: int = 6,
         frame_width: int = 640,
@@ -43,7 +43,7 @@ class CameraWorker:
         
         Args:
             camera_id: Unique camera identifier (e.g., "cam1")
-            rtsp_url: RTSP stream URL
+            stream_url: RTSP stream URL
             redis_producer: Redis streams producer instance
             sample_rate: Target FPS for frame sampling (default: 6)
             frame_width: Resized frame width
@@ -51,7 +51,7 @@ class CameraWorker:
             jpeg_quality: JPEG encoding quality (1-100)
         """
         self.camera_id = camera_id
-        self.rtsp_url = rtsp_url
+        self.stream_url = stream_url
         self.redis_producer = redis_producer
         self.sample_rate = sample_rate
         
@@ -63,8 +63,9 @@ class CameraWorker:
         self.target_width = frame_width
         self.target_height = frame_height
         
-        self.rtsp_client = RTSPClient(
-            rtsp_url=rtsp_url,
+        # Create RTSP client
+        self.client = RTSPClient(
+            rtsp_url=stream_url,
             camera_id=camera_id,
         )
         
@@ -73,7 +74,7 @@ class CameraWorker:
         self.task: Optional[asyncio.Task] = None
         
         # Metrics
-        self.frames_input = 0  # Total frames from RTSP
+        self.frames_input = 0  # Total frames from stream
         self.frames_sampled = 0  # Frames after sampling
         self.frames_sent_to_redis = 0  # Successfully sent to Redis
         self.start_time: Optional[datetime] = None
@@ -126,12 +127,12 @@ class CameraWorker:
         try:
             while self.is_running:
                 # Connect if not already connected
-                if not self.rtsp_client.is_connected:
-                    connected = await self.rtsp_client.connect()
+                if not self.client.is_connected:
+                    connected = await self.client.connect()
                     
                     if not connected:
                         # Try to reconnect
-                        reconnected = await self.rtsp_client.reconnect()
+                        reconnected = await self.client.reconnect()
                         if not reconnected:
                             logger.error(f"[{self.camera_id}] Failed to reconnect, stopping worker")
                             self.is_running = False
@@ -139,7 +140,7 @@ class CameraWorker:
                         continue
                 
                 # Read frame
-                success, frame = await self.rtsp_client.read_frame()
+                success, frame = await self.client.read_frame()
                 
                 if not success:
                     # Connection lost, will reconnect in next loop
@@ -195,11 +196,11 @@ class CameraWorker:
         
         except asyncio.CancelledError:
             logger.info(f"[{self.camera_id}] Worker cancelled")
-            self.rtsp_client.close()
+            self.client.close()
         except Exception as e:
             logger.error(f"[{self.camera_id}] Worker error: {str(e)}")
             self.is_running = False
-            self.rtsp_client.close()
+            self.client.close()
     
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -218,12 +219,12 @@ class CameraWorker:
         return {
             "camera_id": self.camera_id,
             "is_running": self.is_running,
-            "is_connected": self.rtsp_client.is_connected,
+            "is_connected": self.client.is_connected,
             "frames_input": self.frames_input,
             "frames_sampled": self.frames_sampled,
             "frames_sent_to_redis": self.frames_sent_to_redis,
             "input_fps": round(input_fps, 2),
             "output_fps": round(output_fps, 2),
             "elapsed_time_seconds": round(elapsed_time, 2),
-            "rtsp_client_stats": self.rtsp_client.get_stats(),
+            "client_stats": self.client.get_stats(),
         }
