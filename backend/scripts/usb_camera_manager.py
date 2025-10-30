@@ -2,13 +2,43 @@
 USB Camera Manager
 Detects USB camera and runs FFmpeg to stream to RTSP server
 Must run BEFORE docker-compose up
+
+Handles graceful shutdown: CTRL+C to stop
 """
 
 import subprocess
 import sys
 import time
 import threading
-import re
+import signal
+import atexit
+
+# Global variable to track if FFmpeg process is running
+ffmpeg_process = None
+
+def cleanup_ffmpeg():
+    """Cleanup: kill FFmpeg process on exit"""
+    global ffmpeg_process
+    if ffmpeg_process:
+        try:
+            print("\nTerminating FFmpeg...")
+            ffmpeg_process.terminate()
+            ffmpeg_process.wait(timeout=3)
+            print("FFmpeg terminated")
+        except:
+            ffmpeg_process.kill()
+            print("FFmpeg killed")
+
+# Register cleanup on exit
+atexit.register(cleanup_ffmpeg)
+
+def signal_handler(sig, frame):
+    """Handle CTRL+C gracefully"""
+    print("\n\nShutting down...")
+    cleanup_ffmpeg()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 # Global variable to track if FFmpeg process is running
 ffmpeg_process = None
