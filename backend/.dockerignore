@@ -23,15 +23,6 @@ ENV/
 .git/
 .gitignore
 
-# Docker
-docker-compose.yml
-Dockerfile
-.dockerignore
-
-# Database
-*.db
-*.sqlite
-
 # Logs
 *.log
 logs/
@@ -40,8 +31,3 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
-tests/
-
-# Documentation
-README.md
-docs/

@@ -14,7 +14,7 @@ from ...domain.entities import Camera, CameraStatus
 from ...domain.repositories import ICameraRepository
 
 
-"""
+
 class AddCameraUseCase:
     """Use case for adding a new camera"""
     
@@ -106,4 +106,3 @@ class DeleteCameraUseCase:
     async def execute(self, camera_id: str) -> bool:
         """Execute delete camera use case"""
         return await self.camera_repository.delete(camera_id)
-"""

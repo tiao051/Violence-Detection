@@ -100,9 +100,6 @@ class RedisStreamProducer:
                 approximate=False
             )
             
-            if removed > 0:
-                logger.debug(f"Cleaned up {removed} old frames from {stream_key}")
-            
             return removed
         except Exception as e:
             logger.error(f"Redis cleanup_old_frames error for {camera_id}: {str(e)}")

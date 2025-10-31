@@ -1,4 +1,4 @@
-    """Camera worker for continuous RTSP stream processing."""
+"""Camera worker for continuous RTSP stream processing."""
 
 import asyncio
 import logging

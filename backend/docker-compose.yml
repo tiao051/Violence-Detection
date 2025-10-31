@@ -87,7 +87,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
-      - ./tests/rtsp-simulator/test-videos:/videos
+      - ../utils/test_data:/videos
     depends_on: [rtsp-server]
     networks:
       - app-network
@@ -100,7 +100,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
-      - ./tests/rtsp-simulator/test-videos:/videos
+      - ../utils/test_data:/videos
     depends_on: [rtsp-server]
     networks:
       - app-network
@@ -113,7 +113,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
-      - ./tests/rtsp-simulator/test-videos:/videos
+      - ../utils/test_data:/videos
     depends_on: [rtsp-server]
     networks:
       - app-network
@@ -126,7 +126,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
-      - ./tests/rtsp-simulator/test-videos:/videos
+      - ../utils/test_data:/videos
     depends_on: [rtsp-server]
     networks:
       - app-network

@@ -75,8 +75,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## Test Data
 
-Test videos are located in: `./tests/rtsp-simulator/test-videos/`
+Test videos are located in: `../utils/test_data/`
 
+The following test videos are available:
 - `violence_1.mp4` - Violence scene 1
 - `violence_2.mp4` - Violence scene 2
 - `violence_3.mp4` - Violence scene 3

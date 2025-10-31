@@ -40,7 +40,6 @@ class FrameBuffer:
             self.buffers[camera_id] = None
             self.metadata[camera_id] = {}
             self.locks[camera_id] = threading.RLock()
-            logger.debug(f"Registered camera {camera_id} in frame buffer")
     
     def put(
         self,
@@ -77,11 +76,6 @@ class FrameBuffer:
                 "shape": frame.shape,
                 "dtype": str(frame.dtype),
             }
-            
-            logger.debug(
-                f"[{camera_id}] Frame stored: {frame_id} "
-                f"(shape={frame.shape}, seq={frame_seq})"
-            )
     
     def get(self, camera_id: str) -> Optional[np.ndarray]:
         """

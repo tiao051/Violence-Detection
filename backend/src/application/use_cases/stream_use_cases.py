@@ -13,7 +13,6 @@ from ...domain.entities import StreamSession, StreamStatus
 from ...domain.repositories import ICameraRepository, IStreamRepository
 
 
-"""
 class StartStreamUseCase:
     """Use case for starting a camera stream"""
     
@@ -93,4 +92,3 @@ class GetStreamStatusUseCase:
     async def execute(self, camera_id: str) -> Optional[StreamSession]:
         """Execute get stream status use case"""
         return await self.stream_repository.get_active_session_by_camera(camera_id)
-"""
