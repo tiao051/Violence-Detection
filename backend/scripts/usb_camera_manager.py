@@ -63,16 +63,25 @@ def run_ffmpeg_usb_stream():
     ffmpeg_cmd = [
         'ffmpeg',
         '-f', 'dshow',
+        '-thread_queue_size', '512',  # avoid dshow buffer overflows
+        '-video_size', '1280x720',    # match simulated camera resolution
+        '-framerate', '25',           # align with FFmpeg simulated sources
+        '-rtbufsize', '256M',         # enlarge capture buffer to reduce drops
         '-i', 'video=Web Camera',
+        '-vf', 'scale=1280:720',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-tune', 'zerolatency',
-        '-g', '30',
+        '-bf', '0',
+        '-g', '50',
+        '-keyint_min', '25',
+        '-pix_fmt', 'yuv420p',
         '-b:v', '2000k',
         '-an',
         '-f', 'rtsp',
+        '-fflags', 'nobuffer',
         '-rtsp_transport', 'tcp',
-        'rtsp://host.docker.internal:8554/usb-cam' 
+        'rtsp://host.docker.internal:8554/usb-cam'
     ]
     
     try:

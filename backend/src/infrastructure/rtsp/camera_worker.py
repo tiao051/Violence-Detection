@@ -124,8 +124,6 @@ class CameraWorker:
         """Main worker loop (runs as background task)."""
         logger.info(f"[{self.camera_id}] Worker loop started")
         
-        max_initial_attempts = 5
-        initial_attempts = 0
         frames_to_skip = 5  # Skip first frames for codec warmup
         first_processed_frame = False
 
@@ -136,19 +134,11 @@ class CameraWorker:
                     connected = await self.client.connect()
                     
                     if not connected:
-                        initial_attempts += 1
-                        
-                        if initial_attempts >= max_initial_attempts:
-                            logger.warning(f"[{self.camera_id}] Cannot connect after {max_initial_attempts} attempts. Disabling worker.")
-                            self.is_running = False
-                            break
+                        logger.warning(f"[{self.camera_id}] Cannot connect. Disabling worker.")
+                        self.is_running = False
+                        break
 
-                        reconnected = await self.client.reconnect()
-                        if not reconnected:
-                            await asyncio.sleep(1) 
-                        continue
-
-                    initial_attempts = 0
+                    self.client.is_connected = True
                 
                 # Read frame
                 success, frame = await self.client.read_frame()
