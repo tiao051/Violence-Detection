@@ -1,0 +1,19 @@
+# Root path to the dataset (relative to this config file).
+# Use '..' to move up one directory level from 'ai-service'.
+path: ../datasets/rwf_2000_subset_1/train_data_phase1  # IMPORTANT: Ensure this folder name is correct
+
+# Relative paths (from 'path') to the training and validation image folders.
+train: images/train
+val: images/val
+
+# Class definitions.
+# NOTE: The class_id must match the IDs used in your YOLO label .txt files.
+names:
+  0: violence
+
+# Training parameters.
+training_parameters:
+  epochs: 50
+  imgsz: 640
+  batch: 16
+  project: 'training/training_runs'
