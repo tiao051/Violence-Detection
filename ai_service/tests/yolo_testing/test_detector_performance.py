@@ -3,14 +3,22 @@ Performance benchmark for RealtimeDetector on test videos.
 Measures FPS, latency, and throughput on violence detection test dataset.
 
 Usage:
-    pytest ai_service/tests/test_detector_performance.py -v -s
+    python -m pytest ai_service/tests/yolo_testing/test_detector_performance.py -v -s
 """
+import os
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]  
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
 import cv2
 import time
-from pathlib import Path
 
 from ai_service.detection.realtime_detector import RealtimeDetector
 from ai_service.config import DEFAULT_MODEL
+
 
 
 TEST_VIDEOS_DIR = Path('utils/test_data')
@@ -46,8 +54,11 @@ def test_performance_benchmark():
                 if not success:
                     break
                 
+                # Resize to 640x640 before inference to reduce CPU load
+                frame_resized = cv2.resize(frame, (640, 640))
+                
                 start = time.time()
-                detector.process_frame(frame, video_path.stem, "")
+                detector.process_frame(frame_resized, video_path.stem, "")
                 total_time += time.time() - start
                 total_frames += 1
 

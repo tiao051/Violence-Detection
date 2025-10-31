@@ -18,14 +18,18 @@ Key Features:
 import cv2
 import torch
 import numpy as np
+from pathlib import Path
 from ultralytics import YOLO
+
+# Default model weights path (keeps everything local, no automatic hub download)
+DEFAULT_MODEL_PATH = (Path(__file__).resolve().parent.parent / "models" / "weights" / "yolov8n.pt")
 
 class RealtimeDetector:
     """
     A dedicated class for detecting and tracking objects, specifically persons,
     in real-time video streams using a YOLOv8 model with its built-in tracker.
     """
-    def __init__(self, model_path: str = 'yolov8n.pt'):
+    def __init__(self, model_path: str | Path | None = None):
         """
         Initializes the RealtimeDetector instance.
 
@@ -34,8 +38,8 @@ class RealtimeDetector:
         to streamline the tracking process.
 
         Args:
-            model_path (str): The file path to the YOLOv8 model weights (.pt file).
-                              Defaults to 'yolov8n.pt'.
+            model_path (str | Path | None): File path to YOLOv8 weights.
+                                            Defaults to local models/weights/yolov8n.pt.
         """
         # --- Step 1: Device Configuration ---
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -44,9 +48,14 @@ class RealtimeDetector:
 
         # --- Step 2: Model Loading and Initialization ---
         self.model = None
+        weights_path = Path(model_path) if model_path else DEFAULT_MODEL_PATH
+
+        if not weights_path.exists():
+            raise FileNotFoundError(f"YOLO weights not found at '{weights_path}'. Please provide a valid local path.")
+
         try:
-            print(f"INFO: Loading model from '{model_path}'...")
-            self.model = YOLO(model_path)
+            print(f"INFO: Loading model from '{weights_path}'...")
+            self.model = YOLO(weights_path)
             self.model.to(self.device)
             
             # --- Step 3: Identify Target Class ID ---

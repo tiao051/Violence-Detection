@@ -1,16 +1,20 @@
 """
 Model configuration for violence detection.
 """
+from pathlib import Path
 
-# Default YOLO model for real-time detection
-DEFAULT_MODEL = 'yolov8n.pt'
+# Path to local model weights directory
+WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "models" / "weights"
 
-# Model variants available
+# Default YOLO model for real-time detection (local path)
+DEFAULT_MODEL = WEIGHTS_DIR / 'yolov8n.pt'
+
+# Model variants available (local paths)
 MODELS = {
-    'nano': 'yolov8n.pt',      # Fastest, lowest accuracy
-    'small': 'yolov8s.pt',     # Balanced
-    'medium': 'yolov8m.pt',    # Better accuracy
-    'large': 'yolov8l.pt',     # High accuracy, slower
+    'nano': WEIGHTS_DIR / 'yolov8n.pt',      # Fastest, lowest accuracy
+    'small': WEIGHTS_DIR / 'yolov8s.pt',     # Balanced
+    'medium': WEIGHTS_DIR / 'yolov8m.pt',    # Better accuracy
+    'large': WEIGHTS_DIR / 'yolov8l.pt',     # High accuracy, slower
 }
 
 __all__ = ['DEFAULT_MODEL', 'MODELS']
