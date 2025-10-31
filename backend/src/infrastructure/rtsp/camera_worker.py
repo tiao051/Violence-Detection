@@ -116,7 +116,7 @@ class CameraWorker:
                 pass
         
         # Close RTSP connection
-        self.rtsp_client.close()
+        self.client.close()
         
         logger.info(f"[{self.camera_id}] Worker stopped")
     

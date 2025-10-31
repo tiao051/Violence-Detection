@@ -73,6 +73,8 @@ services:
     container_name: rtsp-server
     ports:
       - "8554:8554"        # RTSP
+    volumes:
+      - ./mediamtx.yml:/etc/mediamtx/mediamtx.yml
     environment:
       MEDIAMTX_LOGFILE: ""  # Log to stdout
     networks:

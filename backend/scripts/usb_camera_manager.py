@@ -12,6 +12,7 @@ import time
 import threading
 import signal
 import atexit
+import os
 
 # Global variable to track if FFmpeg process is running
 ffmpeg_process = None
@@ -60,15 +61,17 @@ def run_ffmpeg_usb_stream():
     """Run FFmpeg to capture USB camera and stream to RTSP server"""
     global ffmpeg_process
     
+    # MediaMTX container IP on Docker network (from docker inspect rtsp-server)
+    rtsp_url = "rtsp://172.18.0.3:8554/usb-cam"
+    
     ffmpeg_cmd = [
         'ffmpeg',
         '-f', 'dshow',
-        '-thread_queue_size', '512',  # avoid dshow buffer overflows
-        '-video_size', '1280x720',    # match simulated camera resolution
-        '-framerate', '25',           # align with FFmpeg simulated sources
-        '-rtbufsize', '256M',         # enlarge capture buffer to reduce drops
+        '-thread_queue_size', '512',
+        '-video_size', '1280x720',
+        '-framerate', '30',
+        '-rtbufsize', '256M',
         '-i', 'video=Web Camera',
-        '-vf', 'scale=1280:720',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-tune', 'zerolatency',
@@ -79,23 +82,25 @@ def run_ffmpeg_usb_stream():
         '-b:v', '2000k',
         '-an',
         '-f', 'rtsp',
-        '-fflags', 'nobuffer',
         '-rtsp_transport', 'tcp',
-        'rtsp://host.docker.internal:8554/usb-cam'
+        rtsp_url
     ]
     
     try:
-        print("Starting FFmpeg for USB camera...")
+        print(f"Starting FFmpeg for USB camera... pushing to {rtsp_url}")
         ffmpeg_process = subprocess.Popen(
             ffmpeg_cmd,
-            stdout=sys.stdout,   # show logs in console
-            stderr=sys.stderr,   # show logs in console
-            text=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
         )
-        print("FFmpeg started successfully")
         
-        # Keep process running
-        ffmpeg_process.wait()
+        # Print FFmpeg output in real-time
+        print("FFmpeg output:")
+        for line in ffmpeg_process.stdout:
+            print(f"  [FFmpeg] {line.rstrip()}")
         
     except Exception as e:
         print(f"Error running FFmpeg: {e}")
@@ -109,17 +114,18 @@ def main():
     has_usb = check_usb_camera()
     
     if has_usb:
-        print("Starting FFmpeg stream to rtsp://127.0.0.1:8554/usb-cam")
+        print("Starting FFmpeg stream to rtsp://172.18.0.3:8554/usb-cam")
         
         # Run FFmpeg in background thread
         ffmpeg_thread = threading.Thread(target=run_ffmpeg_usb_stream, daemon=True)
         ffmpeg_thread.start()
         
-        # Give FFmpeg time to start
-        time.sleep(2)
+        # Give FFmpeg time to start and establish connection
+        print("Waiting 5 seconds for FFmpeg to initialize and connect...")
+        time.sleep(5)
         
         print("\nYou can now run: docker-compose up -d")
-        print("USB camera will be available at: rtsp://127.0.0.1:8554/usb-cam")
+        print("USB camera will be available at: rtsp://172.18.0.3:8554/usb-cam")
         
         # Keep running
         try:

@@ -73,10 +73,10 @@ class RTSPClient:
             if self.cap is not None:
                 self.cap.release()
             
-            # Create new VideoCapture (run in thread pool)
+            # Create new VideoCapture with FFmpeg backend (CAP_FFMPEG for RTSP support)
             self.cap = await asyncio.get_event_loop().run_in_executor(
                 _thread_pool,
-                lambda: cv2.VideoCapture(self.rtsp_url)
+                lambda: cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
             )
             
             # Disable all buffering
