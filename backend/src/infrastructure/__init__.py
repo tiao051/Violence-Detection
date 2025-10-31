@@ -8,6 +8,5 @@ __all__ = [
     "RTSPClient",
     "CameraWorker",
     "RedisStreamProducer",
-    "FrameBuffer",
-    "get_frame_buffer",
+    "FrameBuffer"
 ]

@@ -31,12 +31,12 @@ startup_time: float = 0
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
-    
+
     # Startup
     logger.info("Starting up application...")
     await startup()
     yield
-    
+
     # Shutdown
     logger.info("Shutting down application...")
     await shutdown()
@@ -45,26 +45,28 @@ async def lifespan(app: FastAPI):
 async def startup() -> None:
     """Initialize application on startup."""
     global redis_client, redis_producer, camera_workers, startup_time
-    
+
     startup_time = time.time()
-    
+
     try:
         # Connect to Redis
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
         logger.info("Redis connected")
-        
+
         # Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
-        
+
         # Start RTSP camera workers if enabled
         if settings.rtsp_enabled:
             logger.info(f"Starting {len(settings.rtsp_cameras)} RTSP camera workers...")
-            
+
+            # Create all workers
+            workers_to_start = []
             for camera_id in settings.rtsp_cameras:
                 rtsp_url = f"{settings.rtsp_base_url}/{camera_id}"
-                
+
                 worker = CameraWorker(
                     camera_id=camera_id,
                     stream_url=rtsp_url,
@@ -74,16 +76,18 @@ async def startup() -> None:
                     frame_height=settings.rtsp_frame_height,
                     jpeg_quality=settings.rtsp_jpeg_quality,
                 )
-                
-                await worker.start()
+
+                workers_to_start.append(worker)
                 camera_workers.append(worker)
                 
-                logger.info(f"Camera worker started: {camera_id}")
+            # Start all workers in parallel
+            start_tasks = [worker.start() for worker in workers_to_start]
+            await asyncio.gather(*start_tasks)
             
-            logger.info(f"All {len(camera_workers)} RTSP camera workers started ✓")
+            logger.info(f"All {len(camera_workers)} RTSP camera workers started")
         else:
             logger.warning("RTSP is disabled")
-    
+
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)
         raise
@@ -92,25 +96,25 @@ async def startup() -> None:
 async def shutdown() -> None:
     """Clean up on shutdown."""
     global redis_client, camera_workers
-    
+
     try:
         # Stop camera workers
         if camera_workers:
             logger.info(f"Stopping {len(camera_workers)} camera workers...")
-            
+
             for worker in camera_workers:
                 await worker.stop()
                 stats = worker.get_stats()
                 logger.info(f"Worker stats: {worker.camera_id} - {stats}")
-            
+
             logger.info("All camera workers stopped")
-        
+
         # Close Redis connection
         if redis_client:
             logger.info("Closing Redis connection...")
             await redis_client.close()
             logger.info("Redis closed")
-    
+
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}", exc_info=True)
 
@@ -149,7 +153,7 @@ async def root():
 async def health_check():
     """Health check for monitoring"""
     global redis_client
-    
+
     redis_status = "connected"
     try:
         if redis_client:
@@ -158,7 +162,7 @@ async def health_check():
             redis_status = "not_initialized"
     except Exception as e:
         redis_status = f"error: {str(e)}"
-    
+
     return {
         "message": "Violence Detection Backend API",
         "version": "1.0.0",
@@ -171,9 +175,9 @@ async def health_check():
 async def get_stats():
     """Get detailed statistics about camera workers."""
     global redis_client, camera_workers, startup_time
-    
+
     workers_data = {}
-    
+
     # Get worker stats
     for worker in camera_workers:
         stats = worker.get_stats()
@@ -188,9 +192,9 @@ async def get_stats():
             "output_fps": stats.get("output_fps", 0.0),
             "elapsed_time_seconds": stats.get("elapsed_time_seconds", 0)
         }
-    
+
     redis_frames = {}
-    
+
     # Get Redis stream stats
     if redis_client:
         for camera_id in settings.rtsp_cameras:
@@ -200,7 +204,7 @@ async def get_stats():
                 redis_frames[stream_key] = stream_len
             except Exception as e:
                 logger.error(f"Failed to get stream length for {stream_key}: {e}")
-    
+
     return {
         "timestamp": time.time(),
         "uptime_seconds": time.time() - startup_time,

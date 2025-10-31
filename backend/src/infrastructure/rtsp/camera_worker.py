@@ -124,10 +124,11 @@ class CameraWorker:
         """Main worker loop (runs as background task)."""
         logger.info(f"[{self.camera_id}] Worker loop started")
         
-        # Initial connection timeout - if can't connect quickly, disable worker
         max_initial_attempts = 5
         initial_attempts = 0
-        
+        frames_to_skip = 5  # Skip first frames for codec warmup
+        first_processed_frame = False
+
         try:
             while self.is_running:
                 # Connect if not already connected
@@ -137,19 +138,16 @@ class CameraWorker:
                     if not connected:
                         initial_attempts += 1
                         
-                        # If can't connect initially after max attempts, give up
                         if initial_attempts >= max_initial_attempts:
-                            logger.warning(f"[{self.camera_id}] Cannot connect after {max_initial_attempts} attempts. Camera may not be available. Disabling worker.")
+                            logger.warning(f"[{self.camera_id}] Cannot connect after {max_initial_attempts} attempts. Disabling worker.")
                             self.is_running = False
                             break
-                        
-                        # Try to reconnect
+
                         reconnected = await self.client.reconnect()
                         if not reconnected:
-                            await asyncio.sleep(1)  # Wait before retry
+                            await asyncio.sleep(1) 
                         continue
-                    
-                    # Connection successful, reset counter
+
                     initial_attempts = 0
                 
                 # Read frame
@@ -162,6 +160,10 @@ class CameraWorker:
                 
                 self.frames_input += 1
                 
+                # Skip first frames (codec warmup)
+                if self.frames_input <= frames_to_skip:
+                    continue
+
                 # Check if should sample this frame (time-based)
                 current_time = time.time()
                 if (current_time - self.last_sample_time) < self.sample_interval:
@@ -170,6 +172,9 @@ class CameraWorker:
                 self.last_sample_time = current_time
                 self.frames_sampled += 1
                 
+                # Measure end-to-end latency (skip first frame)
+                processing_start = time.time()
+
                 # Resize frame directly (no encoding/decoding)
                 resized_frame = cv2.resize(
                     frame,
@@ -191,7 +196,7 @@ class CameraWorker:
                     frame_seq=self.frames_sampled,
                 )
                 
-                # Push metadata to Redis (only reference to RAM buffer)
+                # Push metadata to Redis
                 try:
                     await self.redis_producer.add_frame_metadata(
                         camera_id=self.camera_id,
@@ -201,11 +206,17 @@ class CameraWorker:
                     )
                     self.frames_sent_to_redis += 1
                     
-                    # Cleanup old frames periodically
+                    # Log end-to-end latency (skip first frame after warmup)
+                    if not first_processed_frame and self.frames_sampled > 1:
+                        first_processed_frame = True
+                        e2e_latency = (time.time() - processing_start) * 1000
+                        logger.info(f"[{self.camera_id}] End-to-end latency: {e2e_latency:.2f}ms (read → resize → buffer → Redis)")
+
+
                     if self.frames_sampled % 100 == 0:
                         await self.redis_producer.cleanup_old_frames(self.camera_id)
                 except Exception as e:
-                    logger.error(f"[{self.camera_id}] Redis metadata push error: {str(e)}")
+                    logger.error(f"[{self.camera_id}] Redis error: {str(e)}")
         
         except asyncio.CancelledError:
             logger.info(f"[{self.camera_id}] Worker cancelled")

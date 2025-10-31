@@ -3,10 +3,15 @@
 import asyncio
 import cv2
 import logging
+import time
 from typing import Optional, Tuple
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+# Global thread pool for blocking cv2 operations
+_thread_pool = ThreadPoolExecutor(max_workers=50, thread_name_prefix="rtsp_")
 
 
 class RTSPClient:
@@ -68,24 +73,39 @@ class RTSPClient:
             if self.cap is not None:
                 self.cap.release()
             
-            # Create new VideoCapture
-            self.cap = cv2.VideoCapture(self.rtsp_url)
+            # Create new VideoCapture (run in thread pool)
+            self.cap = await asyncio.get_event_loop().run_in_executor(
+                _thread_pool,
+                lambda: cv2.VideoCapture(self.rtsp_url)
+            )
             
-            # Set timeout for frame reading
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer
+            # Disable all buffering
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 0)
             
             # Try to read one frame to verify connection
-            ret, frame = self.cap.read()
+            try:
+                ret, frame = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        _thread_pool,
+                        lambda: self.cap.read()
+                    ),
+                    timeout=self.timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"[{self.camera_id}] Connection timeout ({self.timeout}s)")
+                self.cap.release()
+                self.cap = None
+                return False
             
             if not ret or frame is None:
-                logger.error(f"[{self.camera_id}] Failed to read frame during connection test")
+                logger.error(f"[{self.camera_id}] Failed to read frame during connection")
                 self.cap.release()
                 self.cap = None
                 return False
             
             self.is_connected = True
             self.reconnect_attempts = 0
-            logger.info(f"[{self.camera_id}] Successfully connected to {self.rtsp_url}")
+            logger.info(f"[{self.camera_id}] Connected")
             return True
             
         except Exception as e:
@@ -104,7 +124,14 @@ class RTSPClient:
             return False, None
         
         try:
-            ret, frame = self.cap.read()
+            # Run blocking cv2.read() in thread pool with timeout
+            ret, frame = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    _thread_pool,
+                    lambda: self.cap.read()
+                ),
+                timeout=self.timeout
+            )
             
             if not ret or frame is None:
                 logger.warning(f"[{self.camera_id}] Failed to read frame")
@@ -118,6 +145,11 @@ class RTSPClient:
             
             return True, frame
             
+        except asyncio.TimeoutError:
+            logger.warning(f"[{self.camera_id}] Frame read timeout ({self.timeout}s)")
+            self.errors_count += 1
+            self.is_connected = False
+            return False, None
         except Exception as e:
             logger.error(f"[{self.camera_id}] Frame read error: {str(e)}")
             self.errors_count += 1

@@ -21,13 +21,10 @@ def cleanup_ffmpeg():
     global ffmpeg_process
     if ffmpeg_process:
         try:
-            print("\nTerminating FFmpeg...")
             ffmpeg_process.terminate()
             ffmpeg_process.wait(timeout=3)
-            print("FFmpeg terminated")
         except:
             ffmpeg_process.kill()
-            print("FFmpeg killed")
 
 # Register cleanup on exit
 atexit.register(cleanup_ffmpeg)
@@ -66,7 +63,7 @@ def run_ffmpeg_usb_stream():
     ffmpeg_cmd = [
         'ffmpeg',
         '-f', 'dshow',
-        '-i', 'video="Web Camera"',
+        '-i', 'video=Web Camera',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-tune', 'zerolatency',
@@ -75,15 +72,15 @@ def run_ffmpeg_usb_stream():
         '-an',
         '-f', 'rtsp',
         '-rtsp_transport', 'tcp',
-        'rtsp://localhost:8554/usb-cam'
+        'rtsp://host.docker.internal:8554/usb-cam' 
     ]
     
     try:
         print("Starting FFmpeg for USB camera...")
         ffmpeg_process = subprocess.Popen(
             ffmpeg_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=sys.stdout,   # show logs in console
+            stderr=sys.stderr,   # show logs in console
             text=True
         )
         print("FFmpeg started successfully")
@@ -103,8 +100,7 @@ def main():
     has_usb = check_usb_camera()
     
     if has_usb:
-        print("USB camera detected")
-        print("Starting FFmpeg stream to rtsp://localhost:8554/usb-cam")
+        print("Starting FFmpeg stream to rtsp://127.0.0.1:8554/usb-cam")
         
         # Run FFmpeg in background thread
         ffmpeg_thread = threading.Thread(target=run_ffmpeg_usb_stream, daemon=True)
@@ -114,7 +110,7 @@ def main():
         time.sleep(2)
         
         print("\nYou can now run: docker-compose up -d")
-        print("USB camera will be available at: rtsp://localhost:8554/usb-cam")
+        print("USB camera will be available at: rtsp://127.0.0.1:8554/usb-cam")
         
         # Keep running
         try:
@@ -125,12 +121,9 @@ def main():
             if ffmpeg_process:
                 ffmpeg_process.terminate()
                 ffmpeg_process.wait()
-            print("Goodbye!")
             sys.exit(0)
     else:
         print("No USB camera detected")
-        print("You can run: docker-compose up -d")
-        print("Will use simulated cameras (cam1-4)")
 
 if __name__ == "__main__":
     main()
