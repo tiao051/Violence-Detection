@@ -12,7 +12,7 @@ Output:
     - Videos: {original_name}_detections_onnx.mp4 (annotated with green boxes)
 
 Usage:
-    python ai_service/tests/onnx_testing/test_onnx_accuracy.py
+    python ai_service/tests/detector_testing/test_onnx_accuracy.py
 """
 import sys
 from pathlib import Path

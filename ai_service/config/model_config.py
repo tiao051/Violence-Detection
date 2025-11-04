@@ -6,15 +6,20 @@ from pathlib import Path
 # Path to local model weights directory
 WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "models" / "weights"
 
-# Default YOLO model for real-time detection (local path)
+# Default YOLO model for real-time detection (PyTorch)
 DEFAULT_MODEL = WEIGHTS_DIR / 'yolov8n.pt'
 
-# Model variants available (local paths)
-MODELS = {
-    'nano': WEIGHTS_DIR / 'yolov8n.pt',      # Fastest, lowest accuracy
-    'small': WEIGHTS_DIR / 'yolov8s.pt',     # Balanced
-    'medium': WEIGHTS_DIR / 'yolov8m.pt',    # Better accuracy
-    'large': WEIGHTS_DIR / 'yolov8l.pt',     # High accuracy, slower
+# PyTorch model variants (for training/inference)
+PYTORCH_MODELS = {
+    'nano': WEIGHTS_DIR / 'yolov8n.pt'
 }
 
-__all__ = ['DEFAULT_MODEL', 'MODELS']
+# ONNX model variants (for optimized inference)
+ONNX_MODELS = {
+    'nano_320': WEIGHTS_DIR / 'yolov8n_320.onnx'
+}
+
+# Legacy alias for backward compatibility
+MODELS = PYTORCH_MODELS
+
+__all__ = ['DEFAULT_MODEL', 'PYTORCH_MODELS', 'ONNX_MODELS', 'MODELS']

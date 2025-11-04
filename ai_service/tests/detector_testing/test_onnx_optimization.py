@@ -1,19 +1,25 @@
 """
-PHASE 3: ONNX Model Export and Benchmark Suite
+ONNX Model Export and Benchmark Suite
 
-Task 3.1: Check ONNX dependencies
-Task 3.2: Export ONNX models (320, 384, 512)
-Task 3.4: Benchmark ONNX models (CPU/GPU auto-detect)
-Task 3.5: Print comparison table
+Exports YOLOv8n to ONNX format with multiple input sizes (320, 384, 512)
+and benchmarks end-to-end performance (preprocessing + inference) across
+test video frames with automatic GPU/CPU detection.
+
+Key Features:
+- GPU/CPU provider auto-detection via ONNX Runtime
+- End-to-end benchmarking (includes preprocessing overhead)
+- Multiple input size export for optimization comparison
+- Structured performance metrics (latency, FPS, std deviation)
 
 Usage:
-    python -m pytest ai_service/tests/test_onnx_optimization.py -v -s
+    python ai_service/tests/detector_testing/test_onnx_optimization.py
+    pytest ai_service/tests/detector_testing/test_onnx_optimization.py -v -s
 """
 
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import cv2
 import numpy as np
@@ -39,9 +45,6 @@ class ONNXOptimizer:
         self.models_dir = ROOT_DIR / "ai_service" / "models" / "weights"
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.test_frames = []  # Multiple test frames from 4 videos
-        
-        # Initialize YOLO preprocessor (will be updated per size in benchmark)
-        self.preprocessor = None
 
     def setup(self) -> bool:
         """Setup and validate environment."""
@@ -50,11 +53,8 @@ class ONNXOptimizer:
             try:
                 import onnx
                 import onnxruntime as ort
-                print(f"ONNX {onnx.__version__}")
-                print(f"ONNXRUNTIME {ort.__version__}")
             except ImportError as e:
-                print(f"Missing: {e}")
-                print("  pip install onnx onnxruntime")
+                print(f"Missing: {e} - pip install onnx onnxruntime")
                 return False
 
             # Load test frames from all 4 videos
@@ -65,16 +65,15 @@ class ONNXOptimizer:
                 print(f"No test videos found in {test_videos_dir}")
                 return False
             
-            print(f"Loading frames from {len(test_videos)} videos:")
             for video_file in test_videos:
                 cap = cv2.VideoCapture(str(video_file))
                 ret, frame = cap.read()
                 cap.release()
                 if ret:
                     self.test_frames.append(frame)
-                    print(f"  {video_file.name} ({frame.shape[1]}x{frame.shape[0]})")
                 else:
-                    print(f"  {video_file.name} - Failed to read")
+                    print(f"Failed to read: {video_file.name}")
+                    return False
             
             if not self.test_frames:
                 print("No valid test frames loaded")
@@ -86,14 +85,9 @@ class ONNXOptimizer:
             print(f"Setup error: {e}")
             return False
 
-    def export_onnx_model(self, imgsz: int) -> Tuple[bool, Optional[Path]]:
+    def export_onnx_model(self, imgsz: int, model) -> bool:
         """Export YOLOv8n to ONNX format."""
         try:
-            from ultralytics import YOLO
-
-            print(f"  Exporting yolov8n_{imgsz}.onnx...")
-            
-            model = YOLO(str(DEFAULT_MODEL))
             output_path = self.models_dir / f"yolov8n_{imgsz}.onnx"
             
             # Export with GPU if available
@@ -105,17 +99,11 @@ class ONNXOptimizer:
             if default_onnx.exists() and default_onnx != output_path:
                 default_onnx.rename(output_path)
 
-            if output_path.exists():
-                size_mb = output_path.stat().st_size / (1024 ** 2)
-                print(f"    {output_path.name} ({size_mb:.2f}MB)")
-                return True, output_path
-            else:
-                print(f"    Export failed")
-                return False, None
+            return output_path.exists()
 
         except Exception as e:
-            print(f"    Error: {e}")
-            return False, None
+            print(f"Export error ({imgsz}): {e}")
+            return False
 
     def benchmark_onnx_model(self, model_path: Path, imgsz: int) -> Optional[Dict]:
         """Benchmark ONNX model across all 4 test frames (end-to-end with preprocessing)."""
@@ -169,54 +157,42 @@ class ONNXOptimizer:
             }
 
         except Exception as e:
-            print(f"  Benchmark error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Benchmark error: {e}")
             return None
 
     def run_all_tasks(self) -> None:
         """Run export and benchmark pipeline."""
         if not self.setup():
-            print("\nSetup failed")
+            print("Setup failed")
             return
 
-        print("\n" + "="*80)
-        print("PHASE 3: ONNX EXPORT AND BENCHMARK".center(80))
-        print("="*80)
-
-        # Task 3.2: Export all models
-        print("\n[TASK 3.2] Exporting ONNX Models (320, 384, 512)")
-        print("-"*80)
+        # Export all models
+        from ultralytics import YOLO
+        model = YOLO(str(DEFAULT_MODEL))
         
+        print("\nExporting models...")
         export_results = {}
         for size in self.INPUT_SIZES:
-            success, path = self.export_onnx_model(size)
+            success = self.export_onnx_model(size, model)
             if success:
-                export_results[size] = path
+                export_results[size] = self.models_dir / f"yolov8n_{size}.onnx"
+                print(f"  {size}x{size}: OK")
 
-        if len(export_results) < len(self.INPUT_SIZES):
-            print(f"\nOnly {len(export_results)}/{len(self.INPUT_SIZES)} models exported")
-
-        # Task 3.4: Benchmark models
-        print("\n[TASK 3.4] Benchmarking ONNX Models (4 videos)")
-        print("-"*80)
-        
+        # Benchmark models
+        print("\nBenchmarking models...")
         benchmark_results = {}
         for size in self.INPUT_SIZES:
             if size in export_results:
-                print(f"  Benchmark {size}x{size}...")
+                print(f"  {size}x{size}...", end=" ", flush=True)
                 metrics = self.benchmark_onnx_model(export_results[size], size)
                 if metrics:
                     benchmark_results[size] = metrics
+                    print("OK")
 
-        # Task 3.5: Print results
-        print("\n[TASK 3.5] Results")
-        print("-"*80)
+        # Print results
+        print("\n" + "="*60)
         self._print_results(benchmark_results)
-
-        print("\n" + "="*80)
-        print("PHASE 3 COMPLETE - Ready for Phase 4 (Runtime Optimization)".center(80))
-        print("="*80 + "\n")
+        print("="*60 + "\n")
 
     def _print_results(self, results: Dict) -> None:
         """Print benchmark results table."""
