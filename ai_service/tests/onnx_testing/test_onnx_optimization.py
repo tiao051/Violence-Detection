@@ -19,7 +19,10 @@ import cv2
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+ROOT_DIR = Path(__file__).resolve().parents[3]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from ai_service.config import DEFAULT_MODEL
 from ai_service.common.preprocessing.augmentation import YOLOPreprocessor
 
@@ -33,7 +36,7 @@ class ONNXOptimizer:
 
     def __init__(self):
         """Initialize ONNX optimizer."""
-        self.models_dir = Path(__file__).resolve().parent.parent / "models" / "weights"
+        self.models_dir = ROOT_DIR / "ai_service" / "models" / "weights"
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.test_frames = []  # Multiple test frames from 4 videos
         
