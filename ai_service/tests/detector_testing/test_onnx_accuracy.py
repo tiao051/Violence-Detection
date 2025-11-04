@@ -25,7 +25,7 @@ if str(ROOT_DIR) not in sys.path:
 import cv2
 import numpy as np
 
-from ai_service.inference.onnx_inference import ONNXYOLOInference
+from ai_service.detection import ONNXYOLOInference
 
 
 def draw_detections(frame: np.ndarray, detections: List, frame_num: int, fps: float) -> np.ndarray:

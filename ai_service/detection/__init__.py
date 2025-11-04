@@ -1,4 +1,5 @@
 """Detection module."""
-from .realtime_detector import RealtimeDetector
+from .pytorch_detector import PyTorchDetector
+from .onnx_inference import ONNXYOLOInference
 
-__all__ = ['RealtimeDetector']
+__all__ = ['PyTorchDetector', 'ONNXYOLOInference']

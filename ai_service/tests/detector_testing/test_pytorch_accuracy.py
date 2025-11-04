@@ -22,61 +22,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import cv2
-import numpy as np
-from ultralytics import YOLO
-
 from ai_service.config import DEFAULT_MODEL
-
-
-def draw_detections(frame: np.ndarray, results, frame_num: int, fps: float) -> np.ndarray:
-    """Draw detection boxes and info on frame."""
-    annotated = frame.copy()
-    
-    # Draw background for text info
-    cv2.rectangle(annotated, (0, 0), (500, 80), (0, 0, 0), -1)
-    
-    # Frame info
-    time_ms = (frame_num / fps * 1000) if fps > 0 else 0
-    time_s = time_ms / 1000
-    cv2.putText(annotated, f"Frame: {frame_num} | Time: {time_s:.2f}s", 
-                (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-    
-    # Count detections
-    num_detections = len(results[0].boxes) if results[0].boxes is not None else 0
-    cv2.putText(annotated, f"Detections: {num_detections} persons", 
-                (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-    
-    # Draw bounding boxes
-    if results[0].boxes is not None:
-        boxes = results[0].boxes
-        for i, box in enumerate(boxes, 1):
-            # Get box coordinates
-            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0]]
-            conf = float(box.conf)
-            
-            # Clamp coordinates to frame bounds
-            h, w = annotated.shape[:2]
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-            
-            # Draw box (cyan for PyTorch)
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 255, 0), 2)
-            
-            # Draw confidence label
-            label = f"Person {i}: {conf:.2f}"
-            label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            
-            # Background for label
-            cv2.rectangle(annotated, 
-                         (x1, max(0, y1 - label_size[1] - 4)),
-                         (x1 + label_size[0], y1),
-                         (255, 255, 0), -1)
-            
-            # Label text
-            cv2.putText(annotated, label, (x1, y1 - 4), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-    
-    return annotated
+from ai_service.detection import PyTorchDetector
 
 
 def test_pytorch_detection_analysis():
@@ -94,8 +41,13 @@ def test_pytorch_detection_analysis():
     if not video_files:
         return
     
-    # Initialize PyTorch YOLO model
-    model = YOLO(str(DEFAULT_MODEL))
+    # Initialize detector
+    detector = PyTorchDetector(
+        model_path=DEFAULT_MODEL,
+        conf_threshold=0.25,
+        iou_threshold=0.5,
+        class_id=0  # Person only
+    )
     
     print(f"{'Video File':<40} {'Status':<15} {'Total':<12} {'With Det':<12} {'Avg/Frame':<12}")
     
@@ -126,28 +78,23 @@ def test_pytorch_detection_analysis():
             if not success:
                 break
             
-            # Run PyTorch detection
-            results = model.predict(
-                source=frame,
-                conf=0.25,
-                iou=0.5,
-                classes=0,  # Person only
-                verbose=False
-            )
+            # Detect persons
+            detections = detector.detect(frame)
             
             # Count detections
-            num_detections = len(results[0].boxes) if results[0].boxes is not None else 0
+            num_detections = len(detections)
             total_detections += num_detections
             if num_detections > 0:
                 frames_with_detections += 1
             
             # Draw and write frame
-            annotated_frame = draw_detections(frame, results, frame_count, fps)
+            annotated_frame = detector.draw_detections(frame, detections, frame_count, fps)
             writer.write(annotated_frame)
             
             frame_count += 1
         
         writer.release()
+        cap.release()
         
         # Print summary row
         avg_detections_per_frame = total_detections / frame_count if frame_count > 0 else 0
@@ -155,3 +102,4 @@ def test_pytorch_detection_analysis():
 
 if __name__ == '__main__':
     test_pytorch_detection_analysis()
+

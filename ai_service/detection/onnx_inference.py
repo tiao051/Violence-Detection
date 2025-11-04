@@ -9,13 +9,14 @@ This module provides optimized ONNX inference for YOLOv8 models with:
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
 import onnxruntime as ort
 
 from ai_service.common.preprocessing.augmentation import YOLOPreprocessor
+from ai_service.ai_utils.visualization import draw_detections
 
 
 class ONNXYOLOInference:
@@ -236,3 +237,21 @@ class ONNXYOLOInference:
         union_area = box1_area + box2_area - inter_area
 
         return inter_area / union_area if union_area > 0 else 0.0
+
+    def draw_detections(
+        self, frame: np.ndarray, detections: List[Dict], frame_num: int, fps: float
+    ) -> np.ndarray:
+        """
+        Draw detection boxes on frame (green for ONNX).
+
+        Args:
+            frame: Input frame
+            detections: List of detections from infer()
+            frame_num: Frame number for display
+            fps: Video FPS for display
+
+        Returns:
+            Annotated frame with boxes and labels
+        """
+        # Green color for ONNX
+        return draw_detections(frame, detections, frame_num, fps, box_color=(0, 255, 0))
