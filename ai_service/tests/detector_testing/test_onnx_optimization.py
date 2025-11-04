@@ -166,17 +166,29 @@ class ONNXOptimizer:
             print("Setup failed")
             return
 
-        # Export all models
-        from ultralytics import YOLO
-        model = YOLO(str(DEFAULT_MODEL))
-        
-        print("\nExporting models...")
+        # Check for existing ONNX models
         export_results = {}
+        print("\nChecking for existing ONNX models...")
         for size in self.INPUT_SIZES:
-            success = self.export_onnx_model(size, model)
-            if success:
-                export_results[size] = self.models_dir / f"yolov8n_{size}.onnx"
-                print(f"  {size}x{size}: OK")
+            model_path = self.models_dir / f"yolov8n_{size}.onnx"
+            if model_path.exists():
+                export_results[size] = model_path
+                print(f"  {size}x{size}: Found (skip export)")
+            else:
+                print(f"  {size}x{size}: Not found")
+
+        # Export missing models
+        missing_sizes = [s for s in self.INPUT_SIZES if s not in export_results]
+        if missing_sizes:
+            print("\nExporting missing models...")
+            from ultralytics import YOLO
+            model = YOLO(str(DEFAULT_MODEL))
+            
+            for size in missing_sizes:
+                success = self.export_onnx_model(size, model)
+                if success:
+                    export_results[size] = self.models_dir / f"yolov8n_{size}.onnx"
+                    print(f"  {size}x{size}: OK")
 
         # Benchmark models
         print("\nBenchmarking models...")
