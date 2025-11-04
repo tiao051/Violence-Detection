@@ -4,12 +4,11 @@ PyTorch YOLOv8 Detection Analysis - Test All Videos with Visualization
 Analyze frame-by-frame detections on all .mp4 files using standard PyTorch YOLOv8.
 - Processes all video files in utils/test_data/
 - Draws detection boxes with confidence scores
-- Displays detection count per frame
 - Saves annotated video output for each file
-- Prints detailed frame-by-frame analysis
+- Prints summary statistics
 
 Output:
-    - Console: Detailed per-file and per-frame analysis
+    - Console: Summary statistics only
     - Videos: {original_name}_detections_pytorch.mp4 (annotated with cyan boxes)
 
 Usage:
@@ -97,66 +96,35 @@ def test_pytorch_detection_analysis():
         print(f"❌ No .mp4 files found in {test_data_dir}")
         return
     
-    print(f"\n📹 Found {len(video_files)} video file(s) to process:")
-    for vf in video_files:
-        print(f"  - {vf.name}")
+    print(f"\n📹 Processing {len(video_files)} video file(s) with PyTorch model...\n")
     
     # Initialize PyTorch YOLO model
-    print("\n" + "="*120)
-    print("PyTorch YOLOv8 MODEL LOADING".center(120))
-    print("="*120)
-    
     model = YOLO(str(DEFAULT_MODEL))
-    print(f"✅ Loaded: {DEFAULT_MODEL}")
     
-    print("\n" + "="*120)
-    print("PyTorch YOLO DETECTION ANALYSIS - ALL VIDEOS".center(120))
-    print("="*120)
-    
-    print(f"\nModel Info:")
-    print(f"  Model: {DEFAULT_MODEL}")
-    print(f"  Device: CPU")
-    print(f"  Conf Threshold: 0.25")
-    print(f"  IOU Threshold: 0.5")
+    print(f"{'Video File':<40} {'Status':<15} {'Total':<12} {'With Det':<12} {'Avg/Frame':<12}")
+    print("-" * 95)
     
     # Process each video file
     total_summary = {}
     
     for video_path in video_files:
-        print(f"\n{'='*120}")
-        print(f"Processing: {video_path.name}".center(120))
-        print(f"{'='*120}")
-        
         # Open video
         cap = cv2.VideoCapture(str(video_path))
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        duration_seconds = total_frames / fps if fps > 0 else 0
         
-        print(f"\nVideo Info:")
-        print(f"  File: {video_path.name}")
-        print(f"  Resolution: {w}x{h}")
-        print(f"  Total Frames: {total_frames}")
-        print(f"  FPS: {fps}")
-        print(f"  Duration: {duration_seconds:.2f}s")
-        print()
-        
-        # Track detections by second
-        detections_by_second: Dict[int, List] = {}
+        # Track detections
         frame_count = 0
-        all_frames = []  # Store all frames for video output
+        all_frames = []
+        all_detections_count = []
         
-        # First pass: collect detections
-        print("Processing frames...")
+        # Process frames
         while cap.isOpened():
             success, frame = cap.read()
             if not success:
                 break
-            
-            # Calculate current second
-            current_second = int((frame_count / fps)) if fps > 0 else 0
             
             # Run PyTorch detection
             results = model.predict(
@@ -169,22 +137,7 @@ def test_pytorch_detection_analysis():
             
             # Extract detections info
             num_detections = len(results[0].boxes) if results[0].boxes is not None else 0
-            confidences = []
-            if results[0].boxes is not None:
-                confidences = [float(conf) for conf in results[0].boxes.conf]
-            
-            # Store detections for this second
-            if current_second not in detections_by_second:
-                detections_by_second[current_second] = {
-                    'detections': [],
-                }
-            
-            # Add this frame's detections
-            detections_by_second[current_second]['detections'].append({
-                'frame': frame_count,
-                'count': num_detections,
-                'confidences': confidences,
-            })
+            all_detections_count.append(num_detections)
             
             # Store frame for video output
             all_frames.append({
@@ -197,12 +150,9 @@ def test_pytorch_detection_analysis():
         
         cap.release()
         
-        print(f"✅ Processed {frame_count} frames")
-        
         # Create output video with detections
         output_filename = video_path.stem + '_detections_pytorch.mp4'
         output_path = video_path.parent / output_filename
-        print(f"\n🎥 Creating annotated video...")
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
@@ -217,72 +167,12 @@ def test_pytorch_detection_analysis():
             writer.write(annotated_frame)
         
         writer.release()
-        print(f"✅ Video saved: {output_filename}")
         
-        # Print detailed analysis by second
-        print("\n" + "-"*120)
-        print("DETAILED FRAME-BY-FRAME ANALYSIS (PyTorch YOLOv8)".center(120))
-        print("-" * 120 + "\n")
-        
-        for second in sorted(detections_by_second.keys()):
-            second_data = detections_by_second[second]
-            frames_in_second = second_data['detections']
-            
-            print(f"\n⏱️  SECOND {second}:")
-            print("-" * 120)
-            
-            # Analyze all frames in this second
-            detection_counts = [f['count'] for f in frames_in_second]
-            min_detections = min(detection_counts)
-            max_detections = max(detection_counts)
-            avg_detections = sum(detection_counts) / len(detection_counts)
-            
-            print(f"  Frames in second: {len(frames_in_second)}")
-            print(f"  Detection range: {min_detections}-{max_detections} persons")
-            print(f"  Average: {avg_detections:.1f} persons per frame")
-            print()
-            
-            # Show frame details
-            for frame_data in frames_in_second:
-                frame_num = frame_data['frame']
-                count = frame_data['count']
-                confidences = frame_data['confidences']
-                
-                # Format confidences
-                if confidences:
-                    conf_str = ", ".join([f"{c:.3f}" for c in sorted(confidences, reverse=True)])
-                    conf_range = f"[{min(confidences):.3f}, {max(confidences):.3f}]"
-                else:
-                    conf_str = "No detections"
-                    conf_range = "-"
-                
-                time_ms = (frame_num / fps * 1000) if fps > 0 else 0
-                
-                print(f"    Frame {frame_num:>4d} ({time_ms:>6.0f}ms) | {count:>2d} persons | Conf: {conf_range} | {conf_str}")
-        
-        # Summary statistics for this video
-        print("\n" + "-"*120)
-        print("SUMMARY STATISTICS".center(120))
-        print("-" * 120 + "\n")
-        
-        all_detections_count = []
-        for second in detections_by_second.values():
-            for frame_data in second['detections']:
-                all_detections_count.append(frame_data['count'])
-        
+        # Calculate statistics
         if all_detections_count:
             frames_with_detections = sum(1 for d in all_detections_count if d > 0)
-            frames_without_detections = sum(1 for d in all_detections_count if d == 0)
             total_detections = sum(all_detections_count)
             avg_detections_per_frame = total_detections / len(all_detections_count)
-            
-            print(f"Total Frames Processed: {len(all_detections_count)}")
-            print(f"Frames with Detections: {frames_with_detections}")
-            print(f"Frames without Detections: {frames_without_detections}")
-            print(f"Min Detections per Frame: {min(all_detections_count)}")
-            print(f"Max Detections per Frame: {max(all_detections_count)}")
-            print(f"Average Detections per Frame: {avg_detections_per_frame:.2f}")
-            print(f"Total Detections (sum): {total_detections}")
             
             total_summary[video_path.name] = {
                 'frames': len(all_detections_count),
@@ -290,26 +180,13 @@ def test_pytorch_detection_analysis():
                 'avg_per_frame': avg_detections_per_frame,
                 'frames_with_detections': frames_with_detections,
             }
+            
+            # Print summary row
+            status = "✅ Done"
+            print(f"{video_path.name:<40} {status:<15} {total_detections:<12} {frames_with_detections:<12} {avg_detections_per_frame:<12.2f}")
     
-    # Print global summary
-    print("\n" + "="*120)
-    print("GLOBAL SUMMARY - ALL VIDEOS".center(120))
-    print("="*120 + "\n")
-    
-    if total_summary:
-        print(f"{'Video File':<40} {'Total Frames':<15} {'Total Detections':<20} {'Avg/Frame':<15} {'With Detections':<15}")
-        print("-" * 120)
-        
-        for video_name, stats in total_summary.items():
-            print(
-                f"{video_name:<40} {stats['frames']:<15} {stats['total_detections']:<20} "
-                f"{stats['avg_per_frame']:<15.2f} {stats['frames_with_detections']:<15}"
-            )
-        
-        print()
-    
-    print("✅ All videos processed successfully!")
-    print("\n" + "="*120 + "\n")
+    print("\n✅ All videos processed successfully!")
+    print()
 
 
 if __name__ == '__main__':
