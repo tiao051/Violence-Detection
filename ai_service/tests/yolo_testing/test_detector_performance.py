@@ -21,7 +21,7 @@ from ai_service.config import DEFAULT_MODEL
 
 
 
-TEST_VIDEOS_DIR = Path('utils/test_data')
+TEST_VIDEOS_DIR = Path('utils/test_inputs')
 TEST_VIDEOS = [
     TEST_VIDEOS_DIR / 'non_violence_1.mp4',
     TEST_VIDEOS_DIR / 'violence_1.mp4',

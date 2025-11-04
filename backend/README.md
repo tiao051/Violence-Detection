@@ -75,7 +75,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## Test Data
 
-Test videos are located in: `../utils/test_data/`
+Test videos are located in: `../utils/test_inputs/`
 
 The following test videos are available:
 - `violence_1.mp4` - Violence scene 1

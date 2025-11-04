@@ -58,7 +58,7 @@ class ONNXOptimizer:
                 return False
 
             # Load test frames from all 4 videos
-            test_videos_dir = Path("utils/test_data")
+            test_videos_dir = Path("utils/test_inputs")
             test_videos = sorted(test_videos_dir.glob("*.mp4"))
             
             if not test_videos:

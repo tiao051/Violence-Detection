@@ -2,9 +2,9 @@
 ONNX YOLO Detection Analysis - Test All Videos with Visualization
 
 Analyze frame-by-frame detections on all .mp4 files and visualize with bounding boxes.
-- Processes all video files in utils/test_data/
+- Processes all video files in utils/test_inputs/
 - Draws detection boxes with confidence scores
-- Saves annotated video output for each file
+- Saves annotated video output to utils/test_outputs/
 - Prints summary statistics
 
 Output:
@@ -78,17 +78,21 @@ def draw_detections(frame: np.ndarray, detections: List[Dict], frame_num: int, f
 def test_violence_detection_analysis():
     """Analyze ONNX YOLO detections on all videos with visualization."""
     
-    test_data_dir = Path('utils/test_data')
+    test_inputs_dir = Path('utils/test_inputs')
+    test_outputs_dir = Path('utils/test_outputs')
     
-    if not test_data_dir.exists():
-        print(f"❌ Test data directory not found: {test_data_dir}")
+    if not test_inputs_dir.exists():
+        print(f"❌ Test inputs directory not found: {test_inputs_dir}")
         return
     
+    # Create outputs directory if it doesn't exist
+    test_outputs_dir.mkdir(parents=True, exist_ok=True)
+    
     # Get all video files
-    video_files = sorted(test_data_dir.glob('*.mp4'))
+    video_files = sorted(test_inputs_dir.glob('*.mp4'))
     
     if not video_files:
-        print(f"❌ No .mp4 files found in {test_data_dir}")
+        print(f"❌ No .mp4 files found in {test_inputs_dir}")
         return
     
     print(f"\n📹 Processing {len(video_files)} video file(s) with ONNX model...\n")
@@ -151,7 +155,7 @@ def test_violence_detection_analysis():
         
         # Create output video with detections
         output_filename = video_path.stem + '_detections_onnx.mp4'
-        output_path = video_path.parent / output_filename
+        output_path = test_outputs_dir / output_filename
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
