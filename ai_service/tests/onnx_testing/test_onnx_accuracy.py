@@ -16,7 +16,7 @@ Usage:
 """
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
@@ -28,7 +28,7 @@ import numpy as np
 from ai_service.inference.onnx_inference import ONNXYOLOInference
 
 
-def draw_detections(frame: np.ndarray, detections: List[Dict], frame_num: int, fps: float) -> np.ndarray:
+def draw_detections(frame: np.ndarray, detections: List, frame_num: int, fps: float) -> np.ndarray:
     """Draw detection boxes and info on frame."""
     annotated = frame.copy()
     
@@ -82,27 +82,22 @@ def test_violence_detection_analysis():
     test_outputs_dir = Path('utils/test_outputs')
     
     if not test_inputs_dir.exists():
-        print(f"❌ Test inputs directory not found: {test_inputs_dir}")
+        print(f"Error: Test inputs directory not found: {test_inputs_dir}")
         return
     
-    # Create outputs directory if it doesn't exist
     test_outputs_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all video files
     video_files = sorted(test_inputs_dir.glob('*.mp4'))
-    
     if not video_files:
-        print(f"❌ No .mp4 files found in {test_inputs_dir}")
+        print(f"Error: No .mp4 files found in {test_inputs_dir}")
         return
-    
-    print(f"\n📹 Processing {len(video_files)} video file(s) with ONNX model...\n")
     
     # Initialize ONNX inference engine
     models_dir = Path('ai_service/models/weights')
     onnx_path = models_dir / 'yolov8n_320.onnx'
     
     if not onnx_path.exists():
-        print(f"❌ ONNX model not found: {onnx_path}")
+        print(f"Error: ONNX model not found: {onnx_path}")
         return
     
     onnx_engine = ONNXYOLOInference(
@@ -112,85 +107,50 @@ def test_violence_detection_analysis():
         iou_threshold=0.5,
     )
     
-    print(f"{'Video File':<40} {'Status':<15} {'Total':<12} {'With Det':<12} {'Avg/Frame':<12}")
-    print("-" * 95)
-    
-    # Process each video file
-    total_summary = {}
+    print(f"\nProcessing {len(video_files)} video(s)\n")
+    print(f"{'Video File':<45} {'Total Det':<12} {'With Det':<12} {'Avg/Frame':<12}")
+    print("-" * 85)
     
     for video_path in video_files:
-        # Open video
         cap = cv2.VideoCapture(str(video_path))
         fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        # Track detections
-        frame_count = 0
-        all_frames = []
-        all_detections_count = []
+        total_detections = 0
+        frames_with_detections = 0
+        total_frames = 0
         
-        # Process frames
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        output_filename = video_path.stem + '_detections_onnx.mp4'
+        output_path = test_outputs_dir / output_filename
+        writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+        
+        # Process frames and write video in one pass
+        frame_num = 0
         while cap.isOpened():
             success, frame = cap.read()
             if not success:
                 break
             
-            # Run ONNX detection (with NMS applied)
             detections = onnx_engine.infer(frame, class_id=0)
             num_detections = len(detections)
-            all_detections_count.append(num_detections)
             
-            # Store frame for video output
-            all_frames.append({
-                'frame_num': frame_count,
-                'frame_data': frame,
-                'detections': detections
-            })
+            total_detections += num_detections
+            if num_detections > 0:
+                frames_with_detections += 1
+            total_frames += 1
             
-            frame_count += 1
+            # Draw and write frame directly
+            annotated_frame = draw_detections(frame, detections, frame_num, fps)
+            writer.write(annotated_frame)
+            frame_num += 1
         
         cap.release()
-        
-        # Create output video with detections
-        output_filename = video_path.stem + '_detections_onnx.mp4'
-        output_path = test_outputs_dir / output_filename
-        
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
-        
-        for detection_frame in all_frames:
-            annotated_frame = draw_detections(
-                detection_frame['frame_data'],
-                detection_frame['detections'],
-                detection_frame['frame_num'],
-                fps
-            )
-            writer.write(annotated_frame)
-        
         writer.release()
         
-        # Calculate statistics
-        if all_detections_count:
-            frames_with_detections = sum(1 for d in all_detections_count if d > 0)
-            total_detections = sum(all_detections_count)
-            avg_detections_per_frame = total_detections / len(all_detections_count)
-            
-            total_summary[video_path.name] = {
-                'frames': len(all_detections_count),
-                'total_detections': total_detections,
-                'avg_per_frame': avg_detections_per_frame,
-                'frames_with_detections': frames_with_detections,
-            }
-            
-            # Print summary row
-            status = "✅ Done"
-            print(f"{video_path.name:<40} {status:<15} {total_detections:<12} {frames_with_detections:<12} {avg_detections_per_frame:<12.2f}")
+        avg_per_frame = total_detections / total_frames if total_frames > 0 else 0
+        print(f"{video_path.name:<45} {total_detections:<12} {frames_with_detections:<12} {avg_per_frame:<12.2f}")
     
-    print("\n✅ All videos processed successfully!")
-    print()
-
-
 if __name__ == '__main__':
     test_violence_detection_analysis()
