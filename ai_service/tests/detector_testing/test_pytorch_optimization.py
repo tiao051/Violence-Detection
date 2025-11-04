@@ -45,7 +45,7 @@ class PyTorchOptimizer:
         """Setup and validate environment."""
         try:
             # Load test frames from all videos
-            test_videos_dir = Path("utils/test_inputs")
+            test_videos_dir = Path("utils/test_data/test_inputs")
             test_videos = sorted(test_videos_dir.glob("*.mp4"))
 
             if not test_videos:
@@ -143,8 +143,6 @@ class PyTorchOptimizer:
             f"{metrics['model']:<20} {metrics['avg_time_ms']:<12} "
             f"{metrics['fps']:<10} {metrics['std_time_ms']:<10} {metrics['device']:<10} {metrics['frames_tested']:<8}"
         )
-        print()
-
 
 def test_pytorch_optimization():
     """Pytest-compatible test for PyTorch optimization suite."""

@@ -29,8 +29,8 @@ from ai_service.detection import PyTorchDetector
 def test_pytorch_detection_analysis():
     """Analyze PyTorch YOLOv8 detections on all videos with visualization."""
     
-    test_inputs_dir = Path('utils/test_inputs')
-    test_outputs_dir = Path('utils/test_outputs')
+    test_inputs_dir = Path('utils/test_data/test_inputs')
+    test_outputs_dir = Path('utils/test_data/test_outputs')
     
     # Create outputs directory if it doesn't exist
     test_outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,7 @@ def test_pytorch_detection_analysis():
         class_id=0  # Person only
     )
     
-    print(f"{'Video File':<40} {'Status':<15} {'Total':<12} {'With Det':<12} {'Avg/Frame':<12}")
+    print(f"{'Video File':<40} {'Status':<15} {'Total':<12} {'Frame w/Det':<12} {'Avg/Frame':<12}")
     
     # Process each video file
     for video_path in video_files:
@@ -72,7 +72,7 @@ def test_pytorch_detection_analysis():
         frames_with_detections = 0
         
         # Process frames: detect → draw → write (streaming, no buffering)
-        cap.seek(0)  # Reset to beginning
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to beginning
         while cap.isOpened():
             success, frame = cap.read()
             if not success:

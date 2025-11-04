@@ -58,7 +58,7 @@ class ONNXOptimizer:
                 return False
 
             # Load test frames from all 4 videos
-            test_videos_dir = Path("utils/test_inputs")
+            test_videos_dir = Path("utils/test_data/test_inputs")
             test_videos = sorted(test_videos_dir.glob("*.mp4"))
             
             if not test_videos:
@@ -208,11 +208,7 @@ class ONNXOptimizer:
             print(
                 f"{m['model']:<20} {m['imgsz']:<8} {m['avg_time_ms']:<12} "
                 f"{m['fps']:<10} {m['std_time_ms']:<10} {m['provider']:<15} {m['frames_tested']:<8}"
-            )
-        
-        print()
-
-
+            )      
 
 def test_onnx_optimization():
     """Pytest-compatible test for ONNX optimization suite."""

@@ -78,8 +78,8 @@ def draw_detections(frame: np.ndarray, detections: List, frame_num: int, fps: fl
 def test_violence_detection_analysis():
     """Analyze ONNX YOLO detections on all videos with visualization."""
     
-    test_inputs_dir = Path('utils/test_inputs')
-    test_outputs_dir = Path('utils/test_outputs')
+    test_inputs_dir = Path('utils/test_data/test_inputs')
+    test_outputs_dir = Path('utils/test_data/test_outputs')
     
     if not test_inputs_dir.exists():
         print(f"Error: Test inputs directory not found: {test_inputs_dir}")
@@ -108,7 +108,7 @@ def test_violence_detection_analysis():
     )
     
     print(f"\nProcessing {len(video_files)} video(s)\n")
-    print(f"{'Video File':<45} {'Total Det':<12} {'With Det':<12} {'Avg/Frame':<12}")
+    print(f"{'Video File':<45} {'Total Det':<12} {'Frames w/Det':<12} {'Avg/Frame':<12}")
     print("-" * 85)
     
     for video_path in video_files:
