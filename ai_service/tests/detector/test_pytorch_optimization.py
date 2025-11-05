@@ -11,8 +11,8 @@ Key Features:
 - GPU/CPU auto-detection
 
 Usage:
-    python ai_service/tests/detector_testing/test_pytorch_optimization.py
-    pytest ai_service/tests/detector_testing/test_pytorch_optimization.py -v -s
+    python ai_service/tests/detector/pytorch_optimization.py
+    pytest ai_service/tests/detector/pytorch_optimization.py -v -s
 """
 
 import sys

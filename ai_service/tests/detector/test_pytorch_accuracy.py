@@ -12,7 +12,7 @@ Output:
     - Videos: {original_name}_detections_pytorch.mp4 (annotated with cyan boxes)
 
 Usage:
-    python ai_service/tests/detector_testing/test_pytorch_accuracy.py
+    python ai_service/tests/detector/pytorch_accuracy.py
 """
 import sys
 from pathlib import Path
