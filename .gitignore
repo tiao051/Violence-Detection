@@ -88,6 +88,7 @@ build/
 
 # Test data outputs
 utils/test_data/outputs/*
+!.gitkeep
 
 # Docker volumes and data
 docker-data/
