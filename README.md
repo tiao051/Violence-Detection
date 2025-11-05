@@ -48,9 +48,9 @@ The system is built on a modular microservices architecture:
 ┌──────────────────────────────────────────┐
 │         INPUT SOURCES                    │
 │ IP Cameras │ Webcams │ File Upload       │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
+└───────────┬──────────────────────────────┘
+            │
+            ▼
 ┌──────────────────────────────────────────┐
 │     MEDIA PROCESSING LAYER               │
 │ FFmpeg │ Streaming │ MinIO               │
