@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 from typing import Union, Dict, Any, Tuple
 
 class Resize:
@@ -190,8 +191,8 @@ class YOLOPreprocessor:
 class SMEPreprocessor:
     """Spatial Motion Extractor preprocessing pipeline."""
 
-    def __init__(self, kernal_size = 3, iteration = 12):
-        self.kernal_size = np.ones((kernal_size, kernal_size), np.uint8)
+    def __init__(self, kernel_size = 3, iteration = 12):
+        self.kernel_size = np.ones((kernel_size, kernel_size), np.uint8)
         self.iteration = iteration
 
     def process(self, frame_t, frame_t1):
@@ -202,11 +203,14 @@ class SMEPreprocessor:
         diff = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
         # Dilate to enhance motion areas
-        mask = cv2.dilate(diff, self.kernal_size, iterations=self.iteration)
+        mask = cv2.dilate(diff, self.kernel_size, iterations=self.iteration)
+        
+        # Threshold mask to binary using Otsu's method for proper ROI extraction
+        _, mask_binary = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
         # Multiply mask with current frame to highlight motion
-        roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask)
+        roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask_binary)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
-        return roi, mask, diff, elapsed_ms
+        return roi, mask_binary, diff, elapsed_ms
