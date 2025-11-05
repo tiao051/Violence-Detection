@@ -44,34 +44,34 @@ The system is built on a modular microservices architecture:
 
 ```
 ┌──────────────────────────────────────────┐
-│         INPUT SOURCES                    │
-│ IP Cameras │ Webcams │ File Upload       │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
+│              INPUT SOURCES               │
+│    IP Cameras │ Webcams │ File Upload    │
+└────────────────────┬─────────────────────┘
+                     │
+                     ▼
 ┌──────────────────────────────────────────┐
-│     MEDIA PROCESSING LAYER               │
-│ FFmpeg │ Streaming │ MinIO               │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
+│         MEDIA PROCESSING LAYER           │
+│       FFmpeg │ Streaming │ MinIO         │
+└────────────────────┬─────────────────────┘
+                     │
+                     ▼
 ┌──────────────────────────────────────────┐
-│   AI DETECTION SERVICE (GPU)             │
-│ YOLOv8 │ OpenCV │ TensorRT/ONNX          │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
+│        AI DETECTION SERVICE (GPU)        │
+│     YOLOv8 │ OpenCV │ TensorRT/ONNX      │
+└────────────────────┬─────────────────────┘
+                     │
+                     ▼
 ┌──────────────────────────────────────────┐
 │       BACKEND SERVICES                   │
 │ Auth │ Kafka │ PostgreSQL │ Redis        │
-└──────────────┬───────────────────────────┘
-               │
-        ┌──────┴──────┐
-        ▼             ▼
-    ┌────────┐    ┌────────┐
-    │ MOBILE │    │  WEB   │
-    │Flutter │    │ React  │
-    └────────┘    └────────┘
+└────────────────────┬─────────────────────┘
+                     │
+              ┌──────┴──────┐
+              ▼             ▼
+          ┌────────┐    ┌────────┐
+          │ MOBILE │    │  WEB   │
+          │Flutter │    │ React  │
+          └────────┘    └────────┘
 ```
 ---
 
