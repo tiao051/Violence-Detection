@@ -42,36 +42,40 @@ A comprehensive AI-driven violence detection system designed for intelligent vid
 
 The system is built on a modular microservices architecture:
 
+<div align="center">
+
 ```
-┌─────────────────────────────────────────────────────┐
-│          VIDEO INPUT SOURCES                        │
-│  IP Cameras (RTSP) │ Webcams │ Video Files          │
-└────────────┬────────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────┐
-│          MEDIA PROCESSING LAYER                     │
-│  Frame Extraction │ Preprocessing │ Streaming       │
-└────────────┬────────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────┐
-│       AI DETECTION SERVICE                          │
-│  YOLOv8 (PyTorch/ONNX) │ OpenCV │ GPU/CPU Inference │
-└────────────┬────────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────┐
-│         BACKEND SERVICES                            │
-│  FastAPI │ PostgreSQL │ Redis │ Authentication      │
-└────────────┬────────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────┐
-│      USER-FACING INTERFACES                         │
-│  Web Dashboard (React) │ Mobile App (Flutter)       │
-└─────────────────────────────────────────────────────┘
+    ┌─────────────────────────────────────┐
+    │   VIDEO INPUT SOURCES               │
+    │ IP Cameras (RTSP) │ Webcams │ Files │
+    └────────────┬──────────────────────┘
+                 │
+                 ▼
+    ┌─────────────────────────────────────┐
+    │   MEDIA PROCESSING LAYER            │
+    │ Frame Extraction │ Preprocessing     │
+    └────────────┬──────────────────────┘
+                 │
+                 ▼
+    ┌─────────────────────────────────────┐
+    │   AI DETECTION SERVICE              │
+    │ YOLOv8 (PyTorch/ONNX) │ GPU/CPU     │
+    └────────────┬──────────────────────┘
+                 │
+                 ▼
+    ┌─────────────────────────────────────┐
+    │   BACKEND SERVICES                  │
+    │ FastAPI │ PostgreSQL │ Redis │ Auth │
+    └────────────┬──────────────────────┘
+                 │
+                 ▼
+    ┌─────────────────────────────────────┐
+    │   USER-FACING INTERFACES            │
+    │ Web Dashboard (React) │ Mobile (App) │
+    └─────────────────────────────────────┘
 ```
+
+</div>
 
 ---
 
