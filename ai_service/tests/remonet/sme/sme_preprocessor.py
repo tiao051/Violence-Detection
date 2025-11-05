@@ -26,14 +26,14 @@ ROOT_DIR = Path(__file__).resolve().parents[4]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from ai_service.common.preprocessing.augmentation import SMEPreprocessor
+from ai_service.remonet.sme import SMEPreprocessor
 
 class TestSMEPreprocessorFormat:
     """Test output format, dtype, and basic properties."""
 
     def setup_method(self):
         """Initialize SMEPreprocessor before each test."""
-        self.sme = SMEPreprocessor(kernel_size=3, iteration=12)
+        self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
         self.frame_h, self.frame_w = 224, 224
         self.channels = 3
 
@@ -109,7 +109,7 @@ class TestSMEMotionDetection:
 
     def setup_method(self):
         """Initialize SMEPreprocessor before each test."""
-        self.sme = SMEPreprocessor(kernel_size=3, iteration=12)
+        self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
         self.frame_h, self.frame_w = 224, 224
 
     def test_identical_frames_no_motion(self):
@@ -198,7 +198,7 @@ class TestSMEPerformance:
 
     def setup_method(self):
         """Initialize SMEPreprocessor before each test."""
-        self.sme = SMEPreprocessor(kernel_size=3, iteration=12)
+        self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
         self.frame_h, self.frame_w = 224, 224
 
     def test_processing_speed(self):
@@ -251,7 +251,7 @@ class TestSMEReproducibility:
 
     def setup_method(self):
         """Initialize SMEPreprocessor before each test."""
-        self.sme = SMEPreprocessor(kernel_size=3, iteration=12)
+        self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
         self.frame_h, self.frame_w = 224, 224
 
     def test_identical_inputs_identical_outputs(self):
@@ -275,8 +275,8 @@ class TestSMEReproducibility:
         frame_t = np.random.RandomState(42).randint(0, 256, (self.frame_h, self.frame_w, 3), dtype=np.uint8)
         frame_t1 = np.random.RandomState(43).randint(0, 256, (self.frame_h, self.frame_w, 3), dtype=np.uint8)
 
-        sme1 = SMEPreprocessor(kernel_size=3, iteration=12)
-        sme2 = SMEPreprocessor(kernel_size=3, iteration=12)
+        sme1 = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
+        sme2 = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
 
         roi1, mask1, diff1, _ = sme1.process(frame_t, frame_t1)
         roi2, mask2, diff2, _ = sme2.process(frame_t, frame_t1)
@@ -291,7 +291,7 @@ class TestSMERealData:
 
     def setup_method(self):
         """Initialize SMEPreprocessor and locate frame files."""
-        self.sme = SMEPreprocessor(kernel_size=3, iteration=12)
+        self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
         self.frames_dir = ROOT_DIR / "utils" / "test_data" / "test_inputs" / "frames"
         self.output_dir = ROOT_DIR / "utils" / "test_data" / "test_outputs" / "frames"
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -307,15 +307,18 @@ class TestSMERealData:
     def save_visualization(self, frame_t: np.ndarray, frame_t1: np.ndarray, 
                           roi: np.ndarray, mask: np.ndarray, diff: np.ndarray) -> None:
         """Save visualization of SME processing results."""
-        # Create a grid showing input frames and outputs (1x5)
-        h, w = frame_t.shape[:2]
+        # Note: roi, mask, diff are already resized to 224x224
+        # Resize input frames to match for visualization
+        target_h, target_w = 224, 224
+        frame_t_resized = cv2.resize(frame_t, (target_w, target_h))
+        frame_t1_resized = cv2.resize(frame_t1, (target_w, target_h))
         
         # Convert mask and diff to 3-channel for stacking
         mask_3ch = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
         diff_3ch = cv2.cvtColor(diff, cv2.COLOR_GRAY2BGR)
         
-        # Create 1x5 grid: Frame T | Frame T+1 | Diff | Mask | ROI
-        grid = np.hstack([frame_t, frame_t1, diff_3ch, mask_3ch, roi])
+        # Create 1x5 grid: Frame T | Frame T+1 | Diff | Mask | ROI (all 224x224)
+        grid = np.hstack([frame_t_resized, frame_t1_resized, diff_3ch, mask_3ch, roi])
         
         # Add labels
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -324,18 +327,18 @@ class TestSMERealData:
         thickness = 2
         
         cv2.putText(grid, "Frame T", (10, 20), font, font_scale, font_color, thickness)
-        cv2.putText(grid, "Frame T+1", (w + 10, 20), font, font_scale, font_color, thickness)
-        cv2.putText(grid, "Diff", (2*w + 10, 20), font, font_scale, font_color, thickness)
-        cv2.putText(grid, "Mask", (3*w + 10, 20), font, font_scale, font_color, thickness)
-        cv2.putText(grid, "ROI", (4*w + 10, 20), font, font_scale, font_color, thickness)
+        cv2.putText(grid, "Frame T+1", (target_w + 10, 20), font, font_scale, font_color, thickness)
+        cv2.putText(grid, "Diff", (2*target_w + 10, 20), font, font_scale, font_color, thickness)
+        cv2.putText(grid, "Mask", (3*target_w + 10, 20), font, font_scale, font_color, thickness)
+        cv2.putText(grid, "ROI", (4*target_w + 10, 20), font, font_scale, font_color, thickness)
         
         # Save visualization
         output_path = self.output_dir / "sme_output_visualization.jpg"
         cv2.imwrite(str(output_path), grid)
         
-        # Save individual outputs
-        cv2.imwrite(str(self.output_dir / "sme_frame_t.jpg"), frame_t)
-        cv2.imwrite(str(self.output_dir / "sme_frame_t1.jpg"), frame_t1)
+        # Save individual outputs (resized versions)
+        cv2.imwrite(str(self.output_dir / "sme_frame_t.jpg"), frame_t_resized)
+        cv2.imwrite(str(self.output_dir / "sme_frame_t1.jpg"), frame_t1_resized)
         cv2.imwrite(str(self.output_dir / "sme_diff.jpg"), diff)
         cv2.imwrite(str(self.output_dir / "sme_mask.jpg"), mask)
         cv2.imwrite(str(self.output_dir / "sme_roi.jpg"), roi)
@@ -359,13 +362,14 @@ class TestSMERealData:
         assert frame_t is not None, f"Failed to load frame: {frame_files[0]}"
         assert frame_t1 is not None, f"Failed to load frame: {frame_files[1]}"
         
-        # Process
+        # Process (frames will be resized to 224x224 inside process())
         roi, mask, diff, elapsed_ms = self.sme.process(frame_t, frame_t1)
         
-        # Verify outputs
-        assert roi.shape[:2] == frame_t.shape[:2], "ROI shape should match input frame"
-        assert mask.shape[:2] == frame_t.shape[:2], "Mask shape should match input frame"
-        assert diff.shape[:2] == frame_t.shape[:2], "Diff shape should match input frame"
+        # Verify outputs are resized to target size (224x224)
+        expected_shape = (224, 224)
+        assert roi.shape[:2] == expected_shape, f"ROI shape {roi.shape[:2]} should match target size {expected_shape}"
+        assert mask.shape[:2] == expected_shape, f"Mask shape {mask.shape[:2]} should match target size {expected_shape}"
+        assert diff.shape[:2] == expected_shape, f"Diff shape {diff.shape[:2]} should match target size {expected_shape}"
         
         print(f"\n  Real frames processing time: {elapsed_ms:.2f}ms")
         assert elapsed_ms < 5, f"Processing time {elapsed_ms:.2f}ms should be < 5ms"
@@ -395,6 +399,9 @@ class TestSMERealData:
         assert diff_mean >= 0, "Diff mean should be non-negative"
         assert diff.max() <= 255, "Diff max should not exceed 255"
         
+        # Verify resized output
+        assert diff.shape[:2] == (224, 224), f"Diff should be resized to (224, 224), got {diff.shape[:2]}"
+        
         # Save visualization
         self.save_visualization(frame_t, frame_t1, roi, mask, diff)
 
@@ -418,6 +425,12 @@ class TestSMERealData:
         assert roi.dtype == np.uint8
         assert mask.dtype == np.uint8
         assert diff.dtype == np.uint8
+        
+        # Verify resized output
+        assert roi.shape[:2] == (224, 224), f"ROI should be resized to (224, 224), got {roi.shape[:2]}"
+        assert mask.shape[:2] == (224, 224), f"Mask should be resized to (224, 224), got {mask.shape[:2]}"
+        assert diff.shape[:2] == (224, 224), f"Diff should be resized to (224, 224), got {diff.shape[:2]}"
+        
         assert elapsed_ms < 5, f"Processing time {elapsed_ms:.2f}ms should be < 5ms"
         
         # Save visualization
