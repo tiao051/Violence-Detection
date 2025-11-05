@@ -12,8 +12,8 @@ Key Features:
 - Structured performance metrics (latency, FPS, std deviation)
 
 Usage:
-    python ai_service/tests/detector_testing/test_onnx_optimization.py
-    pytest ai_service/tests/detector_testing/test_onnx_optimization.py -v -s
+    python ai_service/tests/detector/onnx_optimization.py
+    pytest ai_service/tests/detector/onnx_optimization.py -v -s
 """
 
 import sys

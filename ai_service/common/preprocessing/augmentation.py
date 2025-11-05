@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
+import time
 from typing import Union, Dict, Any, Tuple
-
 
 class Resize:
     """Resize image with letterbox (YOLO) or stretch (SSD) method."""
@@ -90,7 +90,6 @@ class Resize:
         
         return resized, metadata
 
-
 class Normalize:
     """Normalize image for model inference."""
     
@@ -126,7 +125,6 @@ class Normalize:
         data["image"] = normalized
         return data
 
-
 class ToCHW:
     """Convert HWC to CHW format."""
     
@@ -149,7 +147,6 @@ class ToCHW:
             raise ValueError(f"Invalid image shape: {image.shape}")
         
         return data
-
 
 class YOLOPreprocessor:
     """End-to-end YOLO preprocessing pipeline."""
@@ -190,3 +187,30 @@ class YOLOPreprocessor:
         image = np.expand_dims(image, axis=0).astype(np.float32)
         
         return image, metadata
+
+class SMEPreprocessor:
+    """Spatial Motion Extractor preprocessing pipeline."""
+
+    def __init__(self, kernel_size = 3, iteration = 12):
+        self.kernel_size = np.ones((kernel_size, kernel_size), np.uint8)
+        self.iteration = iteration
+
+    def process(self, frame_t, frame_t1):
+        start = time.perf_counter()
+
+        # Calculate absolute difference between two frames
+        diff = np.sqrt(np.sum((frame_t1.astype(np.float32) - frame_t.astype(np.float32)) ** 2, axis=2))
+        diff = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+        # Dilate to enhance motion areas
+        mask = cv2.dilate(diff, self.kernel_size, iterations=self.iteration)
+        
+        # Threshold mask to binary using Otsu's method for proper ROI extraction
+        _, mask_binary = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Multiply mask with current frame to highlight motion
+        roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask_binary)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        return roi, mask_binary, diff, elapsed_ms

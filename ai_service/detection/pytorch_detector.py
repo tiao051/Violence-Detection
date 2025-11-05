@@ -13,7 +13,7 @@ from typing import Dict, List
 import numpy as np
 from ultralytics import YOLO
 
-from ai_service.ai_utils.visualization import draw_detections
+from ai_service.utils.visualization import draw_detections
 
 
 class PyTorchDetector:
