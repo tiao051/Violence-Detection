@@ -51,10 +51,6 @@ logs/
 Thumbs.db
 desktop.ini
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
 # Testing
 .pytest_cache/
 .coverage
@@ -90,21 +86,9 @@ build/
 .env.local
 .env.*.local
 
-# Results and outputs
-results/
-outputs/
-checkpoints/
-
 # Test data outputs
 utils/test_data/outputs/*
 
 # Docker volumes and data
 docker-data/
 *.volume/
-
-# Datasets
-/datasets/
-data-preparation/
-
-# Evaluation results
-/evaluation_results/
