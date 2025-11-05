@@ -241,20 +241,6 @@ The project is actively maintained and welcomes community contributions.
 
 ---
 
-## License
-
-This project is provided for educational and research purposes.
-
----
-
-## Contributing
-
-We welcome contributions! Please refer to the individual component repositories:
-- [Backend Service](backend/README.md)
-- [AI Service](ai_service/README.md)
-
----
-
 ## Acknowledgments
 
 **🤝 Special Thanks To**
@@ -269,14 +255,6 @@ We welcome contributions! Please refer to the individual component repositories:
 
 <div align="center">
 
-### 📖 Documentation
-
-For detailed implementation guides, visit:
-- **[Backend Documentation](backend/README.md)** - API, services, deployment
-- **[AI Service Documentation](ai_service/README.md)** - Models, inference, testing
-
----
-
 ### 👨‍💻 Development Team
 
 **tiao051** - Project Creator & Lead Developer
@@ -288,8 +266,6 @@ For detailed implementation guides, visit:
 **Status**: 🔄 In Active Development | **Last Updated**: November 2025
 
 [![GitHub](https://img.shields.io/badge/GitHub-tiao051-181717?style=for-the-badge&logo=github)](https://github.com/tiao051)
-[![Python](https://img.shields.io/badge/Made%20with-Python-3776AB?style=flat-square&logo=python)](https://python.org)
-[![License](https://img.shields.io/badge/License-Research-blue?style=flat-square)](LICENSE)
 
 </div>
 
