@@ -16,7 +16,7 @@ import numpy as np
 import onnxruntime as ort
 
 from ai_service.common.preprocessing.augmentation import YOLOPreprocessor
-from ai_service.ai_utils.visualization import draw_detections
+from ai_service.utils.visualization import draw_detections
 
 
 class ONNXYOLOInference:
