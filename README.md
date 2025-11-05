@@ -45,34 +45,35 @@ The system is built on a modular microservices architecture:
 <div align="center">
 
 ```
-    ┌─────────────────────────────────────┐
-    │   VIDEO INPUT SOURCES               │
-    │ IP Cameras (RTSP) │ Webcams │ Files │
-    └────────────┬──────────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────────────────┐
-    │   MEDIA PROCESSING LAYER            │
-    │ Frame Extraction │ Preprocessing     │
-    └────────────┬──────────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────────────────┐
-    │   AI DETECTION SERVICE              │
-    │ YOLOv8 (PyTorch/ONNX) │ GPU/CPU     │
-    └────────────┬──────────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────────────────┐
-    │   BACKEND SERVICES                  │
-    │ FastAPI │ PostgreSQL │ Redis │ Auth │
-    └────────────┬──────────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────────────────┐
-    │   USER-FACING INTERFACES            │
-    │ Web Dashboard (React) │ Mobile (App) │
-    └─────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         INPUT SOURCES                            │
+│     IP Cameras (RTSP/ONVIF) │ Webcams │ File Upload              │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    MEDIA PROCESSING LAYER                        │
+│        FFmpeg Service │ Streaming Server │ MinIO Storage         │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                   AI DETECTION SERVICE (GPU)                     │
+│     YOLO Fine-tuned Model │ OpenCV │ TensorRT/ONNX Runtime       │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       BACKEND SERVICES                           │
+│       Auth │ Kafka/RabbitMQ │ PostgreSQL/MongoDB/Redis           │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                ┌──────────────┴──────────────┐
+                ▼                             ▼
+        ┌───────────────┐            ┌──────────────────┐
+        │    MOBILE     │            │       WEB        │
+        │  Flutter App  │            │ React Dashboard  │
+        └───────────────┘            └──────────────────┘
 ```
 
 </div>
