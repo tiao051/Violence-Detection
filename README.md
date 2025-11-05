@@ -45,27 +45,27 @@ The system is built on a modular microservices architecture:
 <div align="center">
 
 ```
-┌────────────────────────────────────────────┐
-│         INPUT SOURCES                      │
-│ IP Cameras │ Webcams │ File Upload        │
+┌──────────────────────────────────────────┐
+│         INPUT SOURCES                    │
+│ IP Cameras │ Webcams │ File Upload       │
 └──────────────┬───────────────────────────┘
                │
                ▼
-┌────────────────────────────────────────────┐
-│     MEDIA PROCESSING LAYER                 │
-│ FFmpeg │ Streaming │ MinIO                │
+┌──────────────────────────────────────────┐
+│     MEDIA PROCESSING LAYER               │
+│ FFmpeg │ Streaming │ MinIO               │
 └──────────────┬───────────────────────────┘
                │
                ▼
-┌────────────────────────────────────────────┐
-│   AI DETECTION SERVICE (GPU)               │
-│ YOLOv8 │ OpenCV │ TensorRT/ONNX           │
+┌──────────────────────────────────────────┐
+│   AI DETECTION SERVICE (GPU)             │
+│ YOLOv8 │ OpenCV │ TensorRT/ONNX          │
 └──────────────┬───────────────────────────┘
                │
                ▼
-┌────────────────────────────────────────────┐
-│       BACKEND SERVICES                     │
-│ Auth │ Kafka │ PostgreSQL │ Redis         │
+┌──────────────────────────────────────────┐
+│       BACKEND SERVICES                   │
+│ Auth │ Kafka │ PostgreSQL │ Redis        │
 └──────────────┬───────────────────────────┘
                │
         ┌──────┴──────┐
