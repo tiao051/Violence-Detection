@@ -287,13 +287,13 @@ class TestSMEReproducibility:
 
 
 class TestSMERealData:
-    """Test with real video frames from utils/test_data/test_inputs/frames."""
+    """Test with real video frames from utils/test_data/inputs/frames."""
 
     def setup_method(self):
         """Initialize SMEPreprocessor and locate frame files."""
         self.sme = SMEPreprocessor(kernel_size=3, iteration=2, target_size=(224, 224))
-        self.frames_dir = ROOT_DIR / "utils" / "test_data" / "test_inputs" / "frames"
-        self.output_dir = ROOT_DIR / "utils" / "test_data" / "test_outputs" / "frames"
+        self.frames_dir = ROOT_DIR / "utils" / "test_data" / "inputs" / "frames"
+        self.output_dir = ROOT_DIR / "utils" / "test_data" / "outputs" / "frames"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def get_frame_paths(self) -> list:
@@ -306,7 +306,7 @@ class TestSMERealData:
 
     def save_visualization(self, frame_t: np.ndarray, frame_t1: np.ndarray, 
                           roi: np.ndarray, mask: np.ndarray, diff: np.ndarray) -> None:
-        """Save visualization of SME processing results."""
+        """Save visualization of SME processing results to a single grid image."""
         # Note: roi, mask, diff are already resized to 224x224
         # Resize input frames to match for visualization
         target_h, target_w = 224, 224
@@ -332,16 +332,9 @@ class TestSMERealData:
         cv2.putText(grid, "Mask", (3*target_w + 10, 20), font, font_scale, font_color, thickness)
         cv2.putText(grid, "ROI", (4*target_w + 10, 20), font, font_scale, font_color, thickness)
         
-        # Save visualization
+        # Save single visualization grid
         output_path = self.output_dir / "sme_output_visualization.jpg"
         cv2.imwrite(str(output_path), grid)
-        
-        # Save individual outputs (resized versions)
-        cv2.imwrite(str(self.output_dir / "sme_frame_t.jpg"), frame_t_resized)
-        cv2.imwrite(str(self.output_dir / "sme_frame_t1.jpg"), frame_t1_resized)
-        cv2.imwrite(str(self.output_dir / "sme_diff.jpg"), diff)
-        cv2.imwrite(str(self.output_dir / "sme_mask.jpg"), mask)
-        cv2.imwrite(str(self.output_dir / "sme_roi.jpg"), roi)
 
     def test_real_frames_exist(self):
         """Verify test frames are available."""

@@ -45,7 +45,7 @@ class PyTorchOptimizer:
         """Setup and validate environment."""
         try:
             # Load test frames from all videos
-            test_videos_dir = Path("utils/test_data/test_inputs")
+            test_videos_dir = Path("utils/test_data/inputs/videos")
             test_videos = sorted(test_videos_dir.glob("*.mp4"))
 
             if not test_videos:

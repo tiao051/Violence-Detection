@@ -95,6 +95,9 @@ results/
 outputs/
 checkpoints/
 
+# Test data outputs
+utils/test_data/outputs/*
+
 # Docker volumes and data
 docker-data/
 *.volume/

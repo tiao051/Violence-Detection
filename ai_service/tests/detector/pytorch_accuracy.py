@@ -29,8 +29,8 @@ from ai_service.detection import PyTorchDetector
 def test_pytorch_detection_analysis():
     """Analyze PyTorch YOLOv8 detections on all videos with visualization."""
     
-    test_inputs_dir = Path('utils/test_data/test_inputs')
-    test_outputs_dir = Path('utils/test_data/test_outputs')
+    test_inputs_dir = Path('utils/test_data/inputs/videos')
+    test_outputs_dir = Path('utils/test_data/outputs/videos')
     
     # Create outputs directory if it doesn't exist
     test_outputs_dir.mkdir(parents=True, exist_ok=True)
