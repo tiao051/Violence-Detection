@@ -19,7 +19,7 @@ class SMEPreprocessor:
         
         Args:
             kernel_size: Size of dilation kernel (default: 3)
-            iteration: Number of dilation iterations (default: 2)
+            iteration: Number of dilation iterations (default: 8)
             target_size: Target frame size for resizing (default: (224, 224))
         """
         self.kernel_size = np.ones((kernel_size, kernel_size), np.uint8)
