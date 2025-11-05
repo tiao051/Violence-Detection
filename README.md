@@ -42,15 +42,13 @@ A comprehensive AI-driven violence detection system designed for intelligent vid
 
 The system is built on a modular microservices architecture:
 
-<div align="center">
-
 ```
 ┌──────────────────────────────────────────┐
 │         INPUT SOURCES                    │
 │ IP Cameras │ Webcams │ File Upload       │
-└───────────┬──────────────────────────────┘
-            │
-            ▼
+└──────────────┬───────────────────────────┘
+               │
+               ▼
 ┌──────────────────────────────────────────┐
 │     MEDIA PROCESSING LAYER               │
 │ FFmpeg │ Streaming │ MinIO               │
@@ -75,9 +73,6 @@ The system is built on a modular microservices architecture:
     │Flutter │    │ React  │
     └────────┘    └────────┘
 ```
-
-</div>
-
 ---
 
 ## Technical Specifications
