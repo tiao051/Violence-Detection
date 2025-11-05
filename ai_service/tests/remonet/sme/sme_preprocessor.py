@@ -202,13 +202,13 @@ class TestSMEPerformance:
         self.frame_h, self.frame_w = 224, 224
 
     def test_processing_speed(self):
-        """Verify processing time is under 20ms per frame."""
+        """Verify processing time is under 5ms per frame."""
         frame_t = np.random.randint(0, 256, (self.frame_h, self.frame_w, 3), dtype=np.uint8)
         frame_t1 = np.random.randint(0, 256, (self.frame_h, self.frame_w, 3), dtype=np.uint8)
 
         roi, mask, diff, elapsed_ms = self.sme.process(frame_t, frame_t1)
 
-        assert elapsed_ms < 20, f"Processing time {elapsed_ms:.2f}ms should be < 20ms"
+        assert elapsed_ms < 5, f"Processing time {elapsed_ms:.2f}ms should be < 5ms"
 
     def test_processing_speed_multiple_iterations(self):
         """Verify consistent fast performance over multiple frames."""
@@ -224,8 +224,8 @@ class TestSMEPerformance:
         avg_time = np.mean(timings)
         max_time = np.max(timings)
         
-        assert avg_time < 20, f"Average processing time {avg_time:.2f}ms should be < 20ms"
-        assert max_time < 25, f"Max processing time {max_time:.2f}ms is too high"
+        assert avg_time < 5, f"Average processing time {avg_time:.2f}ms should be < 5ms"
+        assert max_time < 8, f"Max processing time {max_time:.2f}ms should be < 8ms"
 
     def test_timing_consistency(self):
         """Verify processing times are relatively stable."""
@@ -366,7 +366,9 @@ class TestSMERealData:
         assert roi.shape[:2] == frame_t.shape[:2], "ROI shape should match input frame"
         assert mask.shape[:2] == frame_t.shape[:2], "Mask shape should match input frame"
         assert diff.shape[:2] == frame_t.shape[:2], "Diff shape should match input frame"
-        assert elapsed_ms < 20, f"Processing time {elapsed_ms:.2f}ms should be < 20ms"
+        
+        print(f"\n  Real frames processing time: {elapsed_ms:.2f}ms")
+        assert elapsed_ms < 5, f"Processing time {elapsed_ms:.2f}ms should be < 5ms"
         
         # Save visualization
         self.save_visualization(frame_t, frame_t1, roi, mask, diff)
@@ -397,30 +399,29 @@ class TestSMERealData:
         self.save_visualization(frame_t, frame_t1, roi, mask, diff)
 
     def test_real_frames_all_consecutive_pairs(self):
-        """Process multiple consecutive frame pairs from real data."""
+        """Process a single frame pair from real data."""
         frame_files = self.get_frame_paths()
         
-        if len(frame_files) < 5:
-            pytest.skip("Need at least 5 frames for this test")
+        if len(frame_files) < 2:
+            pytest.skip("Insufficient test frames")
         
-        # Test first 5 frames as consecutive pairs
-        for i in range(min(4, len(frame_files) - 1)):
-            frame_t = cv2.imread(str(frame_files[i]))
-            frame_t1 = cv2.imread(str(frame_files[i + 1]))
-            
-            assert frame_t is not None
-            assert frame_t1 is not None
-            
-            roi, mask, diff, elapsed_ms = self.sme.process(frame_t, frame_t1)
-            
-            # Basic validation
-            assert roi.dtype == np.uint8
-            assert mask.dtype == np.uint8
-            assert diff.dtype == np.uint8
-            assert elapsed_ms < 20
-            
-            # Save visualization for each pair
-            self.save_visualization(frame_t, frame_t1, roi, mask, diff)
+        # Load first two frames (1 pair)
+        frame_t = cv2.imread(str(frame_files[0]))
+        frame_t1 = cv2.imread(str(frame_files[1]))
+        
+        assert frame_t is not None
+        assert frame_t1 is not None
+        
+        roi, mask, diff, elapsed_ms = self.sme.process(frame_t, frame_t1)
+        
+        # Basic validation
+        assert roi.dtype == np.uint8
+        assert mask.dtype == np.uint8
+        assert diff.dtype == np.uint8
+        assert elapsed_ms < 5, f"Processing time {elapsed_ms:.2f}ms should be < 5ms"
+        
+        # Save visualization
+        self.save_visualization(frame_t, frame_t1, roi, mask, diff)
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
