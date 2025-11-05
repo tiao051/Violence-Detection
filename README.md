@@ -255,12 +255,6 @@ The project is actively maintained and welcomes community contributions.
 
 <div align="center">
 
-### 👨‍💻 Development Team
-
-**tiao051** - Project Creator & Lead Developer
-
----
-
 ### 💖 Built with Passion for a Safer World
 
 **Status**: 🔄 In Active Development | **Last Updated**: November 2025
