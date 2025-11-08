@@ -1,16 +1,16 @@
 """
-SME (Spatial Motion Extractor) Unit Tests
+SME (Spatial Motion Extractor) Preprocessor Unit Tests
 
-This module contains unit tests for the SMEExtractor component, verifying:
-- Motion detection between consecutive frames
-- Output format, shapes, data types, and value ranges
-- Processing performance and elapsed time constraints (< 5ms per frame pair)
-- Deterministic and reproducible results
-- Real video frame processing and visualization
+This module contains unit tests for the SMEPreprocessor component, verifying:
+- Frame resizing to target dimensions
+- Color space conversion (BGR/BGRA/Grayscale → RGB)
+- Data type handling and normalization
+- Processing performance and efficiency
+- Deterministic and reproducible preprocessing results
+- Real video frame preprocessing
 
 Usage:
-    pytest ai_service/tests/remonet/sme/test_sme_extractor.py -v -s
-    python -m pytest ai_service/tests/remonet/sme/test_sme_extractor.py
+    pytest ai_service/tests/remonet/sme/test_sme_preprocessor.py -v -s
 """
 
 import sys
@@ -26,13 +26,7 @@ ROOT_DIR = Path(__file__).resolve().parents[4]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from ai_service.remonet.sme import SMEExtractor, SMEPreprocessor
-
-
-@pytest.fixture
-def extractor():
-    """Returns an SMEExtractor instance with standard configuration."""
-    return SMEExtractor(kernel_size=3, iteration=2)
+from ai_service.remonet.sme import SMEPreprocessor
 
 
 @pytest.fixture
@@ -40,217 +34,196 @@ def preprocessor():
     """Returns an SMEPreprocessor instance for 224x224 RGB frames."""
     return SMEPreprocessor(target_size=(224, 224))
 
-
-# ==========================
 # Helper Functions
-# ==========================
 
-def create_random_pair(seed: int = 42) -> tuple[np.ndarray, np.ndarray]:
-    """Generate a pair of random 224x224 RGB frames."""
+def create_random_bgr_frame(seed: int = 42, size=(480, 640)) -> np.ndarray:
+    """Generate a random BGR frame (typical OpenCV format)."""
     np.random.seed(seed)
-    frame_t = np.random.randint(0, 256, (224, 224, 3), dtype=np.uint8)
-    frame_t1 = np.random.randint(0, 256, (224, 224, 3), dtype=np.uint8)
-    return frame_t, frame_t1
+    return np.random.randint(0, 256, (*size, 3), dtype=np.uint8)
 
 
-def create_identical_pair() -> tuple[np.ndarray, np.ndarray]:
-    """Generate a pair of identical 224x224 RGB frames (no motion)."""
-    frame = np.full((224, 224, 3), 128, dtype=np.uint8)
-    return frame, frame.copy()
+def create_random_grayscale_frame(seed: int = 42, size=(480, 640)) -> np.ndarray:
+    """Generate a random grayscale frame."""
+    np.random.seed(seed)
+    return np.random.randint(0, 256, size, dtype=np.uint8)
 
 
-def create_pair_with_motion_region(value_before: int = 100,
-                                   value_after: int = 200) -> tuple[np.ndarray, np.ndarray, tuple]:
-    """Generate a pair with a synthetic motion region in the center."""
-    frame_t = np.full((224, 224, 3), value_before, dtype=np.uint8)
-    frame_t1 = frame_t.copy()
-    y_start, y_end, x_start, x_end = 56, 168, 56, 168
-    frame_t1[y_start:y_end, x_start:x_end] = value_after
-    return frame_t, frame_t1, (y_start, y_end, x_start, x_end)
+def create_random_bgra_frame(seed: int = 42, size=(480, 640)) -> np.ndarray:
+    """Generate a random BGRA frame."""
+    np.random.seed(seed)
+    return np.random.randint(0, 256, (*size, 4), dtype=np.uint8)
 
 
-def create_pair_with_corner_motion(value_before: int = 50, value_after: int = 200) -> tuple[np.ndarray, np.ndarray]:
-    """Generate a pair with motion in the top-left corner."""
-    frame_t = np.full((224, 224, 3), value_before, dtype=np.uint8)
-    frame_t1 = frame_t.copy()
-    frame_t1[0:56, 0:56] = value_after
-    return frame_t, frame_t1
-
-
-def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray, max_elapsed_ms: float = None):
+def validate_preprocessor_output(frame: np.ndarray, target_size=(224, 224)):
     """
-    Validate SMEExtractor outputs.
+    Validate SMEPreprocessor output.
     
     Args:
-        roi: Region of interest frame (RGB)
-        mask: Motion mask (grayscale)
-        diff: Difference frame (grayscale)
-        max_elapsed_ms: Optional maximum allowed processing time
+        frame: Output frame to validate
+        target_size: Expected output size (width, height)
     """
-    # Shapes
-    assert roi.shape[:2] == (224, 224)
-    assert mask.shape[:2] == (224, 224)
-    assert diff.shape[:2] == (224, 224)
+    # Shape
+    assert frame.shape == (*target_size[::-1], 3), f"Expected shape {(*target_size[::-1], 3)}, got {frame.shape}"
     
     # Channels
-    assert roi.shape[2] == 3
-    assert len(mask.shape) == 2
-    assert len(diff.shape) == 2
+    assert frame.shape[2] == 3, "Output should have 3 channels (RGB)"
     
     # Data type
-    assert roi.dtype == np.uint8
-    assert mask.dtype == np.uint8
-    assert diff.dtype == np.uint8
+    assert frame.dtype == np.uint8, f"Output should be uint8, got {frame.dtype}"
     
-    # Value ranges
-    assert np.all((0 <= roi) & (roi <= 255))
-    assert np.all((0 <= mask) & (mask <= 255))
-    assert np.all((0 <= diff) & (diff <= 255))
-    
-    # Optional elapsed time
-    if max_elapsed_ms is not None:
-        assert max_elapsed_ms < max_elapsed_ms
+    # Value range
+    assert np.all((0 <= frame) & (frame <= 255)), "Pixel values should be in [0, 255]"
 
 
-def load_first_frame_pair(frame_files: list) -> tuple[np.ndarray, np.ndarray]:
-    """Load the first two frames from a list of file paths."""
-    frame_t = cv2.imread(str(frame_files[0]))
-    frame_t1 = cv2.imread(str(frame_files[1]))
-    assert frame_t is not None and frame_t1 is not None
-    return frame_t, frame_t1
+class TestSMEPreprocessorFormat:
+
+    def test_bgr_frame_conversion(self, preprocessor):
+        """Test: BGR frame is converted to RGB"""
+        frame = create_random_bgr_frame()
+        processed = preprocessor.preprocess(frame)
+        validate_preprocessor_output(processed)
+
+    def test_grayscale_frame_conversion(self, preprocessor):
+        """Test: Grayscale frame is converted to RGB"""
+        frame = create_random_grayscale_frame()
+        processed = preprocessor.preprocess(frame)
+        validate_preprocessor_output(processed)
+
+    def test_bgra_frame_conversion(self, preprocessor):
+        """Test: BGRA frame is converted to RGB (alpha dropped)"""
+        frame = create_random_bgra_frame()
+        processed = preprocessor.preprocess(frame)
+        validate_preprocessor_output(processed)
+
+    def test_output_shape(self, preprocessor):
+        """Test: Output has correct shape"""
+        frame = create_random_bgr_frame()
+        processed = preprocessor.preprocess(frame)
+        assert processed.shape == (224, 224, 3)
+
+    def test_output_dtype(self, preprocessor):
+        """Test: Output is uint8"""
+        frame = create_random_bgr_frame()
+        processed = preprocessor.preprocess(frame)
+        assert processed.dtype == np.uint8
+
+    def test_output_channels(self, preprocessor):
+        """Test: Output has 3 channels (RGB)"""
+        frame = create_random_bgr_frame()
+        processed = preprocessor.preprocess(frame)
+        assert processed.shape[2] == 3
 
 
-class TestSMEExtractorFormat:
+class TestSMEPreprocessorResizing:
 
-    def test_output_shapes(self, extractor):
-        frame_t, frame_t1 = create_random_pair()
-        roi, mask, diff, elapsed_ms = extractor.process(frame_t, frame_t1)
-        validate_sme_output(roi, mask, diff)
+    def test_resize_larger_to_target(self, preprocessor):
+        """Test: Resizes from larger size to 224x224"""
+        frame = create_random_bgr_frame(size=(720, 1280))
+        processed = preprocessor.preprocess(frame)
+        assert processed.shape == (224, 224, 3)
 
-    def test_output_channels_and_types(self, extractor):
-        frame_t, frame_t1 = create_random_pair()
-        roi, mask, diff, elapsed_ms = extractor.process(frame_t, frame_t1)
-        validate_sme_output(roi, mask, diff)
+    def test_resize_smaller_to_target(self, preprocessor):
+        """Test: Resizes from smaller size to 224x224"""
+        frame = create_random_bgr_frame(size=(112, 112))
+        processed = preprocessor.preprocess(frame)
+        assert processed.shape == (224, 224, 3)
 
-    def test_elapsed_time_numeric(self, extractor):
-        frame_t, frame_t1 = create_random_pair()
-        roi, mask, diff, elapsed_ms = extractor.process(frame_t, frame_t1)
-        assert isinstance(elapsed_ms, (int, float)) and elapsed_ms >= 0
+    def test_resize_already_correct_size(self, preprocessor):
+        """Test: Handles frame already at target size"""
+        frame = create_random_bgr_frame(size=(224, 224))
+        processed = preprocessor.preprocess(frame)
+        assert processed.shape == (224, 224, 3)
 
-
-class TestSMEMotionDetection:
-
-    def test_no_motion_for_identical_frames(self, extractor):
-        frame_t, frame_t1 = create_identical_pair()
-        roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
-        assert np.all(diff == 0)
-        assert np.count_nonzero(mask) / mask.size < 0.01
-
-    def test_detects_synthetic_center_motion(self, extractor):
-        frame_t, frame_t1, (y0, y1, x0, x1) = create_pair_with_motion_region()
-        roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
-        motion_mean = np.mean(diff[y0:y1, x0:x1])
-        non_motion_mean = np.mean(np.concatenate([diff[:y0, :].flatten(), diff[y1:, :].flatten()]))
-        assert motion_mean > non_motion_mean * 1.5
-
-    def test_mask_highlights_corner_motion(self, extractor):
-        frame_t, frame_t1 = create_pair_with_corner_motion()
-        roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
-        top_left_mask = mask[0:56, 0:56]
-        assert np.count_nonzero(top_left_mask) > 100
-
-    def test_roi_preserves_motion_regions(self, extractor):
-        frame_t, frame_t1, (y0, y1, x0, x1) = create_pair_with_motion_region()
-        roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
-        motion_mean = np.mean(roi[y0:y1, x0:x1])
-        static_mean = np.mean(np.concatenate([roi[:y0, :], roi[y1:, :]]))
-        assert motion_mean > static_mean * 1.2
+    def test_resize_maintains_content(self, preprocessor):
+        """Test: Resizing maintains approximate content distribution"""
+        frame = create_random_bgr_frame(size=(480, 640))
+        processed = preprocessor.preprocess(frame)
+        # Check that mean pixel value is roughly preserved
+        original_mean = frame.mean()
+        processed_mean = processed.mean()
+        # Allow ~20% deviation due to interpolation
+        assert abs(original_mean - processed_mean) < original_mean * 0.2
 
 
-class TestSMEExtractorPerformance:
+class TestSMEPreprocessorColorConversion:
 
-    def test_processing_speed_under_5ms(self, extractor):
-        frame_t, frame_t1 = create_random_pair()
-        roi, mask, diff, elapsed_ms = extractor.process(frame_t, frame_t1)
+    def test_bgr_to_rgb_channel_swap(self, preprocessor):
+        """Test: BGR channels are properly swapped to RGB"""
+        # Create frame with distinct channel values
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame[:, :, 0] = 50   # B channel
+        frame[:, :, 1] = 100  # G channel
+        frame[:, :, 2] = 150  # R channel
+        
+        processed = preprocessor.preprocess(frame)
+        # After BGR→RGB conversion: R should be first, B last
+        assert processed[0, 0, 0] == 150  # R
+        assert processed[0, 0, 1] == 100  # G
+        assert processed[0, 0, 2] == 50   # B
+
+    def test_grayscale_produces_rgb(self, preprocessor):
+        """Test: Grayscale becomes RGB with equal channels"""
+        gray_val = 128
+        frame = np.full((480, 640), gray_val, dtype=np.uint8)
+        processed = preprocessor.preprocess(frame)
+        # All channels should have same value
+        assert processed[0, 0, 0] == processed[0, 0, 1] == processed[0, 0, 2]
+
+    def test_bgra_alpha_channel_dropped(self, preprocessor):
+        """Test: BGRA alpha channel is properly dropped"""
+        frame = create_random_bgra_frame()
+        processed = preprocessor.preprocess(frame)
+        # Should have 3 channels, not 4
+        assert processed.shape[2] == 3
+
+
+class TestSMEPreprocessorPerformance:
+
+    def test_preprocessing_speed_single_frame(self, preprocessor):
+        """Test: Single frame preprocessing is fast"""
+        frame = create_random_bgr_frame()
+        start = time.perf_counter()
+        preprocessor.preprocess(frame)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        print(f"\n Single frame preprocessing: {elapsed_ms:.2f}ms")
+        # Should be < 5ms per frame
         assert elapsed_ms < 5
 
-    def test_consistent_performance(self, extractor):
+    def test_preprocessing_speed_batch(self, preprocessor):
+        """Test: Batch processing performance"""
+        frames = np.random.randint(0, 256, (10, 480, 640, 3), dtype=np.uint8)
+        start = time.perf_counter()
+        preprocessor.preprocess(frames)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        elapsed_per_frame = elapsed_ms / 10
+        print(f"\n Batch processing (10 frames): {elapsed_ms:.2f}ms total ({elapsed_per_frame:.2f}ms per frame)")
+        # Should be < 5ms per frame on average
+        assert elapsed_per_frame < 5
+
+    def test_consistent_preprocessing_speed(self, preprocessor):
+        """Test: Preprocessing speed is consistent"""
         timings = []
         for _ in range(10):
-            frame_t, frame_t1 = create_random_pair()
-            _, _, _, elapsed_ms = extractor.process(frame_t, frame_t1)
+            frame = create_random_bgr_frame()
+            start = time.perf_counter()
+            preprocessor.preprocess(frame)
+            elapsed_ms = (time.perf_counter() - start) * 1000
             timings.append(elapsed_ms)
-        assert np.mean(timings) < 5
-        assert np.max(timings) < 8
-
-    def test_timing_stability(self, extractor):
-        timings = []
-        for _ in range(20):
-            frame_t, frame_t1 = create_random_pair()
-            _, _, _, elapsed_ms = extractor.process(frame_t, frame_t1)
-            timings.append(elapsed_ms)
-        std_dev = np.std(timings)
+        
         mean_time = np.mean(timings)
-        assert std_dev < mean_time * 0.3
-
-
-class TestSMEExtractorReproducibility:
-
-    def test_identical_inputs_produce_identical_outputs(self, extractor):
-        frame_t, frame_t1 = create_random_pair()
-        roi1, mask1, diff1, _ = extractor.process(frame_t, frame_t1)
-        roi2, mask2, diff2, _ = extractor.process(frame_t, frame_t1)
-        assert np.array_equal(roi1, roi2)
-        assert np.array_equal(mask1, mask2)
-        assert np.array_equal(diff1, diff2)
-
-    def test_multiple_extractors_same_results(self):
-        frame_t, frame_t1 = create_random_pair()
-        ext1 = SMEExtractor(kernel_size=3, iteration=2)
-        ext2 = SMEExtractor(kernel_size=3, iteration=2)
-        roi1, mask1, diff1, _ = ext1.process(frame_t, frame_t1)
-        roi2, mask2, diff2, _ = ext2.process(frame_t, frame_t1)
-        assert np.array_equal(roi1, roi2)
-        assert np.array_equal(mask1, mask2)
-        assert np.array_equal(diff1, diff2)
-
-
-class TestSMEExtractorRealData:
-
-    def setup_method(self):
-        self.preprocessor = SMEPreprocessor(target_size=(224, 224))
-        self.extractor = SMEExtractor(kernel_size=3, iteration=2)
-        self.frames_dir = ROOT_DIR / "utils" / "test_data" / "inputs" / "frames"
-        self.output_dir = ROOT_DIR / "utils" / "test_data" / "outputs" / "frames"
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-    def get_frame_paths(self) -> list:
-        if not self.frames_dir.exists():
-            pytest.skip(f"No test frames found at {self.frames_dir}")
-        return sorted(self.frames_dir.glob("frame_*.jpg"))
-
-    def save_visualization(self, frame_t, frame_t1, roi, mask, diff):
-        """Save SMEExtractor processing results as a single visualization image."""
-        processed_t = self.preprocessor.preprocess(frame_t)
-        processed_t1 = self.preprocessor.preprocess(frame_t1)
-        roi_bgr = cv2.cvtColor(roi, cv2.COLOR_RGB2BGR)
-        mask_3ch = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-        diff_3ch = cv2.cvtColor(diff, cv2.COLOR_GRAY2BGR)
-        grid = np.hstack([processed_t, processed_t1, diff_3ch, mask_3ch, roi_bgr])
-        cv2.imwrite(str(self.output_dir / "sme_output_visualization.jpg"), grid)
-
-    def test_real_frames_processing(self):
-        frame_files = self.get_frame_paths()
-        if len(frame_files) < 2:
-            pytest.skip("Insufficient frames")
-
-        frame_t, frame_t1 = load_first_frame_pair(frame_files)
-        frame_t_processed = self.preprocessor.preprocess(frame_t)
-        frame_t1_processed = self.preprocessor.preprocess(frame_t1)
-
-        roi, mask, diff, elapsed_ms = self.extractor.process(frame_t_processed, frame_t1_processed)
-        validate_sme_output(roi, mask, diff, max_elapsed_ms=5)
-        self.save_visualization(frame_t, frame_t1, roi, mask, diff)
+        std_time = np.std(timings)
+        min_time = np.min(timings)
+        max_time = np.max(timings)
+        print(f"\n Preprocessing speed (10 frames):")
+        print(f"   Mean: {mean_time:.2f}ms")
+        print(f"   Std:  {std_time:.2f}ms")
+        print(f"   Min:  {min_time:.2f}ms")
+        print(f"   Max:  {max_time:.2f}ms")
+        
+        # Mean should be consistent
+        assert mean_time < 5
+        # Variance should be low
+        assert std_time < mean_time * 0.5
 
 
 if __name__ == "__main__":

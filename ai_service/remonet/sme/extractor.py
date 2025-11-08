@@ -59,14 +59,7 @@ class SMEPreprocessor:
         Returns:
             processed_frame: Frame in shape (224, 224, 3), uint8, RGB
         """
-        # Ensure uint8
-        if frame.dtype != np.uint8:
-            if frame.max() > 1:
-                frame = np.clip(frame, 0, 255).astype(np.uint8)
-            else:
-                frame = (frame * 255).astype(np.uint8)
-
-        # Get number of channels
+        # Get number of channels and convert to RGB
         if len(frame.shape) == 2:
             # Grayscale (H, W) -> convert to RGB
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
@@ -74,18 +67,23 @@ class SMEPreprocessor:
             # Single channel (H, W, 1) -> convert to RGB
             frame = cv2.cvtColor(frame.squeeze(), cv2.COLOR_GRAY2RGB)
         elif frame.shape[2] == 3:
-            # Assume BGR and convert to RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Assume BGR and convert to RGB using numpy (faster than cv2.cvtColor)
+            # BGR to RGB: swap channels 0 and 2
+            frame = frame[:, :, ::-1]
         elif frame.shape[2] == 4:
-            # BGRA -> convert to RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+            # BGRA -> RGB using numpy (drop alpha, swap BGR to RGB)
+            frame = frame[:, :, 2::-1]
         else:
             raise ValueError(f"Unsupported number of channels: {frame.shape[2]}")
 
-        # Resize to target size
+        # Ensure uint8 dtype
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+
+        # Always resize to target size (required for input handling)
         frame = cv2.resize(frame, self.target_size, interpolation=cv2.INTER_LINEAR)
 
-        return frame.astype(np.uint8)
+        return frame
 
 
 class SMEExtractor:
@@ -150,18 +148,22 @@ class SMEExtractor:
         
         start = time.perf_counter()
 
-        # Calculate motion magnitude between frames
+        # Calculate motion magnitude between frames using uint32 for intermediate calculations
         # Using Euclidean distance per pixel across RGB channels
         # Formula: sqrt((R1-R2)² + (G1-G2)² + (B1-B2)²)
-        frame_diff = frame_t1.astype(np.float32) - frame_t.astype(np.float32)
+        
+        # Compute differences using int32 to avoid overflow (uint8: -255 to 255)
+        frame_diff = frame_t1.astype(np.int32) - frame_t.astype(np.int32)
         
         if self.use_squared_distance:
             # Squared distance: faster, preserves ordering
-            diff = np.sum(frame_diff ** 2, axis=2)
-            diff = np.sqrt(diff)  # Still take sqrt for interpretability
+            # Sum squared differences across RGB channels
+            diff = np.sum(frame_diff ** 2, axis=2, dtype=np.int32)
+            diff = np.sqrt(diff.astype(np.float32))
         else:
             # Standard Euclidean distance: more intuitive
-            diff = np.sqrt(np.sum(frame_diff ** 2, axis=2))
+            # sum(x^2 + y^2 + z^2) then sqrt
+            diff = np.sqrt(np.sum(frame_diff ** 2, axis=2, dtype=np.int32).astype(np.float32))
         
         # Clip to uint8 range [0, 255] while preserving raw distance values
         diff = np.clip(diff, 0, 255).astype(np.uint8)
