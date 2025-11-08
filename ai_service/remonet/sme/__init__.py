@@ -1,5 +1,6 @@
 """SME (Spatial Motion Extractor) module."""
 
-from .extractor import SMEPreprocessor
+from .extractor import SMEExtractor, SMEPreprocessor
 
-__all__ = ["SMEPreprocessor"]
+__all__ = ["SMEExtractor", "SMEPreprocessor"]
+
