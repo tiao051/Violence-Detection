@@ -91,45 +91,91 @@ class SMEPreprocessor:
 class SMEExtractor:
     """Spatial Motion Extractor - Extract motion features from consecutive frames."""
 
-    def __init__(self, kernel_size=3, iteration=8):
+    def __init__(self, kernel_size=3, iteration=8, threshold=50, use_squared_distance=False):
         """
         Initialize SME processor.
         
         Args:
             kernel_size: Size of dilation kernel (default: 3)
             iteration: Number of dilation iterations (default: 8)
+            threshold: Binary threshold for motion mask (default: 50)
+                      Higher values = stricter motion detection
+                      Lower values = more sensitive to small changes
+            use_squared_distance: If True, use squared Euclidean distance (faster)
+                                 If False, use Euclidean distance (default, more intuitive)
         """
         self.kernel_size = np.ones((kernel_size, kernel_size), np.uint8)
         self.iteration = iteration
+        self.threshold = threshold
+        self.use_squared_distance = use_squared_distance
+
+    def _validate_frames(self, frame_t, frame_t1):
+        """
+        Validate input frames.
+        
+        Args:
+            frame_t: First frame to validate
+            frame_t1: Second frame to validate
+            
+        Raises:
+            ValueError: If frames don't meet requirements
+        """
+        if frame_t.shape != (224, 224, 3):
+            raise ValueError(f"frame_t must be shape (224, 224, 3), got {frame_t.shape}")
+        if frame_t1.shape != (224, 224, 3):
+            raise ValueError(f"frame_t1 must be shape (224, 224, 3), got {frame_t1.shape}")
+        if frame_t.dtype != np.uint8:
+            raise ValueError(f"frame_t must be uint8, got {frame_t.dtype}")
+        if frame_t1.dtype != np.uint8:
+            raise ValueError(f"frame_t1 must be uint8, got {frame_t1.dtype}")
 
     def process(self, frame_t, frame_t1):
         """
         Extract motion features from two consecutive frames.
         
         Args:
-            frame_t: First frame (RGB, uint8, pre-resized to 224x224)
-            frame_t1: Second frame (RGB, uint8, pre-resized to 224x224)
+            frame_t: First frame (RGB, uint8, 224x224)
+            frame_t1: Second frame (RGB, uint8, 224x224)
             
         Returns:
-            roi: Motion region extracted from frame_t1 (uint8, 224x224)
+            roi: Motion region extracted from frame_t1 (uint8, 224x224, 3)
+                 Only pixels with motion (mask > threshold) are retained
             mask_binary: Binary motion mask (uint8, 224x224)
-            diff: Grayscale motion difference (uint8, 224x224)
+                        255 where motion detected, 0 elsewhere
+            diff: Raw motion difference map (uint8, 224x224)
+                 Euclidean distance between frame_t and frame_t1
             elapsed_ms: Processing time in milliseconds
         """
+        self._validate_frames(frame_t, frame_t1)
+        
         start = time.perf_counter()
 
-        # Calculate Euclidean distance between two frames
-        diff = np.sqrt(np.sum((frame_t1.astype(np.float32) - frame_t.astype(np.float32)) ** 2, axis=2))
-        # Keep raw values, just clip to [0, 255]
+        # Calculate motion magnitude between frames
+        # Using Euclidean distance per pixel across RGB channels
+        # Formula: sqrt((R1-R2)² + (G1-G2)² + (B1-B2)²)
+        frame_diff = frame_t1.astype(np.float32) - frame_t.astype(np.float32)
+        
+        if self.use_squared_distance:
+            # Squared distance: faster, preserves ordering
+            diff = np.sum(frame_diff ** 2, axis=2)
+            diff = np.sqrt(diff)  # Still take sqrt for interpretability
+        else:
+            # Standard Euclidean distance: more intuitive
+            diff = np.sqrt(np.sum(frame_diff ** 2, axis=2))
+        
+        # Clip to uint8 range [0, 255] while preserving raw distance values
         diff = np.clip(diff, 0, 255).astype(np.uint8)
 
-        # Dilate motion mask directly
-        mask = cv2.dilate(diff, self.kernel_size, iterations=self.iteration)
+        # Enhance motion regions using morphological dilation
+        # This expands motion areas to fill small gaps
+        mask_dilated = cv2.dilate(diff, self.kernel_size, iterations=self.iteration)
         
-        # Threshold mask to binary - moderate threshold (50) for balanced motion detection
-        _, mask_binary = cv2.threshold(mask, 50, 255, cv2.THRESH_BINARY)
+        # Threshold to create binary motion mask
+        # Pixels above threshold are marked as motion (255), below as static (0)
+        _, mask_binary = cv2.threshold(mask_dilated, self.threshold, 255, cv2.THRESH_BINARY)
 
-        # Multiply mask with current frame to highlight motion
+        # Extract motion regions from original frame
+        # Only pixels where mask is non-zero are retained
         roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask_binary)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
