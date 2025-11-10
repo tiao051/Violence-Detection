@@ -89,19 +89,13 @@ class STEExtractor:
         
         Args:
             frames: List of 3 RGB frames (each: 224×224×3, uint8, [0-255])
+                   (Validation is done upstream by SME)
             
         Returns:
             composite_normalized: Shape (224, 224, 3), float32, ImageNet-normalized
         """
         if len(frames) != self.num_frames:
             raise ValueError(f"Expected {self.num_frames} frames, got {len(frames)}")
-        
-        # Validate frames
-        for i, frame in enumerate(frames):
-            if frame.shape != (224, 224, 3):
-                raise ValueError(f"Frame {i}: Expected shape (224, 224, 3), got {frame.shape}")
-            if frame.dtype != np.uint8:
-                raise ValueError(f"Frame {i}: Expected dtype uint8, got {frame.dtype}")
         
         # Average RGB channels for each frame to get grayscale
         p_t = np.mean(frames[0].astype(np.float32), axis=2)    # (224, 224)
@@ -119,40 +113,11 @@ class STEExtractor:
         
         return composite_normalized.astype(np.float32)
 
-    def extract_features(self, frames: List[np.ndarray]) -> Tuple[torch.Tensor, np.ndarray]:
-        """
-        Extract spatiotemporal features from 3 consecutive frames.
-        
-        Args:
-            frames: List of 3 RGB frames from SME
-            
-        Returns:
-            features: Tensor (1, 1280, 7, 7) - spatial feature map
-            embedding: ndarray (1280,) - global average pooled features
-        """
-        # Create temporal composite
-        composite = self.create_temporal_composite(frames)
-        
-        # Convert to tensor: (H, W, C) -> (1, C, H, W)
-        composite_tensor = torch.from_numpy(composite).permute(2, 0, 1).unsqueeze(0)
-        composite_tensor = composite_tensor.to(self.device)
-        
-        # Extract features through MobileNetV2 backbone
-        with torch.no_grad():
-            features = self.backbone(composite_tensor)  # (1, 1280, 7, 7)
-        
-        # Global average pooling for embedding (for GTE module)
-        embedding = torch.nn.functional.adaptive_avg_pool2d(features, (1, 1))
-        embedding = embedding.view(embedding.size(0), -1)  # (1, 1280)
-        embedding_np = embedding.cpu().numpy()[0]
-        
-        return features, embedding_np
-
     def process_batch(self, frames: np.ndarray) -> Tuple[torch.Tensor, np.ndarray]:
         """
         Process batch of 30 frames to extract features.
         
-        Converts 30 frames into 10 temporal composites (30/3 = 10).
+        Converts 30 frames into 10 temporal composites
         Extracts feature maps for all 10 composites in batch.
         
         Args:

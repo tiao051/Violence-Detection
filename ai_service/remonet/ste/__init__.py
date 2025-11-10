@@ -6,6 +6,6 @@ transforming visual changes into compact feature embeddings that represent
 short-term temporal dynamics.
 """
 
-from .extractor import STEExtractor, STEOutput, create_ste_extractor
+from .extractor import STEExtractor, STEOutput
 
-__all__ = ['STEExtractor', 'STEOutput', 'create_ste_extractor']
+__all__ = ['STEExtractor', 'STEOutput']
