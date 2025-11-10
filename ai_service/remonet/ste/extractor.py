@@ -50,11 +50,11 @@ class STEExtractor:
         self.input_size = input_size
         self.num_frames = num_frames
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        
+
         # Build MobileNetV2 feature extractor
         self.backbone = self._build_backbone()
         self.backbone.to(self.device)
-        self.backbone.eval()
+        self.backbone.eval() # comment this when we train the model, rn it's for inference only
         
         # ImageNet normalization parameters (REQUIRED for pretrained MobileNetV2)
         self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
@@ -145,7 +145,7 @@ class STEExtractor:
         composites_tensor = composites_tensor.to(self.device)
         
         # Extract features in batch
-        with torch.no_grad():
+        with torch.no_grad(): # if trainning e2e, remove no_grad()
             features = self.backbone(composites_tensor)  # (10, 1280, 7, 7)
         
         # Global average pooling for embeddings
