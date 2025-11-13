@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 /// Tab that displays detected events (alarms) from cameras.
 class EventTab extends StatefulWidget {
@@ -81,16 +82,7 @@ class _EventTabState extends State<EventTab> {
                             errorBuilder: (context, error, stackTrace) {
                               // Fallback to gradient placeholder on error
                               return Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      const Color(0xFF0F2027),
-                                      const Color(0xFF2B623A),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
+                                decoration: const BoxDecoration(gradient: kAppGradient),
                                 child: Center(
                                   child: Icon(
                                     Icons.videocam,
@@ -102,16 +94,7 @@ class _EventTabState extends State<EventTab> {
                             },
                           )
                         : Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFF0F2027),
-                                  const Color(0xFF2B623A),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
+                            decoration: const BoxDecoration(gradient: kAppGradient),
                             child: Center(
                               child: Icon(
                                 Icons.videocam,

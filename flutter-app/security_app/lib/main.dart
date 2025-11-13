@@ -10,7 +10,8 @@ import 'package:security_app/screens/event_detail_screen.dart';
 import 'package:security_app/screens/home_screen.dart';
 import 'package:security_app/screens/live_view_screen.dart';
 import 'package:security_app/screens/login_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:security_app/theme/app_theme.dart'; 
 
 void main() async {
   // Initialize Flutter bindings before async operations in main()
@@ -50,14 +51,7 @@ class MyApp extends StatelessWidget {
           return MaterialApp.router(
             title: 'Security App',
             routerConfig: _buildRouter(authProvider),
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF2B623A), // Green "DNA" color
-                brightness: Brightness.dark, // Dark mode activated
-              ),
-              scaffoldBackgroundColor: const Color(0xFF0F2027), // Dark background
-              useMaterial3: true,
-            ),
+            theme: appThemeData,
           );
         },
       ),

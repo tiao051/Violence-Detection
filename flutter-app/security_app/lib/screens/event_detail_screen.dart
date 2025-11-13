@@ -130,13 +130,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               Consumer<EventProvider>(
                 builder: (context, eventProvider, child) {
                   final isReporting = eventProvider.isReporting(widget.event.id);
+                  final errorColor = Theme.of(context).colorScheme.error;
 
                   return Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.red.shade900,
-                          Colors.red.shade700,
+                          errorColor.withOpacity(0.8),
+                          errorColor,
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,

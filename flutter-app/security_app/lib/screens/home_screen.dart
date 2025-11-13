@@ -6,6 +6,7 @@ import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 /// Home screen that exposes the app's primary tabs (Cameras, Events).
 ///
@@ -55,16 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_selectedIndex == 0 ? 'Cameras' : 'Events'),
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF0F2027), // Dark background
-                const Color(0xFF2B623A), // Green accent
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
+          decoration: const BoxDecoration(gradient: kAppGradient),
         ),
         actions: [
           // Logout action uses AuthProvider to clear session; routing is

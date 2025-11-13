@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 // import 'package:go_router/go_router.dart'; // GoRouter still needed as fallback
 import 'package:provider/provider.dart'; // Import Provider
 import 'package:security_app/providers/auth_provider.dart'; // Import AuthProvider
+import 'package:security_app/theme/app_theme.dart';
 
 /// Screen for user login.
 class LoginScreen extends StatefulWidget {
@@ -94,14 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 return Container(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF0F2027),
-                        const Color(0xFF2B623A),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: kAppGradient,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: ElevatedButton(
@@ -131,14 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 return Container(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF0F2027),
-                        const Color(0xFF2B623A),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: kAppGradient,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: ElevatedButton.icon(
