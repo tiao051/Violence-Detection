@@ -14,13 +14,13 @@ dependencies:
   # For playing video streams from network (RTSP/HTTP)
   flutter_vlc_player: ^7.4.1
 
-  # For state management (extensively used in future weeks)
+  # For state management
   provider: ^6.1.2
 
-  # For making HTTP requests to login/signup APIs (used in Week 2)
+  # For making HTTP requests to login/signup APIs
   http: ^1.2.1
 
-  # For storing login tokens locally (used in Week 2)
+  # For storing login tokens locally
   shared_preferences: ^2.2.3
 
   # For routing and navigation between screens
@@ -33,11 +33,17 @@ dependencies:
   # For beautiful loading spinners
   flutter_spinkit: ^5.2.1
 
+  # For iOS-style icons
   cupertino_icons: ^1.0.6
 
+  # For video playback
   video_player: ^2.5.1
 
+  # For internationalization and localization
   intl: ^0.19.0
+
+  # For Google Sign-In authentication
+  google_sign_in: ^6.2.1
 
 # Development dependencies
 dev_dependencies:
