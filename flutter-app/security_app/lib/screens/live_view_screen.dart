@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:video_player/video_player.dart'; // New import
+import 'package:chewie/chewie.dart';
 import 'package:security_app/services/camera_service.dart';
 
 /// Screen for viewing live video from a camera.
@@ -16,6 +17,7 @@ class LiveViewScreen extends StatefulWidget {
 
 class _LiveViewScreenState extends State<LiveViewScreen> {
   VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
   final CameraService _cameraService = CameraService();
 
   bool _isLoading = true;
@@ -37,10 +39,25 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(streamUrl))
         ..initialize().then((_) {
           if (mounted) {
+            // Create Chewie controller
+            _chewieController = ChewieController(
+              videoPlayerController: _videoController!,
+              autoPlay: true,
+              looping: false,
+              allowFullScreen: true,
+              allowMuting: true,
+              showControlsOnInitialize: true,
+              materialProgressColors: ChewieProgressColors(
+                playedColor: Theme.of(context).colorScheme.primary,
+                handleColor: Colors.white,
+                backgroundColor: Colors.grey.shade800,
+                bufferedColor: Colors.grey.shade600,
+              ),
+            );
+
             setState(() {
               _isLoading = false;
             });
-            _videoController!.play(); // Auto-play
           }
         }).catchError((error) {
           if (mounted) {
@@ -62,6 +79,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
   @override
   void dispose() {
+    _chewieController?.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -88,10 +106,12 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
           }
 
           // STATE 3: SUCCESS
-          if (_videoController != null && _videoController!.value.isInitialized) {
+          if (_videoController != null && _videoController!.value.isInitialized && _chewieController != null) {
             return AspectRatio(
               aspectRatio: _videoController!.value.aspectRatio,
-              child: VideoPlayer(_videoController!),
+              child: Chewie(
+                controller: _chewieController!,
+              ),
             );
           }
 

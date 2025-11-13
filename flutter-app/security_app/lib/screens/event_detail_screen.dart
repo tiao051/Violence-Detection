@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:security_app/models/event_model.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel event;
@@ -16,6 +17,7 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   late VideoPlayerController _controller;
+  late ChewieController _chewieController;
   bool _isLoadingVideo = true;
   String? _errorMessage;
 
@@ -30,8 +32,21 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       final videoUrl = widget.event.videoUrl;
       _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
       await _controller.initialize();
-      await _controller.play();
-      await _controller.setVolume(1.0);
+
+      _chewieController = ChewieController(
+        videoPlayerController: _controller,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowMuting: true,
+        showControlsOnInitialize: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Theme.of(context).colorScheme.primary,
+          handleColor: Colors.white,
+          backgroundColor: Colors.grey.shade800,
+          bufferedColor: Colors.grey.shade600,
+        ),
+      );
 
       if (mounted) {
         setState(() {
@@ -50,6 +65,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   void dispose() {
+    _chewieController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -108,7 +124,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   if (_errorMessage != null) {
                     return Center(child: Text("Video load error: $_errorMessage"));
                   }
-                  return VideoPlayer(_controller);
+                  return Chewie(
+                    controller: _chewieController,
+                  );
                 }),
               ),
               const SizedBox(height: 16),

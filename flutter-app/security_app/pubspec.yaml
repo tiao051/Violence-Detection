@@ -39,6 +39,9 @@ dependencies:
   # For video playback
   video_player: ^2.5.1
 
+  # For professional video player controls
+  chewie: ^1.8.0
+
   # For internationalization and localization
   intl: ^0.19.0
 
