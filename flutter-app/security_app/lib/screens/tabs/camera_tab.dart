@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
@@ -28,8 +29,11 @@ class _CameraTabState extends State<CameraTab> {
     return Consumer<CameraProvider>(
       builder: (context, cameraProvider, child) {
         if (cameraProvider.isLoading) {
-          return const Center(
-            child: CircularProgressIndicator(),
+          return Center(
+            child: SpinKitFadingCircle(
+              color: Theme.of(context).colorScheme.primary,
+              size: 50.0,
+            ),
           );
         }
 

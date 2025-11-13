@@ -52,6 +52,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_selectedIndex == 0 ? 'Cameras' : 'Events'),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF0F2027), // Dark background
+                const Color(0xFF2B623A), // Green accent
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           // Logout action uses AuthProvider to clear session; routing is
           // handled by GoRouter via the global auth listener.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -28,8 +29,11 @@ class _EventTabState extends State<EventTab> {
     return Consumer<EventProvider>(
       builder: (context, eventProvider, child) {
         if (eventProvider.isLoading) {
-          return const Center(
-            child: CircularProgressIndicator(),
+          return Center(
+            child: SpinKitFadingCircle(
+              color: Theme.of(context).colorScheme.primary,
+              size: 50.0,
+            ),
           );
         }
 

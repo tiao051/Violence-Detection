@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:video_player/video_player.dart'; // New import
 import 'package:security_app/services/camera_service.dart';
 
@@ -75,7 +76,10 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
         child: Builder(builder: (context) {
           // STATE 1: LOADING
           if (_isLoading) {
-            return const CircularProgressIndicator();
+            return SpinKitFadingCircle(
+              color: Theme.of(context).colorScheme.primary,
+              size: 50.0,
+            );
           }
 
           // STATE 2: ERROR

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/models/event_model.dart';
@@ -97,7 +98,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 aspectRatio: 16 / 9,
                 child: Builder(builder: (context) {
                   if (_isLoadingVideo) {
-                    return const Center(child: CircularProgressIndicator());
+                    return Center(
+                      child: SpinKitFadingCircle(
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 50.0,
+                      ),
+                    );
                   }
                   if (_errorMessage != null) {
                     return Center(child: Text("Video load error: $_errorMessage"));
@@ -125,23 +131,38 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 builder: (context, eventProvider, child) {
                   final isReporting = eventProvider.isReporting(widget.event.id);
 
-                  return ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.red.shade300,
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.red.shade900,
+                          Colors.red.shade700,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    // Disable button while reporting to prevent duplicate submissions
-                    onPressed: isReporting ? null : _handleReport,
-                    icon: isReporting 
-                      ? const SizedBox(
-                          width: 20, 
-                          height: 20, 
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                        ) 
-                      : const Icon(Icons.report_problem),
-                    label: Text(isReporting ? "Sending..." : "Report false detection"),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,  // White text & icon
+                        shadowColor: Colors.transparent,
+                        disabledBackgroundColor: Colors.transparent,
+                        elevation: 0,
+                      ),
+                      // Disable button while reporting to prevent duplicate submissions
+                      onPressed: isReporting ? null : _handleReport,
+                      icon: isReporting 
+                        ? const SizedBox(
+                            width: 20, 
+                            height: 20, 
+                            child: SpinKitFadingCircle(color: Colors.white, size: 20.0)
+                          ) 
+                        : const Icon(Icons.report_problem),
+                      label: Text(isReporting ? "Sending..." : "Report false detection"),
+                    ),
                   );
                 },
               ),

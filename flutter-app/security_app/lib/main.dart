@@ -51,7 +51,11 @@ class MyApp extends StatelessWidget {
             title: 'Security App',
             routerConfig: _buildRouter(authProvider),
             theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF2B623A), // Green "DNA" color
+                brightness: Brightness.dark, // Dark mode activated
+              ),
+              scaffoldBackgroundColor: const Color(0xFF0F2027), // Dark background
               useMaterial3: true,
             ),
           );

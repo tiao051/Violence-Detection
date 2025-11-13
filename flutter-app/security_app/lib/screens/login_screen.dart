@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 // import 'package:go_router/go_router.dart'; // GoRouter still needed as fallback
 import 'package:provider/provider.dart'; // Import Provider
 import 'package:security_app/providers/auth_provider.dart'; // Import AuthProvider
@@ -84,15 +85,33 @@ class _LoginScreenState extends State<LoginScreen> {
             Consumer<AuthProvider>(
               builder: (context, auth, child) {
                 if (auth.isLoading) {
-                  return const CircularProgressIndicator();
+                  return SpinKitFadingCircle(
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 50.0,
+                  );
                 }
 
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
+                return Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF0F2027),
+                        const Color(0xFF2B623A),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  onPressed: _handleLogin,
-                  child: const Text('Login'),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                    ),
+                    onPressed: _handleLogin,
+                    child: const Text('Login'),
+                  ),
                 );
               },
             ),
