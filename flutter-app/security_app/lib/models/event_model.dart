@@ -29,14 +29,14 @@ final List<EventModel> dummyEvents = [
   EventModel(
     id: 'evt_001',
     cameraName: 'Front Gate Camera',
-    thumbnailUrl: '',
+    thumbnailUrl: 'https://picsum.photos/seed/event1/120/90',
     videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
   ),
   EventModel(
     id: 'evt_002',
     cameraName: 'Kitchen Camera',
-    thumbnailUrl: '',
+    thumbnailUrl: 'https://picsum.photos/seed/event2/120/90',
     videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
     timestamp: DateTime.now().subtract(const Duration(hours: 2)),
   ),

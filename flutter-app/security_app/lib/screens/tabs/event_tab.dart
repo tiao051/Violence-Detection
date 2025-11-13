@@ -59,9 +59,68 @@ class _EventTabState extends State<EventTab> {
             return Card(
               margin: const EdgeInsets.all(8.0),
               child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.shade100,
-                  child: const Icon(Icons.warning_amber, color: Colors.red),
+                leading: SizedBox(
+                  width: 100.0,
+                  height: 75.0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8.0),
+                    child: event.thumbnailUrl.isNotEmpty
+                        ? Image.network(
+                            event.thumbnailUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey.shade800,
+                                child: SpinKitFadingCircle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 30.0,
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to gradient placeholder on error
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      const Color(0xFF0F2027),
+                                      const Color(0xFF2B623A),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.videocam,
+                                    color: Colors.white.withOpacity(0.7),
+                                    size: 32,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF0F2027),
+                                  const Color(0xFF2B623A),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                Icons.videocam,
+                                color: Colors.white.withOpacity(0.7),
+                                size: 32,
+                              ),
+                            ),
+                          ),
+                  ),
                 ),
                 title: Text('Detected at ${event.cameraName}'),
                 subtitle: Text(formattedTime),
