@@ -44,26 +44,32 @@ class _CameraTabState extends State<CameraTab> {
         }
 
         final cameras = cameraProvider.cameras;
-        return ListView.builder(
-          itemCount: cameras.length,
-          itemBuilder: (context, index) {
-            final camera = cameras[index];
+        return RefreshIndicator(
+          onRefresh: () => cameraProvider.refreshCameras(),
+          color: Theme.of(context).colorScheme.primary,
+          strokeWidth: 3.0,
+          backgroundColor: Colors.transparent,
+          child: ListView.builder(
+            itemCount: cameras.length,
+            itemBuilder: (context, index) {
+              final camera = cameras[index];
 
-            return Card(
-              margin: const EdgeInsets.all(8.0),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.videocam_outlined),
+              return Card(
+                margin: const EdgeInsets.all(8.0),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.videocam_outlined),
+                  ),
+                  title: Text(camera.name),
+                  subtitle: Text('ID: ${camera.id}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    context.push('/live_view/${camera.id}');
+                  },
                 ),
-                title: Text(camera.name),
-                subtitle: Text('ID: ${camera.id}'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  context.push('/live_view/${camera.id}');
-                },
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );

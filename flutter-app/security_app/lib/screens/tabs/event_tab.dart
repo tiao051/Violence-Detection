@@ -50,16 +50,21 @@ class _EventTabState extends State<EventTab> {
           return const Center(child: Text('No events found.'));
         }
 
-        return ListView.builder(
-          itemCount: events.length,
-          itemBuilder: (context, index) {
-            final event = events[index];
-            final formattedTime = DateFormat('HH:mm - dd/MM/yyyy')
-                                  .format(event.timestamp);
+        return RefreshIndicator(
+          onRefresh: () => eventProvider.refreshEvents(),
+          color: Theme.of(context).colorScheme.primary,
+          strokeWidth: 3.0,
+          backgroundColor: Colors.transparent,
+          child: ListView.builder(
+            itemCount: events.length,
+            itemBuilder: (context, index) {
+              final event = events[index];
+              final formattedTime = DateFormat('HH:mm - dd/MM/yyyy')
+                                    .format(event.timestamp);
 
-            return Card(
-              margin: const EdgeInsets.all(8.0),
-              child: ListTile(
+              return Card(
+                margin: const EdgeInsets.all(8.0),
+                child: ListTile(
                 leading: SizedBox(
                   width: 100.0,
                   height: 75.0,
@@ -114,7 +119,8 @@ class _EventTabState extends State<EventTab> {
                 },
               ),
             );
-          },
+            },
+          ),
         );
       },
     );

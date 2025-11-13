@@ -72,4 +72,26 @@ class EventProvider with ChangeNotifier {
     _reportError = null;
     notifyListeners();
   }
+
+  /// Refreshes the event list by clearing cache and fetching fresh data.
+  ///
+  /// Called by pull-to-refresh gesture. Returns a Future that completes
+  /// when the fetch operation is done (success or failure).
+  Future<void> refreshEvents() async {
+    // Clear cache to force fresh fetch
+    _events = [];
+    _fetchError = null;
+    _isLoadingEvents = true;
+    notifyListeners();
+
+    try {
+      _events = await _eventService.getEvents();
+      _fetchError = null;
+    } catch (e) {
+      _fetchError = e.toString();
+    } finally {
+      _isLoadingEvents = false;
+      notifyListeners();
+    }
+  }
 }

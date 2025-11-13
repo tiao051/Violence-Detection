@@ -44,4 +44,26 @@ class CameraProvider with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
   }
+
+  /// Refreshes the camera list by clearing cache and fetching fresh data.
+  ///
+  /// Called by pull-to-refresh gesture. Returns a Future that completes
+  /// when the fetch operation is done (success or failure).
+  Future<void> refreshCameras() async {
+    // Clear cache to force fresh fetch
+    _cameras = [];
+    _errorMessage = null;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _cameras = await _cameraService.getCameras();
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }
