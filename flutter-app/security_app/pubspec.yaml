@@ -45,6 +45,9 @@ dependencies:
   # For Google Sign-In authentication
   google_sign_in: ^6.2.1
 
+  # For Font Awesome icons (including Google logo)
+  font_awesome_flutter: ^10.7.0
+
 # Development dependencies
 dev_dependencies:
   flutter_test:

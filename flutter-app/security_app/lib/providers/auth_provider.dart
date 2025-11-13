@@ -9,6 +9,7 @@ class AuthProvider with ChangeNotifier {
 
   String? _token;
   bool _isLoading = false;
+  bool _isLoadingGoogle = false;
   String? _errorMessage;
 
   /// Constructor that restores authentication state from previous session.
@@ -24,6 +25,7 @@ class AuthProvider with ChangeNotifier {
 
   bool get isLoggedIn => _token != null;
   bool get isLoading => _isLoading;
+  bool get isLoadingGoogle => _isLoadingGoogle;
   String? get errorMessage => _errorMessage;
 
   /// Logs in the user with email and password.
@@ -50,10 +52,37 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Initiates Google Sign-In flow via AuthService.
+  ///
+  /// Sets _isLoadingGoogle flag to show spinner on Google button only.
+  /// Persists token to SharedPreferences on success.
+  Future<void> signInWithGoogleProvider() async {
+    _isLoadingGoogle = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final token = await _authService.signInWithGoogle();
+      _token = token;
+      await _prefs.setString('token', token);
+
+      _isLoadingGoogle = false;
+      notifyListeners();
+    } catch (e) {
+      _token = null;
+      _errorMessage = e.toString();
+      _isLoadingGoogle = false;
+      notifyListeners();
+    }
+  }
+
   /// Logs out the current user and clears persisted session.
+  ///
+  /// Also signs out from Google to forget account selection.
   Future<void> logout() async {
     _token = null;
     await _prefs.remove('token');
+    await _authService.signOutGoogle();
     notifyListeners();
   }
 }
