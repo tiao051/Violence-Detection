@@ -60,4 +60,16 @@ class EventProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Clears all cached event data.
+  ///
+  /// Called when user logs out to prevent data leaks between sessions.
+  void clearCache() {
+    _events = [];
+    _isLoadingEvents = false;
+    _fetchError = null;
+    _reportingEvents.clear();
+    _reportError = null;
+    notifyListeners();
+  }
 }

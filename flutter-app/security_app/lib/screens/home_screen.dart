@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/auth_provider.dart';
+import 'package:security_app/providers/camera_provider.dart';
+import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
@@ -70,6 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
+              // Clear all cached data to prevent stale data leaks between users
+              context.read<CameraProvider>().clearCache();
+              context.read<EventProvider>().clearCache();
               context.read<AuthProvider>().logout();
             },
           ),

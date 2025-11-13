@@ -34,4 +34,14 @@ class CameraProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Clears all cached camera data.
+  ///
+  /// Called when user logs out to prevent data leaks between sessions.
+  void clearCache() {
+    _cameras = [];
+    _isLoading = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
 }
