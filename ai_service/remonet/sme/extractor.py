@@ -121,7 +121,7 @@ class SMEExtractor:
         if frame_t.shape != (224, 224, 3):
             raise ValueError(f"frame_t must be shape (224, 224, 3), got {frame_t.shape}")
         if frame_t.dtype != np.uint8:
-            raise ValueError(f"frame_t must be uint8, got {frame_t.dtype}")")
+            raise ValueError(f"frame_t must be uint8, got {frame_t.dtype}")
 
     def process(self, frame_t, frame_t1):
         """
