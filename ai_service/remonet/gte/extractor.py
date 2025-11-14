@@ -142,35 +142,34 @@ class GTEExtractor(nn.Module):
         Apply Global Average Pooling on spatial dimensions.
         
         Compresses spatial information (H×W) while preserving channel and temporal dims.
+        Accepts STE output format: (T/3, C, H, W)
         
         Formula:
             S_c = (1 / (H×W)) * Σ Σ B_c(i, j)
         
         Args:
-            B: Feature map from STE, shape (batch, C, T/3, H, W) or (C, T/3, H, W)
-               Example: (10, 1280, 7, 7) for unbatched or (1, 1280, 10, 7, 7) for batched
+            B: Feature map from STE, shape (T/3, C, H, W) or (batch, T/3, C, H, W)
+               Example: (10, 1280, 7, 7) from STE
             
         Returns:
-            S: Spatially compressed features, shape (batch, C, T/3) or (C, T/3)
-               Spatial dimensions (H, W) are reduced to single value per channel-frame
+            S: Spatially compressed features, shape (C, T/3)
         """
-        # Determine input format
-        original_dim = B.dim()
-        if original_dim == 4:
-            # Unbatched: (C, T/3, H, W) -> add batch dim
-            B = B.unsqueeze(0)  # (1, C, T/3, H, W)
+        # Handle both 4D and 5D input
+        if B.dim() == 4:
+            # Unbatched: (T/3, C, H, W)
+            # Reorder to (C, T/3, H, W) for processing
+            B = B.permute(1, 0, 2, 3)  # (C, T/3, H, W)
             squeeze_output = True
-        else:
+        elif B.dim() == 5:
+            # Batched: (batch, T/3, C, H, W)
+            # Reorder to (batch, C, T/3, H, W)
+            B = B.permute(0, 2, 1, 3, 4)  # (batch, C, T/3, H, W)
             squeeze_output = False
+        else:
+            raise ValueError(f"Expected 4D or 5D input, got {B.dim()}D")
         
         # Global Average Pooling over spatial dimensions (H, W)
-        # B shape: (batch, C, T/3, H, W)
-        # Apply mean over dimensions 3, 4 (H and W)
-        S = torch.mean(B, dim=(3, 4))  # (batch, C, T/3)
-        
-        # Remove batch dimension if input was unbatched
-        if squeeze_output:
-            S = S.squeeze(0)  # (C, T/3)
+        S = torch.mean(B, dim=(-2, -1))  # (C, T/3) or (batch, C, T/3)
         
         return S
     
@@ -191,12 +190,12 @@ class GTEExtractor(nn.Module):
             q: Temporal summary vector, shape (T/3,) or (batch, T/3)
                Single value per temporal frame representing all channels
         """
-        # Determine if batched
+        # Mean over channel dimension (dim 0 for unbatched, dim 1 for batched)
         if S.dim() == 3:
-            # Batched: (batch, C, T/3) -> mean over channel dim
+            # Batched: (batch, C, T/3) -> mean over dim 1 (channel)
             q = torch.mean(S, dim=1)  # (batch, T/3)
         else:
-            # Unbatched: (C, T/3) -> mean over channel dim
+            # Unbatched: (C, T/3) -> mean over dim 0 (channel)
             q = torch.mean(S, dim=0)  # (T/3,)
         
         return q
@@ -266,8 +265,8 @@ class GTEExtractor(nn.Module):
         
         Args:
             B: Feature map from STE
-               Shape: (C, T/3, H, W) = (1280, 10, 7, 7) for unbatched
-                      (batch, C, T/3, H, W) for batched
+               Shape: (T/3, C, H, W) = (10, 1280, 7, 7) for unbatched
+                      (batch, T/3, C, H, W) for batched
             
         Returns:
             logits: Classification logits, shape (num_classes,) or (batch, num_classes)
