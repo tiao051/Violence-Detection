@@ -52,6 +52,9 @@ dependencies:
   # For Font Awesome icons (including Google logo)
   font_awesome_flutter: ^10.7.0
 
+  # For retrieving app package information (version, build number, etc.)
+  package_info_plus: ^7.0.0
+
 # Development dependencies
 dev_dependencies:
   flutter_test:

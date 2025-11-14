@@ -163,6 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
               context.push('/settings');
             },
           ),
+          // Profile button
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              context.push('/profile');
+            },
+          ),
           // Logout action uses AuthProvider to clear session; routing is
           // handled by GoRouter via the global auth listener.
           IconButton(
