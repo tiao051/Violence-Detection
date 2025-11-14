@@ -33,14 +33,6 @@ ENV/
 env/
 .venv
 
-# Model weights
-*.pt
-*.pth
-*.onnx
-*.pb
-*.h5
-*.weights
-
 # Logs
 *.log
 logs/
@@ -167,5 +159,3 @@ coverage/
 # iOS/macOS Pods
 Pods/
 Podfile.lock
-
-# ==================== End Flutter ====================
