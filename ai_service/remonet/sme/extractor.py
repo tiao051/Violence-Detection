@@ -180,3 +180,42 @@ class SMEExtractor:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         return roi, mask_binary, diff, elapsed_ms
+
+    def process_batch(self, frames: np.ndarray) -> np.ndarray:
+        """
+        Process a batch of frames to extract motion features.
+        
+        Takes N frames and produces N motion frames (with last frame duplicated).
+        Processes consecutive frame pairs: (frame[i], frame[i+1]) → motion[i]
+        Then duplicates the last motion frame to match input count.
+        
+        Args:
+            frames: Batch of frames (N, 224, 224, 3), RGB, uint8
+                   Example: 30 frames for STE processing
+        
+        Returns:
+            motion_frames: Motion features (N, 224, 224, 3), float32 [0, 1]
+                          N = same as input frame count
+        """
+        if len(frames) < 2:
+            raise ValueError(f"Expected at least 2 frames, got {len(frames)}")
+        
+        motion_frames = []
+        
+        # Process consecutive frame pairs
+        for i in range(len(frames) - 1):
+            frame_t = frames[i]
+            frame_t1 = frames[i + 1]
+            roi, _, _, _ = self.process(frame_t, frame_t1)
+            motion_frames.append(roi)
+        
+        # Convert to numpy array
+        motion_array = np.array(motion_frames, dtype=np.float32)  # (N-1, 224, 224, 3)
+        
+        # Duplicate last motion frame to match input count
+        # 30 input frames → 29 motion frames → duplicate last → 30 motion frames
+        if len(motion_array) < len(frames):
+            last_frame = motion_array[-1:].copy()  # Shape: (1, 224, 224, 3)
+            motion_array = np.vstack([motion_array, last_frame])
+        
+        return motion_array
