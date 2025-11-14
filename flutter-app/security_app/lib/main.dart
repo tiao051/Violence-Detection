@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; 
 import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
-import 'package:security_app/providers/event_provider.dart'; 
+import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/event_detail_screen.dart';
 import 'package:security_app/screens/home_screen.dart';
 import 'package:security_app/screens/live_view_screen.dart';

@@ -1,33 +1,14 @@
 import 'package:security_app/models/event_model.dart';
 
-// Simulated event data for development. Moved outside class to allow
-// reuse in other services if needed.
-final List<EventModel> dummyEvents = [
-  EventModel(
-    id: 'evt_001',
-    cameraName: 'Front Gate Camera',
-    thumbnailUrl: '', // Will use thumbnail images later
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-  ),
-  EventModel(
-    id: 'evt_002',
-    cameraName: 'Kitchen Camera',
-    thumbnailUrl: '',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-  ),
-];
-
 class EventService {
   
   /// Simulates fetching detected events from backend.
   ///
   /// Uses 800ms delay to mimic network latency.
-  /// Returns hardcoded event list until real API is integrated.
+  /// Returns hardcoded event list (from event_model.dart) until real API is integrated.
   Future<List<EventModel>> getEvents() async {
     await Future.delayed(const Duration(milliseconds: 800));
-    print("EventService: Returning simulated event list.");
+    print("EventService: Returning simulated event list with ${dummyEvents.length} events.");
     return dummyEvents;
   }
 

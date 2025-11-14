@@ -25,6 +25,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Mark event as viewed when screen loads
+    context.read<EventProvider>().markEventAsViewed(widget.event.id);
     _initializePlayer();
   }
 

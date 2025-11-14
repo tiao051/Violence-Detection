@@ -16,11 +16,12 @@ class EventTab extends StatefulWidget {
   State<EventTab> createState() => _EventTabState();
 }
 
-class _EventTabState extends State<EventTab> {
+class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Defer fetch until after first frame to avoid calling provider during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<EventProvider>().fetchEvents();
@@ -28,9 +29,27 @@ class _EventTabState extends State<EventTab> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Called when app lifecycle changes (resume, pause, etc)
+  /// Force rebuild when app resumes to get latest viewed state
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('🔄 EventTab: App resumed - rebuilding to get latest state');
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<EventProvider>(
       builder: (context, eventProvider, child) {
+        print('🎨 EventTab rebuild - unviewed: ${eventProvider.unviewedCount}');
+        
         if (eventProvider.isLoading) {
           return Center(
             child: SpinKitFadingCircle(
@@ -67,6 +86,34 @@ class _EventTabState extends State<EventTab> {
 
         return Column(
           children: [
+            // Unviewed events badge
+            if (eventProvider.unviewedCount > 0)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                color: Theme.of(context).colorScheme.error.withOpacity(0.1),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0,
+                        vertical: 6.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.error,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${eventProvider.unviewedCount} unviewed',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Date filter chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,

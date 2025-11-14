@@ -30,6 +30,13 @@ class EventProvider with ChangeNotifier {
   /// Returns true if the given event is currently being reported.
   bool isReporting(String eventId) => _reportingEvents.contains(eventId);
 
+  /// Returns the count of events that haven't been viewed yet.
+  int get unviewedCount => _events.where((event) => !event.isViewed).length;
+
+  /// Returns a list of unviewed events.
+  List<EventModel> get unviewedEvents =>
+      _events.where((event) => !event.isViewed).toList();
+
   /// Returns filtered events based on current date filter
   List<EventModel> get filteredEvents {
     final now = DateTime.now();
@@ -70,13 +77,28 @@ class EventProvider with ChangeNotifier {
   }
 
   /// Fetches the list of detected events from the service.
+  /// 
+  /// Preserves isViewed state from existing events when fetching.
   Future<void> fetchEvents() async {
     _isLoadingEvents = true;
     _fetchError = null;
     notifyListeners();
 
     try {
-      _events = await _eventService.getEvents();
+      final newEvents = await _eventService.getEvents();
+      
+      // Preserve isViewed state from existing events
+      _events = newEvents.map((newEvent) {
+        final existingEvent = _events.firstWhere(
+          (e) => e.id == newEvent.id,
+          orElse: () => newEvent,
+        );
+        // If event existed before and was viewed, keep viewed state
+        if (existingEvent.id == newEvent.id && existingEvent.isViewed) {
+          return newEvent.copyWith(isViewed: true);
+        }
+        return newEvent;
+      }).toList();
     } catch (e) {
       _fetchError = e.toString();
     } finally {
@@ -120,17 +142,29 @@ class EventProvider with ChangeNotifier {
 
   /// Refreshes the event list by clearing cache and fetching fresh data.
   ///
-  /// Called by pull-to-refresh gesture. Returns a Future that completes
-  /// when the fetch operation is done (success or failure).
+  /// Called by pull-to-refresh gesture. Preserves isViewed state.
   Future<void> refreshEvents() async {
-    // Clear cache to force fresh fetch
-    _events = [];
+    // Keep old events to preserve isViewed state
+    final oldEvents = _events;
     _fetchError = null;
     _isLoadingEvents = true;
     notifyListeners();
 
     try {
-      _events = await _eventService.getEvents();
+      final newEvents = await _eventService.getEvents();
+      
+      // Preserve isViewed state from old events
+      _events = newEvents.map((newEvent) {
+        final existingEvent = oldEvents.firstWhere(
+          (e) => e.id == newEvent.id,
+          orElse: () => newEvent,
+        );
+        // If event existed before and was viewed, keep viewed state
+        if (existingEvent.id == newEvent.id && existingEvent.isViewed) {
+          return newEvent.copyWith(isViewed: true);
+        }
+        return newEvent;
+      }).toList();
       _fetchError = null;
     } catch (e) {
       _fetchError = e.toString();
@@ -144,5 +178,23 @@ class EventProvider with ChangeNotifier {
   void setDateFilter(DateFilter filter) {
     _dateFilter = filter;
     notifyListeners();
+  }
+
+  /// Marks an event as viewed by its event ID.
+  ///
+  /// Finds the event in the list and updates its isViewed flag to true.
+  /// Creates a new list reference to ensure Consumer detects the change.
+  void markEventAsViewed(String eventId) {
+    final eventIndex = _events.indexWhere((event) => event.id == eventId);
+    if (eventIndex != -1) {
+      // Create new list with updated event to force reference change
+      _events = [
+        ..._events.sublist(0, eventIndex),
+        _events[eventIndex].copyWith(isViewed: true),
+        ..._events.sublist(eventIndex + 1),
+      ];
+      print('🔍 EventProvider: Marked $eventId as viewed. Unviewed count: $unviewedCount');
+      notifyListeners();
+    }
   }
 }
