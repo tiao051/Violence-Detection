@@ -110,7 +110,12 @@ class STEExtractor:
         """
         self.input_size = input_size
         self.num_frames = num_frames
-        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
+        # Respect user's device choice, but validate if 'cuda' is requested
+        if device == 'cuda' and not torch.cuda.is_available():
+            print("Warning: CUDA requested but not available. Falling back to CPU.")
+            self.device = torch.device('cpu')
+        else:
+            self.device = torch.device(device)
         self.training_mode = training_mode
         
         # Convert string to BackboneType if needed
