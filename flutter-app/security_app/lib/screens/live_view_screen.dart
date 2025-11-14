@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:video_player/video_player.dart'; // New import
+import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:security_app/services/camera_service.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
 /// Screen for viewing live video from a camera.
 class LiveViewScreen extends StatefulWidget {
@@ -102,7 +103,18 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
           // STATE 2: ERROR
           if (_errorMessage != null) {
-            return Text('Video load error: $_errorMessage');
+            return error_widget.ErrorWidget(
+              errorMessage: _errorMessage ?? "Unable to load live stream",
+              onRetry: () {
+                setState(() {
+                  _isLoading = true;
+                  _errorMessage = null;
+                });
+                _initializePlayer();
+              },
+              iconData: Icons.live_tv_rounded,
+              title: "Live Stream Unavailable",
+            );
           }
 
           // STATE 3: SUCCESS

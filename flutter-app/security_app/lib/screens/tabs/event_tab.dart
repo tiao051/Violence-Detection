@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/theme/app_theme.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
 /// Tab that displays detected events (alarms) from cameras.
 class EventTab extends StatefulWidget {
@@ -39,8 +40,14 @@ class _EventTabState extends State<EventTab> {
         }
 
         if (eventProvider.errorMessage != null) {
-          return Center(
-            child: Text('Error: ${eventProvider.errorMessage}'),
+          return error_widget.ErrorWidget(
+            errorMessage: eventProvider.errorMessage ?? "Unknown error",
+            onRetry: () {
+              eventProvider.clearCache();
+              eventProvider.fetchEvents();
+            },
+            iconData: Icons.warning_rounded,
+            title: "Failed to Load Events",
           );
         }
 

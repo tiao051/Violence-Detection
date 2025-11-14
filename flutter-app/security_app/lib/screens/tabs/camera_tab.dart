@@ -3,6 +3,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
 /// Tab that displays the list of available cameras.
 class CameraTab extends StatefulWidget {
@@ -38,8 +39,14 @@ class _CameraTabState extends State<CameraTab> {
         }
 
         if (cameraProvider.errorMessage != null) {
-          return Center(
-            child: Text('Error: ${cameraProvider.errorMessage}'),
+          return error_widget.ErrorWidget(
+            errorMessage: cameraProvider.errorMessage ?? "Unknown error",
+            onRetry: () {
+              cameraProvider.clearCache();
+              cameraProvider.fetchCameras();
+            },
+            iconData: Icons.videocam_off,
+            title: "Failed to Load Cameras",
           );
         }
 

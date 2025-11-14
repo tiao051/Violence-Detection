@@ -6,6 +6,7 @@ import 'package:security_app/models/event_model.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel event;
@@ -122,7 +123,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     );
                   }
                   if (_errorMessage != null) {
-                    return Center(child: Text("Video load error: $_errorMessage"));
+                    return error_widget.ErrorWidget(
+                      errorMessage: _errorMessage ?? "Unable to load video",
+                      onRetry: () {
+                        setState(() {
+                          _isLoadingVideo = true;
+                          _errorMessage = null;
+                        });
+                        _initializePlayer();
+                      },
+                      iconData: Icons.play_circle_outline,
+                      title: "Video Not Available",
+                    );
                   }
                   return Chewie(
                     controller: _chewieController,
@@ -148,7 +160,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               Consumer<EventProvider>(
                 builder: (context, eventProvider, child) {
                   final isReporting = eventProvider.isReporting(widget.event.id);
+                  final hasReportError = eventProvider.reportError != null;
                   final errorColor = Theme.of(context).colorScheme.error;
+                  
+                  // Disable button if already reporting or if there's a network error
+                  final isDisabled = isReporting || hasReportError;
 
                   return Container(
                     decoration: BoxDecoration(
@@ -162,25 +178,48 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,  // White text & icon
-                        shadowColor: Colors.transparent,
-                        disabledBackgroundColor: Colors.transparent,
-                        elevation: 0,
-                      ),
-                      // Disable button while reporting to prevent duplicate submissions
-                      onPressed: isReporting ? null : _handleReport,
-                      icon: isReporting 
-                        ? const SizedBox(
-                            width: 20, 
-                            height: 20, 
-                            child: SpinKitFadingCircle(color: Colors.white, size: 20.0)
-                          ) 
-                        : const Icon(Icons.report_problem),
-                      label: Text(isReporting ? "Sending..." : "Report false detection"),
+                    child: Column(
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 50),
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shadowColor: Colors.transparent,
+                            disabledBackgroundColor: Colors.transparent,
+                            elevation: 0,
+                          ),
+                          // Disable button while reporting or if network error
+                          onPressed: isDisabled ? null : _handleReport,
+                          icon: isReporting 
+                            ? const SizedBox(
+                                width: 20, 
+                                height: 20, 
+                                child: SpinKitFadingCircle(color: Colors.white, size: 20.0)
+                              ) 
+                            : const Icon(Icons.report_problem),
+                          label: Text(
+                            isReporting 
+                              ? "Sending..." 
+                              : hasReportError 
+                                ? "No Internet Connection"
+                                : "Report false detection"
+                          ),
+                        ),
+                        // Show error message if report failed
+                        if (hasReportError)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "Error: ${eventProvider.reportError}",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
