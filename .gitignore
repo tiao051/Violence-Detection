@@ -66,6 +66,11 @@ node_modules/
 .npm/
 package-lock.json
 yarn.lock
+.yarn/
+.next/
+dist/
+build/
+out/
 
 # Flutter
 .dart_tool/
@@ -75,6 +80,27 @@ yarn.lock
 .pub-cache/
 .pub/
 build/
+*.iml
+.gradle
+.idea/
+local.properties
+android/
+ios/
+windows/
+linux/
+macos/
+web/
+.symlinks/
+flutter/ephemeral/
+.fvm/
+.fvmrc
+coverage/
+pubspec.lock
+
+# Flutter - Generated
+.dart_tool
+lib/generated
+lib/generated_plugin_registrant.dart
 
 # Database
 *.db
@@ -93,3 +119,53 @@ utils/test_data/outputs/*
 # Docker volumes and data
 docker-data/
 *.volume/
+
+# ==================== Flutter App Specific ====================
+
+# Flutter iOS/macOS builds
+.ios/
+.macos/
+ios/Flutter/Flutter.podspec
+ios/Flutter/flutter.podspec
+
+# Flutter Android builds
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+android/.gradle
+
+# Flutter Web builds
+web/
+.web/
+
+# Flutter dependencies & lock files
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.dart_tool/
+
+# IDE
+flutter/.vscode/
+flutter/.idea/
+*.iml
+
+# Build artifacts
+build/
+dist/
+
+# Flutter coverage
+coverage/
+.coverage/
+
+# Android studio build cache
+.gradle
+.android/
+
+# iOS/macOS Pods
+Pods/
+Podfile.lock
+
+# ==================== End Flutter ====================
