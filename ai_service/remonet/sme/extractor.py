@@ -172,9 +172,10 @@ class SMEExtractor:
         # Pixels above threshold are marked as motion (255), below as static (0)
         _, mask_binary = cv2.threshold(mask_dilated, self.threshold, 255, cv2.THRESH_BINARY)
 
-        # Extract motion regions from original frame
-        # Only pixels where mask is non-zero are retained
-        roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask_binary)
+        # Extract motion regions from original frame using dot product
+        # Element-wise multiply: frame * (mask / 255.0)
+        # Keep as float32 [0, 1] to preserve precision for downstream processing
+        roi = frame_t1.astype(np.float32) * mask_binary.astype(np.float32)[:, :, np.newaxis] / 255.0
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 

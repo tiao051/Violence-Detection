@@ -180,7 +180,8 @@ class STEExtractor:
         3. Normalize using ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         
         Args:
-            frames: List of 3 RGB motion frames (each: 224×224×3, uint8, [0-255])
+            frames: List of 3 RGB motion frames (each: 224×224×3)
+                   Can be uint8 [0-255] or float32 [0-1]
             
         Returns:
             composite_normalized: Shape (224, 224, 3), float32, ImageNet normalized
@@ -198,8 +199,11 @@ class STEExtractor:
         # Temporal information is encoded in the 3 channels
         composite = np.stack([p_t, p_t1, p_t2], axis=2)  # (224, 224, 3)
         
-        # Normalize to [0, 1] range first
-        composite = composite / 255.0
+        # Handle both uint8 [0-255] and float32 [0-1] inputs
+        if composite.max() > 1.0:
+            # Input is uint8 [0-255], normalize to [0, 1]
+            composite = composite / 255.0
+        # else: already in [0, 1] range (float from SME)
         
         # Apply ImageNet normalization (mean and std per channel)
         imagenet_mean = np.array([0.485, 0.456, 0.406])
@@ -216,7 +220,8 @@ class STEExtractor:
         Extracts feature maps for all 10 composites in batch using selected backbone.
         
         Args:
-            frames: numpy array (30, 224, 224, 3), RGB, uint8, [0-255]
+            frames: numpy array (30, 224, 224, 3), RGB
+                   Can be uint8 [0-255] or float32 [0-1]
             
         Returns:
             features: Tensor (T/3, C, W, H) where:
@@ -271,7 +276,8 @@ class STEExtractor:
         - MNasNet: (10, 1280, 7, 7)
         
         Args:
-            frames: numpy array (30, 224, 224, 3), RGB, uint8
+            frames: numpy array (30, 224, 224, 3), RGB
+                   Can be uint8 [0-255] or float32 [0-1]
             camera_id: Camera identifier
             timestamp: Timestamp for this batch (auto-generated if None)
             
