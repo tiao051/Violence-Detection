@@ -112,8 +112,6 @@ utils/test_data/outputs/*
 docker-data/
 *.volume/
 
-# ==================== Flutter App Specific ====================
-
 # Flutter iOS/macOS builds
 .ios/
 .macos/
