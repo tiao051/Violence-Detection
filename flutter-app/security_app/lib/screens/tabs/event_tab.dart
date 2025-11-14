@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/theme/app_theme.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import 'package:security_app/widgets/empty_state_widget.dart';
 
 /// Tab that displays detected events (alarms) from cameras.
 class EventTab extends StatefulWidget {
@@ -54,7 +55,12 @@ class _EventTabState extends State<EventTab> {
         final events = eventProvider.events;
 
         if (events.isEmpty) {
-          return const Center(child: Text('No events found.'));
+          return EmptyStateWidget(
+            title: "No Events Yet",
+            subtitle: "Events detected by cameras will appear here",
+            iconData: Icons.event_outlined,
+            showRefreshHint: true,
+          );
         }
 
         return RefreshIndicator(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import 'package:security_app/widgets/empty_state_widget.dart';
 
 /// Tab that displays the list of available cameras.
 class CameraTab extends StatefulWidget {
@@ -51,6 +52,15 @@ class _CameraTabState extends State<CameraTab> {
         }
 
         final cameras = cameraProvider.cameras;
+
+        if (cameras.isEmpty) {
+          return EmptyStateWidget(
+            title: "No Cameras Available",
+            subtitle: "Add cameras in settings to start monitoring",
+            iconData: Icons.videocam_off,
+          );
+        }
+
         return RefreshIndicator(
           onRefresh: () => cameraProvider.refreshCameras(),
           color: Theme.of(context).colorScheme.primary,
