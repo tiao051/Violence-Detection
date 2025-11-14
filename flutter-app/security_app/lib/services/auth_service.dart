@@ -100,6 +100,12 @@ class AuthService {
   /// ensuring user must pick account again on next sign-in.
   Future<void> signOutGoogle() async {
     try {
+      // Sign out from Google Sign-In SDK (disconnects cached account)
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.disconnect();
+      print('AuthService: Disconnected from Google Sign-In');
+
+      // Sign out from Firebase
       await _firebaseAuth.signOut();
       print('AuthService: Signed out from Firebase');
     } catch (e) {
