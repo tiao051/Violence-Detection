@@ -73,14 +73,16 @@ def create_pair_with_corner_motion(value_before: int = 50, value_after: int = 20
     return frame_t, frame_t1
 
 
-def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray, max_elapsed_ms: float = None):
+def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray, 
+                       elapsed_ms: float = None, max_elapsed_ms: float = None):
     """
     Validate SMEExtractor outputs.
-    
+
     Args:
         roi: Region of interest frame (RGB)
         mask: Motion mask (grayscale)
         diff: Difference frame (grayscale)
+        elapsed_ms: Actual processing time in milliseconds
         max_elapsed_ms: Optional maximum allowed processing time
     """
     # Shapes
@@ -104,10 +106,8 @@ def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray, max
     assert np.all((0 <= diff) & (diff <= 255))
     
     # Optional elapsed time
-    if max_elapsed_ms is not None:
-        assert max_elapsed_ms < max_elapsed_ms
-
-
+    if max_elapsed_ms is not None and elapsed_ms is not None:
+        assert elapsed_ms <= max_elapsed_ms
 def load_first_frame_pair(frame_files: list) -> tuple[np.ndarray, np.ndarray]:
     """Load the first two frames from a list of file paths."""
     frame_t = cv2.imread(str(frame_files[0]))
@@ -245,7 +245,7 @@ class TestSMEExtractorRealData:
         frame_t1_processed = self.preprocessor.preprocess(frame_t1)
 
         roi, mask, diff, elapsed_ms = self.extractor.process(frame_t_processed, frame_t1_processed)
-        validate_sme_output(roi, mask, diff, max_elapsed_ms=5)
+        validate_sme_output(roi, mask, diff, elapsed_ms=elapsed_ms, max_elapsed_ms=5)
         self.save_visualization(frame_t, frame_t1, roi, mask, diff)
 
 

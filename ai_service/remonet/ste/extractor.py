@@ -1,7 +1,8 @@
 """
 Short Temporal Extractor (STE) - Extract short-term spatiotemporal features.
 
-Processes 30 motion frames into 10 temporal composites using MobileNetV2 backbone.
+Processes 30 motion frames into 10 temporal composites using various CNN backbones.
+Supports: MobileNetV2, MobileNetV3, EfficientNet B0, MNasNet
 """
 
 import cv2
@@ -9,10 +10,56 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from torchvision.models import MobileNet_V2_Weights
-from typing import List, Dict, Tuple, Optional
+from torchvision.models import (
+    MobileNet_V2_Weights, MobileNet_V3_Small_Weights, MobileNet_V3_Large_Weights,
+    EfficientNet_B0_Weights, MNASNet1_0_Weights
+)
+from typing import List, Dict, Tuple, Optional, Literal
 import time
 from dataclasses import dataclass
+from enum import Enum
+
+
+class BackboneType(str, Enum):
+    """Supported CNN backbones for feature extraction."""
+    MOBILENET_V2 = "mobilenet_v2"
+    MOBILENET_V3_SMALL = "mobilenet_v3_small"
+    MOBILENET_V3_LARGE = "mobilenet_v3_large"
+    EFFICIENTNET_B0 = "efficientnet_b0"
+    MNASNET = "mnasnet"
+    
+    def __str__(self):
+        return self.value
+
+
+# Backbone output channel configuration
+BACKBONE_CONFIG = {
+    BackboneType.MOBILENET_V2: {
+        'out_channels': 1280,
+        'spatial_size': 7,  # 224 / 32 = 7
+        'weights_class': MobileNet_V2_Weights.IMAGENET1K_V1,
+    },
+    BackboneType.MOBILENET_V3_SMALL: {
+        'out_channels': 576,
+        'spatial_size': 7,
+        'weights_class': MobileNet_V3_Small_Weights.IMAGENET1K_V1,
+    },
+    BackboneType.MOBILENET_V3_LARGE: {
+        'out_channels': 960,
+        'spatial_size': 7,
+        'weights_class': MobileNet_V3_Large_Weights.IMAGENET1K_V1,
+    },
+    BackboneType.EFFICIENTNET_B0: {
+        'out_channels': 1280,
+        'spatial_size': 7,
+        'weights_class': EfficientNet_B0_Weights.IMAGENET1K_V1,
+    },
+    BackboneType.MNASNET: {
+        'out_channels': 1280,
+        'spatial_size': 7,
+        'weights_class': MNASNet1_0_Weights.IMAGENET1K_V1,
+    },
+}
 
 
 @dataclass
@@ -20,16 +67,24 @@ class STEOutput:
     """STE processing output with spatiotemporal feature maps."""
     camera_id: str
     timestamp: float
-    features: torch.Tensor  # Shape: (T/3, C, W, H) = (10, 1280, 7, 7) per paper
+    features: torch.Tensor  # Shape: (T/3, C, W, H) - varies by backbone
     latency_ms: float
+    backbone: str = "mobilenet_v2"  # Which backbone was used
 
 
 class STEExtractor:
     """
-    Extract short-term temporal features from motion frames using MobileNetV2.
+    Extract short-term temporal features from motion frames using various CNN backbones.
     
     Takes 3 consecutive frames, creates temporal composite by averaging RGB channels,
     then extracts spatial feature maps. Processes 30 frames into 10 temporal features.
+    
+    Supported backbones:
+    - MobileNetV2 (1280 channels, default)
+    - MobileNetV3 Small (576 channels)
+    - MobileNetV3 Large (960 channels)
+    - EfficientNet B0 (1280 channels)
+    - MNasNet (1280 channels)
     """
 
     def __init__(
@@ -37,10 +92,11 @@ class STEExtractor:
         input_size: Tuple[int, int] = (224, 224),
         num_frames: int = 3,
         device: str = 'cuda',
-        training_mode: bool = False
+        training_mode: bool = False,
+        backbone: BackboneType = BackboneType.MOBILENET_V2
     ):
         """
-        Initialize STE extractor with MobileNetV2 backbone.
+        Initialize STE extractor with specified backbone.
         
         Args:
             input_size: Expected input frame size (width, height) - default (224, 224)
@@ -48,13 +104,22 @@ class STEExtractor:
             device: 'cuda' or 'cpu'
             training_mode: If True, enables gradient computation for training.
                           If False (default), inference mode with no_grad.
+            backbone: CNN backbone to use for feature extraction.
+                     Options: 'mobilenet_v2', 'mobilenet_v3_small', 'mobilenet_v3_large',
+                             'efficientnet_b0', 'mnasnet'
         """
         self.input_size = input_size
         self.num_frames = num_frames
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.training_mode = training_mode
+        
+        # Convert string to BackboneType if needed
+        if isinstance(backbone, str):
+            backbone = BackboneType(backbone)
+        self.backbone_type = backbone
+        self.backbone_config = BACKBONE_CONFIG[backbone]
 
-        # Build MobileNetV2 feature extractor
+        # Build backbone feature extractor
         self.backbone = self._build_backbone()
         self.backbone.to(self.device)
         
@@ -66,15 +131,37 @@ class STEExtractor:
 
     def _build_backbone(self) -> nn.Module:
         """
-        Build MobileNetV2 feature extractor (preserve spatial dimensions).
+        Build feature extractor based on selected backbone.
         
-        Returns spatial feature maps (batch, 1280, 7, 7) without pooling or classifier.
+        Returns spatial feature maps preserving spatial dimensions.
+        Output channels and spatial size depend on chosen backbone.
         """
-        mobilenet = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
+        backbone_type = self.backbone_type
+        config = self.backbone_config
         
-        # Extract feature extractor only (no avgpool, no classifier)
-        # Output is (batch, 1280, 7, 7) preserving spatial dimensions
-        feature_extractor = mobilenet.features
+        if backbone_type == BackboneType.MOBILENET_V2:
+            mobilenet = models.mobilenet_v2(weights=config['weights_class'])
+            feature_extractor = mobilenet.features
+            
+        elif backbone_type == BackboneType.MOBILENET_V3_SMALL:
+            mobilenet = models.mobilenet_v3_small(weights=config['weights_class'])
+            feature_extractor = mobilenet.features
+            
+        elif backbone_type == BackboneType.MOBILENET_V3_LARGE:
+            mobilenet = models.mobilenet_v3_large(weights=config['weights_class'])
+            feature_extractor = mobilenet.features
+            
+        elif backbone_type == BackboneType.EFFICIENTNET_B0:
+            efficientnet = models.efficientnet_b0(weights=config['weights_class'])
+            feature_extractor = efficientnet.features
+            
+        elif backbone_type == BackboneType.MNASNET:
+            mnasnet = models.mnasnet1_0(weights=config['weights_class'])
+            # MNASNet uses layers attribute instead of features
+            feature_extractor = mnasnet.layers
+            
+        else:
+            raise ValueError(f"Unsupported backbone: {backbone_type}")
         
         return feature_extractor
 
@@ -85,17 +172,13 @@ class STEExtractor:
         Process (per paper):
         1. Average RGB channels for each frame independently (grayscale)
         2. Stack 3 grayscale frames as pseudo-RGB image P_t,t+1,t+2
-        3. Normalize to [0, 1] range ONLY
-        
-        NOTE: ImageNet normalization is NOT applied because the composite is NOT
-        a natural RGB image - it encodes temporal changes in channels. Using ImageNet
-        normalization would corrupt the temporal signal encoding.
+        3. Normalize using ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         
         Args:
             frames: List of 3 RGB motion frames (each: 224×224×3, uint8, [0-255])
             
         Returns:
-            composite_normalized: Shape (224, 224, 3), float32, normalized to [0, 1]
+            composite_normalized: Shape (224, 224, 3), float32, ImageNet normalized
         """
         if len(frames) != self.num_frames:
             raise ValueError(f"Expected {self.num_frames} frames, got {len(frames)}")
@@ -110,8 +193,13 @@ class STEExtractor:
         # Temporal information is encoded in the 3 channels
         composite = np.stack([p_t, p_t1, p_t2], axis=2)  # (224, 224, 3)
         
-        # Normalize to [0, 1] range ONLY (preserve temporal scale)
-        composite_normalized = composite / 255.0
+        # Normalize to [0, 1] range first
+        composite = composite / 255.0
+        
+        # Apply ImageNet normalization (mean and std per channel)
+        imagenet_mean = np.array([0.485, 0.456, 0.406])
+        imagenet_std = np.array([0.229, 0.224, 0.225])
+        composite_normalized = (composite - imagenet_mean) / imagenet_std
         
         return composite_normalized.astype(np.float32)
 
@@ -120,14 +208,16 @@ class STEExtractor:
         Process batch of 30 frames to extract spatiotemporal features.
         
         Converts 30 frames into 10 temporal composites (T/3).
-        Extracts feature maps for all 10 composites in batch using MobileNetV2.
+        Extracts feature maps for all 10 composites in batch using selected backbone.
         
         Args:
             frames: numpy array (30, 224, 224, 3), RGB, uint8, [0-255]
             
         Returns:
-            features: Tensor (T/3, C, W, H) = (10, 1280, 7, 7)
-                     Feature maps preserving spatial dimensions as per paper
+            features: Tensor (T/3, C, W, H) where:
+                     - T/3 = 10 (30 frames / 3)
+                     - C = depends on backbone (1280 for V2/B0/MNasNet, 576/960 for V3)
+                     - W, H = spatial dimensions (typically 7x7)
         """
         if len(frames) != 30:
             raise ValueError(f"Expected 30 frames, got {len(frames)}")
@@ -147,14 +237,13 @@ class STEExtractor:
         composites_tensor = composites_tensor.to(self.device)
         
         # Extract feature maps in batch
-        # Output: B ∈ ℝ^(T/3 × C × W × H) = (10, 1280, 7, 7)
         if self.training_mode:
             # Training: enable gradient computation
-            features = self.backbone(composites_tensor)  # (10, 1280, 7, 7)
+            features = self.backbone(composites_tensor)
         else:
             # Inference: no gradient computation
             with torch.no_grad():
-                features = self.backbone(composites_tensor)  # (10, 1280, 7, 7)
+                features = self.backbone(composites_tensor)
         
         return features
 
@@ -167,8 +256,14 @@ class STEExtractor:
         """
         Process 30 motion frames and generate spatiotemporal feature maps.
         
-        According to paper: output is feature map B ∈ ℝ^(T/3 × C × W × H)
-        where T=30, so output shape is (10, 1280, 7, 7) from MobileNetV2.
+        Converts 30 frames to 10 temporal composites and extracts features
+        using selected backbone. Output dimensions vary by backbone:
+        
+        - MobileNetV2: (10, 1280, 7, 7)
+        - MobileNetV3 Small: (10, 576, 7, 7)
+        - MobileNetV3 Large: (10, 960, 7, 7)
+        - EfficientNet B0: (10, 1280, 7, 7)
+        - MNasNet: (10, 1280, 7, 7)
         
         Args:
             frames: numpy array (30, 224, 224, 3), RGB, uint8
@@ -189,6 +284,28 @@ class STEExtractor:
         return STEOutput(
             camera_id=camera_id,
             timestamp=timestamp,
-            features=features,      # (10, 1280, 7, 7) - spatial feature maps for GTE
-            latency_ms=latency_ms
+            features=features,
+            latency_ms=latency_ms,
+            backbone=str(self.backbone_type)
         )
+
+    def get_backbone_info(self) -> Dict[str, any]:
+        """
+        Get configuration information about the current backbone.
+        
+        Returns:
+            Dictionary with backbone name, output channels, and spatial size
+        """
+        return {
+            'backbone': str(self.backbone_type),
+            'out_channels': self.backbone_config['out_channels'],
+            'spatial_size': self.backbone_config['spatial_size'],
+            'feature_shape': (10, self.backbone_config['out_channels'], 
+                            self.backbone_config['spatial_size'], 
+                            self.backbone_config['spatial_size']),
+        }
+
+    @staticmethod
+    def get_available_backbones() -> List[str]:
+        """Get list of available backbone types."""
+        return [b.value for b in BackboneType]
