@@ -9,10 +9,26 @@ class CameraProvider with ChangeNotifier {
   List<CameraModel> _cameras = [];
   bool _isLoading = false;
   String? _errorMessage;
+  String _searchQuery = '';
 
   List<CameraModel> get cameras => _cameras;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String get searchQuery => _searchQuery;
+
+  /// Returns filtered cameras based on current search query
+  /// Filters by camera name and ID (case-insensitive)
+  List<CameraModel> get filteredCameras {
+    if (_searchQuery.isEmpty) {
+      return _cameras;
+    }
+    final query = _searchQuery.toLowerCase();
+    return _cameras
+        .where((camera) =>
+            camera.name.toLowerCase().contains(query) ||
+            camera.id.toLowerCase().contains(query))
+        .toList();
+  }
 
   /// Fetches the list of cameras from the service.
   ///
@@ -65,5 +81,19 @@ class CameraProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Updates the search query and filters cameras accordingly.
+  ///
+  /// Filtering happens instantly without API calls.
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  /// Clears the current search query, showing all cameras.
+  void clearSearch() {
+    _searchQuery = '';
+    notifyListeners();
   }
 }

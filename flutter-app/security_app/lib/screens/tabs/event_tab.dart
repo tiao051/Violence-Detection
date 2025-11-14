@@ -63,77 +63,146 @@ class _EventTabState extends State<EventTab> {
           );
         }
 
-        return RefreshIndicator(
-          onRefresh: () => eventProvider.refreshEvents(),
-          color: Theme.of(context).colorScheme.primary,
-          strokeWidth: 3.0,
-          backgroundColor: Colors.transparent,
-          child: ListView.builder(
-            itemCount: events.length,
-            itemBuilder: (context, index) {
-              final event = events[index];
-              final formattedTime = DateFormat('HH:mm - dd/MM/yyyy')
-                                    .format(event.timestamp);
+        final filteredEvents = eventProvider.filteredEvents;
 
-              return Card(
-                margin: const EdgeInsets.all(8.0),
-                child: ListTile(
-                leading: SizedBox(
-                  width: 100.0,
-                  height: 75.0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8.0),
-                    child: event.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            event.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                color: Colors.grey.shade800,
-                                child: SpinKitFadingCircle(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 30.0,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              // Fallback to gradient placeholder on error
-                              return Container(
-                                decoration: const BoxDecoration(gradient: kAppGradient),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.videocam,
-                                    color: Colors.white.withOpacity(0.7),
-                                    size: 32,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : Container(
-                            decoration: const BoxDecoration(gradient: kAppGradient),
-                            child: Center(
-                              child: Icon(
-                                Icons.videocam,
-                                color: Colors.white.withOpacity(0.7),
-                                size: 32,
-                              ),
-                            ),
-                          ),
-                  ),
+        return Column(
+          children: [
+            // Date filter chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('Today'),
+                      selected: eventProvider.dateFilter == DateFilter.today,
+                      onSelected: (_) {
+                        eventProvider.setDateFilter(DateFilter.today);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('This Week'),
+                      selected:
+                          eventProvider.dateFilter == DateFilter.thisWeek,
+                      onSelected: (_) {
+                        eventProvider.setDateFilter(DateFilter.thisWeek);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('This Month'),
+                      selected:
+                          eventProvider.dateFilter == DateFilter.thisMonth,
+                      onSelected: (_) {
+                        eventProvider.setDateFilter(DateFilter.thisMonth);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: eventProvider.dateFilter == DateFilter.all,
+                      onSelected: (_) {
+                        eventProvider.setDateFilter(DateFilter.all);
+                      },
+                    ),
+                  ],
                 ),
-                title: Text('Detected at ${event.cameraName}'),
-                subtitle: Text(formattedTime),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  // Use extra to pass event object since GoRouter can't serialize complex objects in path
-                  context.push('/event_detail', extra: event);
-                },
               ),
-            );
-            },
-          ),
+            ),
+            // Event list
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => eventProvider.refreshEvents(),
+                color: Theme.of(context).colorScheme.primary,
+                strokeWidth: 3.0,
+                backgroundColor: Colors.transparent,
+                child: filteredEvents.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No events in ${eventProvider.getFilterLabel().toLowerCase()}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: filteredEvents.length,
+                        itemBuilder: (context, index) {
+                          final event = filteredEvents[index];
+                          final formattedTime = DateFormat('HH:mm - dd/MM/yyyy')
+                              .format(event.timestamp);
+
+                          return Card(
+                            margin: const EdgeInsets.all(8.0),
+                            child: ListTile(
+                              leading: SizedBox(
+                                width: 100.0,
+                                height: 75.0,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  child: event.thumbnailUrl.isNotEmpty
+                                      ? Image.network(
+                                          event.thumbnailUrl,
+                                          fit: BoxFit.cover,
+                                          loadingBuilder: (context, child,
+                                              loadingProgress) {
+                                            if (loadingProgress == null)
+                                              return child;
+                                            return Container(
+                                              color: Colors.grey.shade800,
+                                              child: SpinKitFadingCircle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                                size: 30.0,
+                                              ),
+                                            );
+                                          },
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                            // Fallback to gradient placeholder on error
+                                            return Container(
+                                              decoration: const BoxDecoration(
+                                                  gradient: kAppGradient),
+                                              child: Center(
+                                                child: Icon(
+                                                  Icons.videocam,
+                                                  color: Colors.white
+                                                      .withOpacity(0.7),
+                                                  size: 32,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      : Container(
+                                          decoration: const BoxDecoration(
+                                              gradient: kAppGradient),
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.videocam,
+                                              color: Colors.white
+                                                  .withOpacity(0.7),
+                                              size: 32,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              title: Text('Detected at ${event.cameraName}'),
+                              subtitle: Text(formattedTime),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                // Use extra to pass event object since GoRouter can't serialize complex objects in path
+                                context.push('/event_detail', extra: event);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
         );
       },
     );
