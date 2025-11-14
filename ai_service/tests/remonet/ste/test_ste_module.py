@@ -107,6 +107,7 @@ class TestTemporalCompositeCorrectness:
         ch1 = composite[112, 112, 1]  # Frame 1 averaged + normalized
         ch2 = composite[112, 112, 2]  # Frame 2 averaged + normalized
         
+        # For uint8 input [0-255], divide by 255 before ImageNet norm
         expected_ch0 = (90.0 / 255.0 - imagenet_mean[0]) / imagenet_std[0]
         expected_ch1 = (60.0 / 255.0 - imagenet_mean[1]) / imagenet_std[1]
         expected_ch2 = (120.0 / 255.0 - imagenet_mean[2]) / imagenet_std[2]
@@ -120,6 +121,34 @@ class TestTemporalCompositeCorrectness:
         composite = self.ste.create_temporal_composite(frames)
         assert composite.shape == (224, 224, 3)
         assert composite.dtype == np.float32
+
+    def test_auto_detect_float_input_from_sme(self):
+        """Test: STE auto-detects float [0, 1] input from SME (no double divide)"""
+        # Simulate SME output: float [0, 1]
+        frames_float = [
+            np.full((224, 224, 3), 0.4, dtype=np.float32),
+            np.full((224, 224, 3), 0.6, dtype=np.float32),
+            np.full((224, 224, 3), 0.5, dtype=np.float32),
+        ]
+        
+        composite = self.ste.create_temporal_composite(frames_float)
+        
+        # Expected: 0.4, 0.6, 0.5 averaged + ImageNet norm (no double divide)
+        # ch = (value - imagenet_mean) / imagenet_std
+        imagenet_mean = np.array([0.485, 0.456, 0.406])
+        imagenet_std = np.array([0.229, 0.224, 0.225])
+        
+        expected_ch0 = (0.4 - imagenet_mean[0]) / imagenet_std[0]
+        expected_ch1 = (0.6 - imagenet_mean[1]) / imagenet_std[1]
+        expected_ch2 = (0.5 - imagenet_mean[2]) / imagenet_std[2]
+        
+        ch0 = composite[112, 112, 0]
+        ch1 = composite[112, 112, 1]
+        ch2 = composite[112, 112, 2]
+        
+        assert np.isclose(ch0, expected_ch0, atol=1e-5)
+        assert np.isclose(ch1, expected_ch1, atol=1e-5)
+        assert np.isclose(ch2, expected_ch2, atol=1e-5)
 
 
 class TestNormalization:

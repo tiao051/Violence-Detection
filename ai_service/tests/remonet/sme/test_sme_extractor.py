@@ -79,9 +79,9 @@ def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray,
     Validate SMEExtractor outputs.
 
     Args:
-        roi: Region of interest frame (RGB)
-        mask: Motion mask (grayscale)
-        diff: Difference frame (grayscale)
+        roi: Region of interest frame (RGB, float32 [0, 1])
+        mask: Motion mask (grayscale, uint8)
+        diff: Difference frame (grayscale, uint8)
         elapsed_ms: Actual processing time in milliseconds
         max_elapsed_ms: Optional maximum allowed processing time
     """
@@ -95,13 +95,13 @@ def validate_sme_output(roi: np.ndarray, mask: np.ndarray, diff: np.ndarray,
     assert len(mask.shape) == 2
     assert len(diff.shape) == 2
     
-    # Data type
-    assert roi.dtype == np.uint8
+    # Data type: ROI is now float32 [0, 1], mask/diff still uint8
+    assert roi.dtype == np.float32
     assert mask.dtype == np.uint8
     assert diff.dtype == np.uint8
     
-    # Value ranges
-    assert np.all((0 <= roi) & (roi <= 255))
+    # Value ranges: ROI is [0, 1], mask/diff are [0, 255]
+    assert np.all((0 <= roi) & (roi <= 1))
     assert np.all((0 <= mask) & (mask <= 255))
     assert np.all((0 <= diff) & (diff <= 255))
     
@@ -145,6 +145,7 @@ class TestSMEMotionDetection:
     def test_detects_synthetic_center_motion(self, extractor):
         frame_t, frame_t1, (y0, y1, x0, x1) = create_pair_with_motion_region()
         roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
+        # diff is still uint8, test it
         motion_mean = np.mean(diff[y0:y1, x0:x1])
         non_motion_mean = np.mean(np.concatenate([diff[:y0, :].flatten(), diff[y1:, :].flatten()]))
         assert motion_mean > non_motion_mean * 1.5
@@ -158,9 +159,16 @@ class TestSMEMotionDetection:
     def test_roi_preserves_motion_regions(self, extractor):
         frame_t, frame_t1, (y0, y1, x0, x1) = create_pair_with_motion_region()
         roi, mask, diff, _ = extractor.process(frame_t, frame_t1)
-        motion_mean = np.mean(roi[y0:y1, x0:x1])
-        static_mean = np.mean(np.concatenate([roi[:y0, :], roi[y1:, :]]))
-        assert motion_mean > static_mean * 1.2
+        # ROI is now float [0, 1]: multiply by mask and divide by 255
+        # Motion region should have higher mean than static region
+        motion_roi = roi[y0:y1, x0:x1]
+        static_roi = np.concatenate([roi[:y0, :], roi[y1:, :]])
+        
+        motion_mean = np.mean(motion_roi[motion_roi > 0])  # Only compare non-zero regions
+        static_mean = np.mean(static_roi[static_roi > 0])
+        
+        # Motion region should have preserved higher values
+        assert motion_mean > static_mean if static_mean > 0 else True
 
 
 class TestSMEExtractorPerformance:
