@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/providers/settings_provider.dart';
 import 'package:security_app/screens/event_detail_screen.dart';
 import 'package:security_app/screens/home_screen.dart';
 import 'package:security_app/screens/live_view_screen.dart';
 import 'package:security_app/screens/login_screen.dart';
+import 'package:security_app/screens/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:security_app/theme/app_theme.dart'; 
 
@@ -44,6 +46,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (context) => EventProvider(),
         ),
+        ChangeNotifierProvider(
+          create: (context) => SettingsProvider(),
+        ),
       ],
       // Consumer rebuilds MaterialApp when auth state changes to update routes
       child: Consumer<AuthProvider>(
@@ -75,6 +80,10 @@ GoRouter _buildRouter(AuthProvider authProvider) {
       GoRoute(
         path: '/home',
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: '/live_view/:cameraId',
