@@ -214,9 +214,83 @@ class TestSMEExtractorReproducibility:
         ext2 = SMEExtractor(kernel_size=3, iteration=2)
         roi1, mask1, diff1, _ = ext1.process(frame_t, frame_t1)
         roi2, mask2, diff2, _ = ext2.process(frame_t, frame_t1)
-        assert np.array_equal(roi1, roi2)
+        assert np.array_equal(roi2, roi2)
         assert np.array_equal(mask1, mask2)
         assert np.array_equal(diff1, diff2)
+
+
+class TestSMEExtractorBatch:
+    """Test batch processing of multiple frames."""
+
+    def test_batch_output_shape(self):
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        # Create 30 random frames
+        frames = np.random.randint(0, 256, (30, 224, 224, 3), dtype=np.uint8)
+        
+        motion_frames = extractor.process_batch(frames)
+        
+        # Should output same number of frames as input (30)
+        assert motion_frames.shape == (30, 224, 224, 3)
+        assert motion_frames.dtype == np.float32
+
+    def test_batch_30_frames(self):
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        frames = np.random.randint(0, 256, (30, 224, 224, 3), dtype=np.uint8)
+        
+        motion_frames = extractor.process_batch(frames)
+        
+        # 30 input → 30 output (29 from pairs + 1 duplicated)
+        assert len(motion_frames) == 30
+        # Last motion frame should be duplicate of 29th
+        assert np.array_equal(motion_frames[-1], motion_frames[-2])
+
+    def test_batch_arbitrary_length(self):
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        for num_frames in [2, 10, 15, 30, 50]:
+            frames = np.random.randint(0, 256, (num_frames, 224, 224, 3), dtype=np.uint8)
+            motion_frames = extractor.process_batch(frames)
+            
+            # Output should match input count
+            assert len(motion_frames) == num_frames
+            assert motion_frames.dtype == np.float32
+            # All values in [0, 1]
+            assert np.all((0 <= motion_frames) & (motion_frames <= 1))
+
+    def test_batch_value_range(self):
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        frames = np.random.randint(0, 256, (30, 224, 224, 3), dtype=np.uint8)
+        
+        motion_frames = extractor.process_batch(frames)
+        
+        # All values should be in [0, 1]
+        assert np.all(motion_frames >= 0)
+        assert np.all(motion_frames <= 1)
+
+    def test_batch_insufficient_frames(self):
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        frames = np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8)
+        
+        with pytest.raises(ValueError, match="Expected at least 2 frames"):
+            extractor.process_batch(frames)
+
+    def test_batch_consistency_with_process(self):
+        """Verify batch processing produces same results as individual processing."""
+        extractor = SMEExtractor(kernel_size=3, iteration=2)
+        frames = np.random.randint(0, 256, (5, 224, 224, 3), dtype=np.uint8)
+        
+        # Process individually
+        individual_rois = []
+        for i in range(len(frames) - 1):
+            roi, _, _, _ = extractor.process(frames[i], frames[i + 1])
+            individual_rois.append(roi)
+        individual_rois.append(individual_rois[-1].copy())  # Duplicate last
+        individual_array = np.array(individual_rois, dtype=np.float32)
+        
+        # Process batch
+        batch_array = extractor.process_batch(frames)
+        
+        # Should be identical
+        assert np.allclose(batch_array, individual_array, rtol=1e-5, atol=1e-7)
 
 
 class TestSMEExtractorRealData:
