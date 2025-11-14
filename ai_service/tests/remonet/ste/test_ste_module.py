@@ -28,9 +28,6 @@ if str(ROOT_DIR) not in sys.path:
 
 from ai_service.remonet.ste import STEExtractor, STEOutput
 
-IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
 
 @pytest.fixture
 def ste_extractor():
@@ -61,12 +58,6 @@ def create_invalid_shape_frame(shape, dtype=np.uint8):
     return np.random.randint(0, (65535 if dtype == np.uint16 else 255), shape, dtype=dtype)
 
 
-def denormalize_pixels(array, y, x):
-    """Get denormalized pixel values at (y, x) position."""
-    denorm = (array * IMAGENET_STD + IMAGENET_MEAN) * 255.0
-    return denorm[y, x, 0], denorm[y, x, 1], denorm[y, x, 2]
-
-
 class TestSTEExtractorFormat:
 
     def test_batch_output_shapes(self, ste_extractor):
@@ -93,16 +84,25 @@ class TestTemporalCompositeCorrectness:
         self.ste = STEExtractor(device='cpu')
 
     def test_rgb_averaging_before_normalization(self):
+        """Test: RGB channels are averaged correctly before normalization."""
         frames = [
             create_frame_with_rgb((60, 90, 120)),
             create_frame_with_rgb((30, 60, 90)),
             create_frame_with_rgb((90, 120, 150)),
         ]
         composite = self.ste.create_temporal_composite(frames)
-        ch0, ch1, ch2 = denormalize_pixels(composite, 112, 112)
-        assert np.isclose(ch0, 90, atol=5)
-        assert np.isclose(ch1, 60, atol=5)
-        assert np.isclose(ch2, 120, atol=5)
+        
+        # Expected values after averaging RGB channels and normalizing to [0, 1]
+        # Frame 0: mean(60, 90, 120) = 90 → 90/255 ≈ 0.353
+        # Frame 1: mean(30, 60, 90) = 60 → 60/255 ≈ 0.235
+        # Frame 2: mean(90, 120, 150) = 120 → 120/255 ≈ 0.471
+        ch0 = composite[112, 112, 0]  # Frame 0 averaged
+        ch1 = composite[112, 112, 1]  # Frame 1 averaged
+        ch2 = composite[112, 112, 2]  # Frame 2 averaged
+        
+        assert np.isclose(ch0, 90.0 / 255.0, atol=1e-5)
+        assert np.isclose(ch1, 60.0 / 255.0, atol=1e-5)
+        assert np.isclose(ch2, 120.0 / 255.0, atol=1e-5)
 
     def test_composite_shape_and_dtype(self):
         frames = create_random_frames(3)
