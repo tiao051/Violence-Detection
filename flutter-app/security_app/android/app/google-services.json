@@ -12,7 +12,16 @@
           "package_name": "com.example.security_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592049335952-u6bb8fq85innr5p0tj77t9e7k0djj3am.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.security_app",
+            "certificate_hash": "4548b767bffe748e47d77cd552c4490bec9157bc"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAWJoecz3KqRJVQnmUQXXUeeocCa4tud0w"
