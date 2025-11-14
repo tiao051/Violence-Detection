@@ -20,8 +20,7 @@ class STEOutput:
     """STE processing output with spatiotemporal feature maps."""
     camera_id: str
     timestamp: float
-    features: torch.Tensor  # Shape: (T/3, C, H, W) - preserve spatial dimensions
-    embedding: np.ndarray   # Shape: (T/3, C) - flattened for GTE module
+    features: torch.Tensor  # Shape: (T/3, C, W, H) = (10, 1280, 7, 7) per paper
     latency_ms: float
 
 
@@ -113,24 +112,24 @@ class STEExtractor:
         
         return composite_normalized.astype(np.float32)
 
-    def process_batch(self, frames: np.ndarray) -> Tuple[torch.Tensor, np.ndarray]:
+    def process_batch(self, frames: np.ndarray) -> torch.Tensor:
         """
-        Process batch of 30 frames to extract features.
+        Process batch of 30 frames to extract spatiotemporal features.
         
-        Converts 30 frames into 10 temporal composites
-        Extracts feature maps for all 10 composites in batch.
+        Converts 30 frames into 10 temporal composites (T/3).
+        Extracts feature maps for all 10 composites in batch using MobileNetV2.
         
         Args:
             frames: numpy array (30, 224, 224, 3), RGB, uint8, [0-255]
             
         Returns:
-            features: Tensor (10, 1280, 7, 7) - spatial feature maps
-            embeddings: ndarray (10, 1280) - pooled features
+            features: Tensor (T/3, C, W, H) = (10, 1280, 7, 7)
+                     Feature maps preserving spatial dimensions as per paper
         """
         if len(frames) != 30:
             raise ValueError(f"Expected 30 frames, got {len(frames)}")
         
-        # Create 10 temporal composites from 30 frames
+        # Create 10 temporal composites from 30 frames (T/3)
         composites = []
         for i in range(0, 30, 3):
             if i + 2 < len(frames):
@@ -144,16 +143,12 @@ class STEExtractor:
         composites_tensor = torch.from_numpy(composites_batch).permute(0, 3, 1, 2)
         composites_tensor = composites_tensor.to(self.device)
         
-        # Extract features in batch
+        # Extract feature maps in batch
+        # Output: B ∈ ℝ^(T/3 × C × W × H) = (10, 1280, 7, 7)
         with torch.no_grad(): # if trainning e2e, remove no_grad()
             features = self.backbone(composites_tensor)  # (10, 1280, 7, 7)
         
-        # Global average pooling for embeddings
-        embeddings = torch.nn.functional.adaptive_avg_pool2d(features, (1, 1))
-        embeddings = embeddings.view(embeddings.size(0), -1)  # (10, 1280)
-        embeddings_np = embeddings.cpu().numpy()
-        
-        return features, embeddings_np
+        return features
 
     def process(
         self,
@@ -162,7 +157,10 @@ class STEExtractor:
         timestamp: Optional[float] = None
     ) -> STEOutput:
         """
-        Process 30 motion frames and generate spatiotemporal features.
+        Process 30 motion frames and generate spatiotemporal feature maps.
+        
+        According to paper: output is feature map B ∈ ℝ^(T/3 × C × W × H)
+        where T=30, so output shape is (10, 1280, 7, 7) from MobileNetV2.
         
         Args:
             frames: numpy array (30, 224, 224, 3), RGB, uint8
@@ -170,20 +168,19 @@ class STEExtractor:
             timestamp: Timestamp for this batch (auto-generated if None)
             
         Returns:
-            STEOutput with features and embeddings
+            STEOutput with spatiotemporal feature maps (T/3, C, W, H)
         """
         start = time.perf_counter()
         
         if timestamp is None:
             timestamp = time.time()
         
-        features, embeddings = self.process_batch(frames)
+        features = self.process_batch(frames)
         latency_ms = (time.perf_counter() - start) * 1000
         
         return STEOutput(
             camera_id=camera_id,
             timestamp=timestamp,
-            features=features,      # (10, 1280, 7, 7) - for GTE module
-            embedding=embeddings,   # (10, 1280) - pooled version
+            features=features,      # (10, 1280, 7, 7) - spatial feature maps for GTE
             latency_ms=latency_ms
         )
