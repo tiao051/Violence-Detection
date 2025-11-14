@@ -70,17 +70,18 @@ def denormalize_pixels(array, y, x):
 class TestSTEExtractorFormat:
 
     def test_batch_output_shapes(self, ste_extractor):
+        """Test: process_batch returns feature maps with correct shape (T/3, C, W, H)"""
         frames = create_random_frames(30)
-        features, embeddings = ste_extractor.process_batch(frames)
+        features = ste_extractor.process_batch(frames)
         assert features.shape == (10, 1280, 7, 7)
-        assert embeddings.shape == (10, 1280)
+        assert isinstance(features, torch.Tensor)
 
     def test_process_output_type(self, ste_extractor):
+        """Test: process() returns STEOutput with feature maps per paper spec"""
         frames = create_random_frames(30)
         output = ste_extractor.process(frames, camera_id="test_cam", timestamp=123.0)
         assert isinstance(output, STEOutput)
         assert output.features.shape == (10, 1280, 7, 7)
-        assert output.embedding.shape == (10, 1280)
         assert output.camera_id == "test_cam"
         assert output.timestamp == 123.0
         assert output.latency_ms > 0
@@ -134,14 +135,13 @@ class TestBatchConsistency:
         frames_30 = create_random_frames(30)
         
         # Run 1
-        features_1, embeddings_1 = self.ste.process_batch(frames_30)
+        features_1 = self.ste.process_batch(frames_30)
         
         # Run 2
-        features_2, embeddings_2 = self.ste.process_batch(frames_30)
+        features_2 = self.ste.process_batch(frames_30)
         
         # Should be identical (deterministic)
         assert torch.allclose(features_1, features_2, rtol=1e-5, atol=1e-5)
-        assert np.allclose(embeddings_1, embeddings_2, rtol=1e-5, atol=1e-5)
 
 
 class TestIntegration:
@@ -150,11 +150,11 @@ class TestIntegration:
         self.ste = STEExtractor(device='cpu')
 
     def test_batch_processing_accepts_sme_like_rgb_frames(self):
-        """Test: process_batch accepts SME-like RGB frames"""
+        """Test: process_batch accepts SME-like RGB frames and outputs feature maps"""
         frames = create_random_frames(30)
-        features, embeddings = self.ste.process_batch(frames)
+        features = self.ste.process_batch(frames)
         assert features.shape == (10, 1280, 7, 7)
-        assert embeddings.shape == (10, 1280)
+        assert isinstance(features, torch.Tensor)
 
     def test_does_not_modify_input_frames(self):
         """Test: Processing does not modify input frames"""
