@@ -132,8 +132,8 @@ class SMEExtractor:
             frame_t1: Second frame (RGB, uint8, 224x224)
             
         Returns:
-            roi: Motion region extracted from frame_t1 (uint8, 224x224, 3)
-                 Only pixels with motion (mask > threshold) are retained
+            roi: Motion region extracted from frame_t1 (float32 [0, 1], 224x224, 3)
+                 Only pixels with motion (mask > threshold) are retained, normalized to [0, 1]
             mask_binary: Binary motion mask (uint8, 224x224)
                         255 where motion detected, 0 elsewhere
             diff: Raw motion difference map (uint8, 224x224)
@@ -173,9 +173,9 @@ class SMEExtractor:
         _, mask_binary = cv2.threshold(mask_dilated, self.threshold, 255, cv2.THRESH_BINARY)
 
         # Extract motion regions from original frame using dot product
-        # Element-wise multiply: frame * (mask / 255.0)
-        # Keep as float32 [0, 1] to preserve precision for downstream processing
-        roi = frame_t1.astype(np.float32) * mask_binary.astype(np.float32)[:, :, np.newaxis] / 255.0
+        # Normalize frame to [0, 1], then multiply by normalized mask
+        # (frame / 255.0) * (mask / 255.0) → float32 [0, 1]
+        roi = frame_t1.astype(np.float32) / 255.0 * mask_binary.astype(np.float32)[:, :, np.newaxis] / 255.0
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
