@@ -12,6 +12,7 @@ import 'package:security_app/screens/event_detail_screen.dart';
 import 'package:security_app/screens/home_screen.dart';
 import 'package:security_app/screens/live_view_screen.dart';
 import 'package:security_app/screens/login_screen.dart';
+import 'package:security_app/screens/sign_up_screen.dart';
 import 'package:security_app/screens/settings_screen.dart';
 import 'package:security_app/screens/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -83,6 +84,10 @@ GoRouter _buildRouter(AuthProvider authProvider) {
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
+        path: '/sign-up',
+        builder: (context, state) => const SignUpScreen(),
+      ),
+      GoRoute(
         path: '/home',
         builder: (context, state) => const HomeScreen(),
       ),
@@ -119,16 +124,36 @@ GoRouter _buildRouter(AuthProvider authProvider) {
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {
+      
+      // FIX 1: If sign up is in progress, DON'T redirect.
+      if (authProvider.isLoadingSignUp) {
+        return null;
+      }
+      
+      // FIX 2: If there is an error message, DON'T redirect.
+      // Stay on the page to let the UI show the error.
+      if (authProvider.errorMessage != null) {
+        return null;
+      }
+
+      // --- Original Logic (using matchedLocation) ---
       final isLoggedIn = authProvider.isLoggedIn;
+      
+      // Use matchedLocation, NOT state.uri.toString()
       final loggingIn = state.matchedLocation == '/login';
+      final signingUp = state.matchedLocation == '/sign-up';
+
+      // Debug print
+      print('GoRouter Redirect: location=${state.matchedLocation}, isLoggedIn=$isLoggedIn, signingUp=$signingUp');
 
       // Prevent unauthenticated users from accessing protected routes
-      if (!isLoggedIn && !loggingIn) {
+      if (!isLoggedIn && !loggingIn && !signingUp) {
+        print('GoRouter Redirect: *** ĐANG CHUYỂN HƯỚNG VỀ /LOGIN ***');
         return '/login';
       }
 
-      // Prevent authenticated users from seeing login screen
-      if (isLoggedIn && loggingIn) {
+      // Prevent authenticated users from seeing login or sign-up screens
+      if (isLoggedIn && (loggingIn || signingUp)) {
         return '/home';
       }
 

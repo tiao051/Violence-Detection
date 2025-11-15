@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// import 'package:go_router/go_router.dart'; // GoRouter still needed as fallback
+// ignore: unused_import
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; // Import Provider
 import 'package:security_app/providers/auth_provider.dart'; // Import AuthProvider
 import 'package:security_app/theme/app_theme.dart';
@@ -32,9 +33,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     final authProvider = context.read<AuthProvider>();
 
-    await authProvider.login(
-      _emailController.text,
-      _passwordController.text,
+    await authProvider.loginWithEmail(
+      email: _emailController.text,
+      password: _passwordController.text,
     );
 
     // Check mounted before using context after async operation
@@ -181,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             TextButton(
               onPressed: () {
-                // TODO: Implement sign up navigation
+                context.go('/sign-up');
               },
               child: const Text('Don\'t have an account? Sign up now'),
             ),

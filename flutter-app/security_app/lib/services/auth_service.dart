@@ -337,5 +337,43 @@ class AuthService {
     }
   }
 
+  /// Checks if an email is already registered
+  ///
+  /// Returns true if email exists, false otherwise
+  /// Uses Firebase Auth API to fetch sign-in methods
+  Future<bool> emailExists(String email) async {
+    try {
+      print('AuthService: Checking if email exists: $email');
+
+      final signInMethods = await _firebaseAuth.fetchSignInMethodsForEmail(email);
+      final exists = signInMethods.isNotEmpty;
+
+      print('AuthService: Email exists: $exists');
+      return exists;
+    } catch (e) {
+      print('AuthService: Error checking email: $e');
+      return false;
+    }
+  }
+
+  /// Gets the Firebase ID token for the current user
+  ///
+  /// Returns the ID token string, or null if no user is logged in
+  Future<String?> getIdToken() async {
+    try {
+      final User? user = _firebaseAuth.currentUser;
+      if (user == null) {
+        return null;
+      }
+
+      final String? idToken = await user.getIdToken();
+      print('AuthService: ID token retrieved');
+      return idToken;
+    } catch (e) {
+      print('AuthService: Error getting ID token: $e');
+      return null;
+    }
+  }
+
   // TODO: Add getCameras methods here later
 }

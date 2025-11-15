@@ -182,7 +182,6 @@ class AuthProvider with ChangeNotifier {
       _errorMessage = e.toString();
       _isLoadingSignUp = false;
       notifyListeners();
-      rethrow;
     }
   }
 
@@ -298,6 +297,22 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// Checks if an email is already registered
+  ///
+  /// Returns true if email exists, false otherwise
+  /// Non-blocking - does not set loading state
+  Future<bool> checkEmailExists(String email) async {
+    try {
+      print('AuthProvider: Checking if email exists: $email');
+      final exists = await _authService.emailExists(email);
+      print('AuthProvider: Email exists result: $exists');
+      return exists;
+    } catch (e) {
+      print('AuthProvider: Error checking email: $e');
+      return false;
     }
   }
 }
