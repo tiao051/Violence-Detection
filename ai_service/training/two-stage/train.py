@@ -26,9 +26,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import os
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import OneCycleLR
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -41,9 +40,9 @@ from remonet.gte.extractor import GTEExtractor
 
 @dataclass
 class TrainConfig:
-    """Training configuration."""
+    """Training configuration (per RWF-2000 paper)."""
     epochs: int = 100
-    batch_size: int = 16
+    batch_size: int = 2
     learning_rate: float = 1e-3
     weight_decay: float = 1e-2
     adam_epsilon: float = 1e-9
@@ -51,10 +50,9 @@ class TrainConfig:
     extracted_frames_dir: str = None
     num_workers: int = 2
     
-    # OneCycle LR Scheduler config
+    # One-Cycle LR Scheduler config (per paper)
+    scheduler_max_lr: float = 1e-3
     scheduler_min_lr: float = 1e-8
-    scheduler_patience: int = 2
-    scheduler_factor: float = 0.5
 
 
 class Trainer:
@@ -107,13 +105,18 @@ class Trainer:
             weight_decay=config.weight_decay
         )
         
-        # Learning rate scheduler
-        self.scheduler = ReduceLROnPlateau(
+        # Learning rate scheduler (One-Cycle per paper)
+        # total_steps = num_batches * num_epochs
+        num_batches = len(self.train_loader)
+        total_steps = num_batches * config.epochs
+        
+        self.scheduler = OneCycleLR(
             self.optimizer,
-            mode='max',
-            factor=config.scheduler_factor,
-            patience=config.scheduler_patience,
-            min_lr=config.scheduler_min_lr
+            max_lr=config.scheduler_max_lr,
+            total_steps=total_steps,
+            pct_start=0.3,
+            anneal_strategy='cos',
+            cycle_momentum=False
         )
         
         # Metrics
@@ -197,6 +200,7 @@ class Trainer:
             # Backward pass
             loss.backward()
             self.optimizer.step()
+            self.scheduler.step()  # OneCycleLR steps after each batch
             
             # Calculate metrics
             total_loss += loss.item()
@@ -264,11 +268,6 @@ class Trainer:
             self.train_accs.append(train_metrics['accuracy'])
             self.val_accs.append(val_metrics['accuracy'])
             
-            # Update learning rate
-            old_lr = self.optimizer.param_groups[0]['lr']
-            self.scheduler.step(val_metrics['accuracy'])
-            new_lr = self.optimizer.param_groups[0]['lr']
-            
             # Get metrics
             train_loss = train_metrics['loss']
             val_loss = val_metrics['loss']
@@ -280,12 +279,10 @@ class Trainer:
             is_overfitting = overfitting_gap > 0.15
             
             # Log
-            self.logger.info(f"Epoch {epoch+1}/{self.config.epochs}")
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.logger.info(f"Epoch {epoch+1}/{self.config.epochs} (LR: {current_lr:.2e})")
             self.logger.info(f"  Train - Loss: {train_loss:.4f}, Acc: {train_acc:.4f}")
             self.logger.info(f"  Val   - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
-            
-            if old_lr != new_lr:
-                self.logger.info(f"  LR adjusted: {old_lr:.2e} → {new_lr:.2e}")
             
             # Check overfitting
             if is_overfitting:
@@ -353,7 +350,7 @@ def main():
     
     parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs (default: 100)')
-    parser.add_argument('--batch-size', type=int, default=16, help='Batch size (default: 16)')
+    parser.add_argument('--batch-size', type=int, default=2, help='Batch size (default: 2)')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate (default: 1e-3)')
     parser.add_argument('--device', type=str, default=None, help='Device: cpu/cuda (default: auto)')
     parser.add_argument('--num-workers', type=int, default=2, help='Number of DataLoader workers (default: 2)')

@@ -27,16 +27,22 @@ from pathlib import Path
 from typing import Dict, List
 from dataclasses import dataclass
 
-# Import from same directory
-import importlib.util
-spec = importlib.util.spec_from_file_location("data_loader", str(Path(__file__).parent / "data_loader.py"))
-data_loader_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(data_loader_module)
-VideoDatasetLoader = data_loader_module.VideoDatasetLoader
+# Add current directory to path for data_loader import
+sys.path.insert(0, str(Path(__file__).parent))
+from data_loader import VideoDataLoader
 
 # Add ai_service to path for SME import
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from remonet.sme.extractor import SMEPreprocessor
+
+
+# Helper class for frame extraction
+class VideoItem:
+    """Video item for frame extraction."""
+    def __init__(self, path: str, label: str, split: str):
+        self.path = path
+        self.label = label
+        self.split = split
 
 
 @dataclass
@@ -190,8 +196,7 @@ def main():
     
     if args.dataset == 'rwf-2000':
         print(f"Loading RWF-2000 dataset from {dataset_root}")
-        loader = VideoDatasetLoader(str(dataset_root))
-        videos = loader.load_rwf2000()
+        videos = VideoDataLoader.load_rwf2000_videos(str(dataset_root))
         
         total_videos = len(videos['train']) + len(videos['val'])
         print(f"Found {total_videos} videos (train: {len(videos['train'])}, val: {len(videos['val'])})")
@@ -204,9 +209,19 @@ def main():
             if not split_videos:
                 print(f"WARNING: No videos for split: {split}")
                 continue
+            
+            # Convert dict items to VideoItem objects
+            video_items = [
+                VideoItem(
+                    path=video_info['path'],
+                    label=video_info['label'],
+                    split=video_info['split']
+                )
+                for video_info in split_videos
+            ]
         
             extractor.extract_batch(
-                video_items=split_videos,
+                video_items=video_items,
                 output_base_dir=str(output_dir)
             )
         

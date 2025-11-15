@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 import cv2
 import numpy as np
 import torch
@@ -28,24 +28,14 @@ from remonet.ste.extractor import STEExtractor
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class VideoItem:
-    """Represents a single video item in the dataset."""
-    path: str
-    label: str
-    split: str  # 'train' or 'val'
+class VideoDataLoader(Dataset):
+    """
+    PyTorch Dataset for extracted video frames.
     
-    def __post_init__(self):
-        """Validate video item."""
-        if not os.path.exists(self.path):
-            raise FileNotFoundError(f"Video file not found: {self.path}")
-        
-        if self.split not in ['train', 'val']:
-            raise ValueError(f"Invalid split: {self.split}")
-
-
-class VideoDatasetLoader:
-    """Load RWF-2000 dataset with predefined train/val split."""
+    Processes frames through SME (motion extraction) and STE (feature extraction).
+    Input: 30 extracted frames per video
+    Output: (features, label) where features are spatiotemporal embeddings
+    """
     
     LABEL_MAP = {
         'Violence': 0,
@@ -54,26 +44,20 @@ class VideoDatasetLoader:
     
     SUPPORTED_FORMATS = ('.avi', '.mp4', '.mov', '.mkv')
     
-    def __init__(self, dataset_root: str):
+    @staticmethod
+    def load_rwf2000_videos(dataset_root: str) -> Dict[str, List[Dict]]:
         """
-        Initialize video dataset loader.
+        Load RWF-2000 dataset using its predefined train/val split.
+        Used by frame extraction pipeline.
         
         Args:
             dataset_root: Root directory containing RWF-2000 folder
-                         Expected structure: dataset_root/RWF-2000/train/Fight, etc.
-        """
-        self.dataset_root = Path(dataset_root)
-        if not self.dataset_root.exists():
-            raise ValueError(f"Dataset root not found: {dataset_root}")
-    
-    def load_rwf2000(self) -> Dict[str, List[VideoItem]]:
-        """
-        Load RWF-2000 dataset using its predefined train/val split.
         
         Returns:
-            Dict mapping 'train'/'val' -> list of VideoItem objects
+            Dict mapping 'train'/'val' -> list of dicts with 'path' and 'label' keys
         """
-        rwf_root = self.dataset_root / 'RWF-2000'
+        dataset_root = Path(dataset_root)
+        rwf_root = dataset_root / 'RWF-2000'
         if not rwf_root.exists():
             raise ValueError(f"RWF-2000 folder not found: {rwf_root}")
         
@@ -87,44 +71,20 @@ class VideoDatasetLoader:
                 
                 label = 'Violence' if cls == 'Fight' else 'NonViolence'
                 
-                try:
-                    video_files = os.listdir(cls_dir)
-                except Exception as e:
-                    print(f"ERROR: Cannot read directory {cls_dir}: {e}")
-                    continue
-                
-                for video_file in sorted(video_files):
-                    video_path = cls_dir / video_file
-                    
-                    if not video_path.is_file():
+                for video_file in sorted(cls_dir.iterdir()):
+                    if not video_file.is_file():
                         continue
                     
-                    if video_path.suffix.lower() not in self.SUPPORTED_FORMATS:
+                    if video_file.suffix.lower() not in VideoDataLoader.SUPPORTED_FORMATS:
                         continue
                     
-                    try:
-                        item = VideoItem(
-                            path=str(video_path),
-                            label=label,
-                            split=split
-                        )
-                        items[split].append(item)
-                    except FileNotFoundError:
-                        print(f"WARNING: Video file not found: {video_path}")
-                        continue
+                    items[split].append({
+                        'path': str(video_file),
+                        'label': label,
+                        'split': split
+                    })
         
         return items
-
-
-class VideoDataLoader(VideoDatasetLoader, Dataset):
-    """
-    PyTorch Dataset for extracted video frames.
-    
-    Processes frames through SME (motion extraction) and STE (feature extraction).
-    Input: 30 extracted frames per video
-    Output: (features, label) where features are spatiotemporal embeddings
-    """
-    
     
     def __init__(
         self,
