@@ -2,27 +2,49 @@
 Frame Extraction Module.
 
 Extracts frames from videos at specified FPS and resizes to target size.
+
+Usage:
+    python frame_extractor.py --dataset rwf-2000 --dataset-root <path> [OPTIONS]
+
+Arguments:
+    --dataset {rwf-2000}           Dataset to extract frames from (required)
+    --dataset-root PATH            Path to dataset root directory (required)
+
+Options:
+    --target-fps FPS               Target FPS for frame extraction (default: 30)
+    --target-size W H              Target frame size in pixels (default: 224 224)
+    --jpeg-quality QUALITY         JPEG quality 0-100 (default: 85)
+
+Example:
+    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/violence-detection/dataset
+    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/violence-detection/dataset --target-fps 30 --target-size 256 256
 """
 
 import cv2
-import hashlib
-import logging
+import argparse
+import sys
 from pathlib import Path
 from typing import Dict, List
 from dataclasses import dataclass
-from ai_service.remonet.sme.extractor import SMEPreprocessor
 
-# Setup logging
-logger = logging.getLogger(__name__)
+# Import from same directory
+import importlib.util
+spec = importlib.util.spec_from_file_location("data_loader", str(Path(__file__).parent / "data_loader.py"))
+data_loader_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(data_loader_module)
+VideoDatasetLoader = data_loader_module.VideoDatasetLoader
+
+# Add ai_service to path for SME import
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from remonet.sme.extractor import SMEPreprocessor
 
 
 @dataclass
 class ExtractionConfig:
     """Configuration for frame extraction."""
     target_size: tuple = (224, 224)
-    target_fps: int = 20
+    target_fps: int = 30
     jpeg_quality: int = 85
-    log_file: str = "frame_extraction.log"
 
 
 class FrameExtractor:
@@ -39,21 +61,6 @@ class FrameExtractor:
         """
         self.config = config or ExtractionConfig()
         self.preprocessor = SMEPreprocessor(target_size=self.config.target_size)
-        
-        # Setup logging
-        self._setup_logging()
-    
-    def _setup_logging(self):
-        """Setup file logging."""
-        handler = logging.FileHandler(self.config.log_file)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    
-    def _get_video_hash(self, video_path: str) -> str:
-        """Generate unique hash for video file."""
-        return hashlib.md5(video_path.encode()).hexdigest()[:12]
     
     def extract_batch(self, video_items: List, output_base_dir: str) -> Dict:
         """
@@ -62,7 +69,7 @@ class FrameExtractor:
         Args:
             video_items: List of VideoItem objects
             output_base_dir: Base output directory
-                            Structure: output_base_dir/split/label/video_hash/
+                            Structure: output_base_dir/split/label/video_index/
         
         Returns:
             Dict with batch extraction results
@@ -74,22 +81,21 @@ class FrameExtractor:
         output_base.mkdir(parents=True, exist_ok=True)
         
         for idx, video_item in enumerate(video_items):
-            # Construct output directory
-            video_hash = self._get_video_hash(video_item.path)
-            output_dir = output_base / video_item.split / video_item.label / video_hash
+            # Construct output directory using video index (easy to understand, short path)
+            output_dir = output_base / video_item.split / video_item.label / f"{idx:05d}"
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
             
             # Validate input
             if not Path(video_item.path).exists():
-                logger.error(f"Video not found: {video_item.path}")
+                print(f"ERROR: Video not found: {video_item.path}")
                 failed_count += 1
                 continue
             
             # Open video
             cap = cv2.VideoCapture(video_item.path)
             if not cap.isOpened():
-                logger.error(f"Cannot open video: {video_item.path}")
+                print(f"ERROR: Cannot open video: {video_item.path}")
                 failed_count += 1
                 continue
             
@@ -113,14 +119,17 @@ class FrameExtractor:
                     
                     if current_t + 1e-6 >= next_t:
                         try:
-                            # Resize using SMEPreprocessor
+                            # Preprocess frame: resize to 224x224 and convert to RGB
                             resized_frame = self.preprocessor.preprocess(frame)
+                            
+                            # Convert RGB back to BGR for cv2.imwrite (OpenCV expects BGR)
+                            frame_bgr = cv2.cvtColor(resized_frame, cv2.COLOR_RGB2BGR)
                             
                             # Save frame
                             frame_path = output_path / f"frame_{extracted_count:06d}.jpg"
                             cv2.imwrite(
                                 str(frame_path), 
-                                cv2.cvtColor(resized_frame, cv2.COLOR_RGB2BGR),
+                                frame_bgr,
                                 [cv2.IMWRITE_JPEG_QUALITY, self.config.jpeg_quality]
                             )
                             
@@ -128,7 +137,7 @@ class FrameExtractor:
                             next_t += step_t
                         
                         except Exception as e:
-                            logger.warning(f"Error processing frame {frame_idx}: {e}")
+                            print(f"WARNING: Error processing frame {frame_idx}: {e}")
                             next_t += step_t
                     
                     frame_idx += 1
@@ -137,9 +146,9 @@ class FrameExtractor:
                 cap.release()
             
             total_frames += extracted_count
-            logger.info(f"[{idx+1}/{len(video_items)}] Extracted {extracted_count} frames from {video_item.path}")
+            print(f"[{idx+1}/{len(video_items)}] Extracted {extracted_count} frames from {video_item.path}")
         
-        logger.info(f"Batch extraction completed: {len(video_items) - failed_count}/{len(video_items)} successful, {total_frames} total frames")
+        print(f"Batch extraction completed: {len(video_items) - failed_count}/{len(video_items)} successful, {total_frames} total frames")
         
         return {
             'total': len(video_items),
@@ -147,3 +156,62 @@ class FrameExtractor:
             'failed': failed_count,
             'total_frames': total_frames
         }
+
+
+def main():
+    """CLI entry point for frame extraction."""
+    parser = argparse.ArgumentParser(
+        description='Extract frames from video dataset',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000'], help='Dataset to extract frames from')
+    parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root directory')
+    parser.add_argument('--target-fps', type=int, default=30, help='Target FPS for frame extraction (default: 30)')
+    parser.add_argument('--target-size', type=int, nargs=2, default=[224, 224], help='Target frame size (width height) (default: 224 224)')
+    parser.add_argument('--jpeg-quality', type=int, default=85, help='JPEG quality (0-100) (default: 85)')
+    
+    args = parser.parse_args()
+    
+    dataset_root = Path(args.dataset_root).resolve()
+    
+    if not dataset_root.exists():
+        print(f"ERROR: Dataset root not found: {dataset_root}")
+        sys.exit(1)
+    
+    # Create config and extractor
+    config = ExtractionConfig(
+        target_size=tuple(args.target_size),
+        target_fps=args.target_fps,
+        jpeg_quality=args.jpeg_quality
+    )
+
+    extractor = FrameExtractor(config=config)
+    
+    if args.dataset == 'rwf-2000':
+        print(f"Loading RWF-2000 dataset from {dataset_root}")
+        loader = VideoDatasetLoader(str(dataset_root))
+        videos = loader.load_rwf2000()
+        
+        total_videos = len(videos['train']) + len(videos['val'])
+        print(f"Found {total_videos} videos (train: {len(videos['train'])}, val: {len(videos['val'])})")
+        
+        output_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
+        
+        # Extract frames for each split
+        for split in ['train', 'val']:
+            split_videos = videos[split]
+            if not split_videos:
+                print(f"WARNING: No videos for split: {split}")
+                continue
+        
+            extractor.extract_batch(
+                video_items=split_videos,
+                output_base_dir=str(output_dir)
+            )
+        
+        print(f"Frames saved to: {output_dir}")
+
+
+if __name__ == '__main__':
+    main()
