@@ -30,6 +30,7 @@ dependencies:
   firebase_core: ^3.1.1
   firebase_messaging: ^15.0.1
   firebase_auth: ^5.1.1
+  cloud_firestore: ^5.0.0
 
   # For beautiful loading spinners
   flutter_spinkit: ^5.2.1
