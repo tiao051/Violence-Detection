@@ -32,11 +32,8 @@ from torch.optim.lr_scheduler import OneCycleLR
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-
-# Import VideoDataLoader trực tiếp để hỗ trợ multiprocessing trên Windows
 from data_loader import VideoDataLoader
 from remonet.gte.extractor import GTEExtractor
-
 
 @dataclass
 class TrainConfig:
