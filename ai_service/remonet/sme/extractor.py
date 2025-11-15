@@ -120,12 +120,8 @@ class SMEExtractor:
         """
         if frame_t.shape != (224, 224, 3):
             raise ValueError(f"frame_t must be shape (224, 224, 3), got {frame_t.shape}")
-        if frame_t1.shape != (224, 224, 3):
-            raise ValueError(f"frame_t1 must be shape (224, 224, 3), got {frame_t1.shape}")
         if frame_t.dtype != np.uint8:
             raise ValueError(f"frame_t must be uint8, got {frame_t.dtype}")
-        if frame_t1.dtype != np.uint8:
-            raise ValueError(f"frame_t1 must be uint8, got {frame_t1.dtype}")
 
     def process(self, frame_t, frame_t1):
         """
@@ -136,8 +132,8 @@ class SMEExtractor:
             frame_t1: Second frame (RGB, uint8, 224x224)
             
         Returns:
-            roi: Motion region extracted from frame_t1 (uint8, 224x224, 3)
-                 Only pixels with motion (mask > threshold) are retained
+            roi: Motion region extracted from frame_t1 (float32 [0, 1], 224x224, 3)
+                 Only pixels with motion (mask > threshold) are retained, normalized to [0, 1]
             mask_binary: Binary motion mask (uint8, 224x224)
                         255 where motion detected, 0 elsewhere
             diff: Raw motion difference map (uint8, 224x224)
@@ -176,10 +172,50 @@ class SMEExtractor:
         # Pixels above threshold are marked as motion (255), below as static (0)
         _, mask_binary = cv2.threshold(mask_dilated, self.threshold, 255, cv2.THRESH_BINARY)
 
-        # Extract motion regions from original frame
-        # Only pixels where mask is non-zero are retained
-        roi = cv2.bitwise_and(frame_t1, frame_t1, mask=mask_binary)
+        # Extract motion regions from original frame using dot product
+        # Normalize frame to [0, 1], then multiply by normalized mask
+        # (frame / 255.0) * (mask / 255.0) → float32 [0, 1]
+        roi = frame_t1.astype(np.float32) / 255.0 * mask_binary.astype(np.float32)[:, :, np.newaxis] / 255.0
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         return roi, mask_binary, diff, elapsed_ms
+
+    def process_batch(self, frames: np.ndarray) -> np.ndarray:
+        """
+        Process a batch of frames to extract motion features.
+        
+        Takes N frames and produces N motion frames (with last frame duplicated).
+        Processes consecutive frame pairs: (frame[i], frame[i+1]) → motion[i]
+        Then duplicates the last motion frame to match input count.
+        
+        Args:
+            frames: Batch of frames (N, 224, 224, 3), RGB, uint8
+                   Example: 30 frames for STE processing
+        
+        Returns:
+            motion_frames: Motion features (N, 224, 224, 3), float32 [0, 1]
+                          N = same as input frame count
+        """
+        if len(frames) < 2:
+            raise ValueError(f"Expected at least 2 frames, got {len(frames)}")
+        
+        motion_frames = []
+        
+        # Process consecutive frame pairs
+        for i in range(len(frames) - 1):
+            frame_t = frames[i]
+            frame_t1 = frames[i + 1]
+            roi, _, _, _ = self.process(frame_t, frame_t1)
+            motion_frames.append(roi)
+        
+        # Convert to numpy array
+        motion_array = np.array(motion_frames, dtype=np.float32)  # (N-1, 224, 224, 3)
+        
+        # Duplicate last motion frame to match input count
+        # 30 input frames → 29 motion frames → duplicate last → 30 motion frames
+        if len(motion_array) < len(frames):
+            last_frame = motion_array[-1:].copy()  # Shape: (1, 224, 224, 3)
+            motion_array = np.vstack([motion_array, last_frame])
+        
+        return motion_array
