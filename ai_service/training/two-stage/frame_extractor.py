@@ -113,14 +113,14 @@ class FrameExtractor:
                     
                     if current_t + 1e-6 >= next_t:
                         try:
-                            # Resize using SMEPreprocessor
+                            # Preprocess frame: resize to 224x224 and convert to RGB
                             resized_frame = self.preprocessor.preprocess(frame)
                             
-                            # Save frame
+                            # Save frame as RGB (JPG doesn't store color space info anyway)
                             frame_path = output_path / f"frame_{extracted_count:06d}.jpg"
                             cv2.imwrite(
                                 str(frame_path), 
-                                cv2.cvtColor(resized_frame, cv2.COLOR_RGB2BGR),
+                                resized_frame,
                                 [cv2.IMWRITE_JPEG_QUALITY, self.config.jpeg_quality]
                             )
                             
