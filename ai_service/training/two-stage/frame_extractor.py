@@ -2,15 +2,43 @@
 Frame Extraction Module.
 
 Extracts frames from videos at specified FPS and resizes to target size.
+
+Usage:
+    python frame_extractor.py --dataset rwf-2000 --dataset-root <path> [OPTIONS]
+
+Arguments:
+    --dataset {rwf-2000}           Dataset to extract frames from (required)
+    --dataset-root PATH            Path to dataset root directory (required)
+
+Options:
+    --target-fps FPS               Target FPS for frame extraction (default: 30)
+    --target-size W H              Target frame size in pixels (default: 224 224)
+    --jpeg-quality QUALITY         JPEG quality 0-100 (default: 85)
+
+Example:
+    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/dataset
+    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/dataset --target-fps 30 --target-size 256 256
 """
 
 import cv2
 import hashlib
 import logging
+import argparse
+import sys
 from pathlib import Path
 from typing import Dict, List
 from dataclasses import dataclass
-from ai_service.remonet.sme.extractor import SMEPreprocessor
+
+# Import from same directory
+import importlib.util
+spec = importlib.util.spec_from_file_location("data_loader", str(Path(__file__).parent / "data_loader.py"))
+data_loader_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(data_loader_module)
+VideoDatasetLoader = data_loader_module.VideoDatasetLoader
+
+# Add ai_service to path for SME import
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from remonet.sme.extractor import SMEPreprocessor
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -20,7 +48,7 @@ logger = logging.getLogger(__name__)
 class ExtractionConfig:
     """Configuration for frame extraction."""
     target_size: tuple = (224, 224)
-    target_fps: int = 20
+    target_fps: int = 30
     jpeg_quality: int = 85
     log_file: str = "frame_extraction.log"
 
@@ -147,3 +175,65 @@ class FrameExtractor:
             'failed': failed_count,
             'total_frames': total_frames
         }
+
+
+def main():
+    """CLI entry point for frame extraction."""
+    parser = argparse.ArgumentParser(
+        description='Extract frames from video dataset',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000'], help='Dataset to extract frames from')
+    parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root directory')
+    parser.add_argument('--target-fps', type=int, default=30, help='Target FPS for frame extraction (default: 30)')
+    parser.add_argument('--target-size', type=int, nargs=2, default=[224, 224], help='Target frame size (width height) (default: 224 224)')
+    parser.add_argument('--jpeg-quality', type=int, default=85, help='JPEG quality (0-100) (default: 85)')
+    
+    args = parser.parse_args()
+    
+    # Setup logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    dataset_root = Path(args.dataset_root).resolve()
+    
+    if not dataset_root.exists():
+        logging.error(f"Dataset root not found: {dataset_root}")
+        sys.exit(1)
+    
+    # Create config and extractor
+    config = ExtractionConfig(
+        target_size=tuple(args.target_size),
+        target_fps=args.target_fps,
+        jpeg_quality=args.jpeg_quality
+    )
+
+    extractor = FrameExtractor(config=config)
+    
+    if args.dataset == 'rwf-2000':
+        logging.info(f"Loading RWF-2000 dataset from {dataset_root}")
+        loader = VideoDatasetLoader(str(dataset_root))
+        videos = loader.load_rwf2000()
+        
+        total_videos = len(videos['train']) + len(videos['val'])
+        logging.info(f"Found {total_videos} videos (train: {len(videos['train'])}, val: {len(videos['val'])})")
+        
+        output_dir = dataset_root / 'extracted_frames'
+        
+        # Extract frames for each split
+        for split in ['train', 'val']:
+            split_videos = videos[split]
+            if not split_videos:
+                logging.warning(f"No videos for split: {split}")
+                continue
+        
+            extractor.extract_batch(
+                video_items=split_videos,
+                output_base_dir=str(output_dir)
+            )
+        
+        logging.info(f"Frames saved to: {output_dir}")
+
+
+if __name__ == '__main__':
+    main()
