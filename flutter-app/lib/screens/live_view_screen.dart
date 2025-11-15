@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:security_app/services/camera_service.dart';
-import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import '../services/camera_service.dart';
+import '../widgets/error_widget.dart' as error_widget;
 
 /// Screen for viewing live video from a camera.
 class LiveViewScreen extends StatefulWidget {

@@ -3,8 +3,8 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 // import 'package:go_router/go_router.dart'; // GoRouter still needed as fallback
 import 'package:provider/provider.dart'; // Import Provider
-import 'package:security_app/providers/auth_provider.dart'; // Import AuthProvider
-import 'package:security_app/theme/app_theme.dart';
+import '../providers/auth_provider.dart'; // Import AuthProvider
+import '../theme/app_theme.dart';
 
 /// Screen for user login.
 class LoginScreen extends StatefulWidget {

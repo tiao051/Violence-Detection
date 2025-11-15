@@ -1,4 +1,4 @@
-import 'package:security_app/models/event_model.dart';
+import '../models/event_model.dart';
 
 class EventService {
   

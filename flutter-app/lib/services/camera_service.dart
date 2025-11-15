@@ -1,4 +1,4 @@
-import 'package:security_app/models/camera_model.dart'; // Reuse existing model
+import '../models/camera_model.dart'; // Reuse existing model
 
 /// Service layer for camera-related API calls.
 class CameraService {

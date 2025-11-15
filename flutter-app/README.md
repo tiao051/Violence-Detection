@@ -67,7 +67,7 @@ This version establishes the application's foundational structure. All API calls
 
 1.  **Navigate to the app directory:**
     ```bash
-    cd flutter-app/security_app
+    cd flutter-app
     ```
 
 2.  **Clean the project (optional but recommended):**

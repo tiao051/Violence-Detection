@@ -3,10 +3,10 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:security_app/providers/event_provider.dart';
-import 'package:security_app/theme/app_theme.dart';
-import 'package:security_app/widgets/error_widget.dart' as error_widget;
-import 'package:security_app/widgets/empty_state_widget.dart';
+import '../../providers/event_provider.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/error_widget.dart' as error_widget;
+import '../../widgets/empty_state_widget.dart';
 
 /// Tab that displays detected events (alarms) from cameras.
 class EventTab extends StatefulWidget {

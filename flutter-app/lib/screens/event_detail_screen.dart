@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:security_app/models/event_model.dart';
-import 'package:security_app/providers/event_provider.dart';
+import '../models/event_model.dart';
+import '../providers/event_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import '../widgets/error_widget.dart' as error_widget;
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel event;

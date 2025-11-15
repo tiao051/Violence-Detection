@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:security_app/providers/profile_provider.dart';
-import 'package:security_app/providers/auth_provider.dart';
-import 'package:security_app/theme/app_theme.dart';
+import '../providers/profile_provider.dart';
+import '../providers/auth_provider.dart';
+import '../theme/app_theme.dart';
 
 /// Screen displaying user profile and account settings
 class ProfileScreen extends StatefulWidget {

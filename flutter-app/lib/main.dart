@@ -3,19 +3,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; 
-import 'package:security_app/providers/auth_provider.dart';
-import 'package:security_app/providers/camera_provider.dart';
-import 'package:security_app/providers/event_provider.dart';
-import 'package:security_app/providers/settings_provider.dart';
-import 'package:security_app/providers/profile_provider.dart';
-import 'package:security_app/screens/event_detail_screen.dart';
-import 'package:security_app/screens/home_screen.dart';
-import 'package:security_app/screens/live_view_screen.dart';
-import 'package:security_app/screens/login_screen.dart';
-import 'package:security_app/screens/settings_screen.dart';
-import 'package:security_app/screens/profile_screen.dart';
+import 'providers/auth_provider.dart';
+import 'providers/camera_provider.dart';
+import 'providers/event_provider.dart';
+import 'providers/settings_provider.dart';
+import 'providers/profile_provider.dart';
+import 'screens/event_detail_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/live_view_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:security_app/theme/app_theme.dart'; 
+import 'theme/app_theme.dart'; 
 
 void main() async {
   // Initialize Flutter bindings before async operations in main()

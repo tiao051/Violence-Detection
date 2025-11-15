@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:security_app/models/event_model.dart';
-import 'package:security_app/services/event_service.dart';
+import '../models/event_model.dart';
+import '../services/event_service.dart';
 
 enum DateFilter { all, today, thisWeek, thisMonth }
 

@@ -2,13 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:security_app/providers/auth_provider.dart';
-import 'package:security_app/providers/camera_provider.dart';
-import 'package:security_app/providers/event_provider.dart';
-import 'package:security_app/screens/tabs/camera_tab.dart';
-import 'package:security_app/screens/tabs/event_tab.dart';
-import 'package:security_app/services/notification_service.dart';
-import 'package:security_app/theme/app_theme.dart';
+import '../providers/auth_provider.dart';
+import '../providers/camera_provider.dart';
+import '../providers/event_provider.dart';
+import 'tabs/camera_tab.dart';
+import 'tabs/event_tab.dart';
+import '../services/notification_service.dart';
+import '../theme/app_theme.dart';
 
 /// Home screen that exposes the app's primary tabs (Cameras, Events).
 ///

@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:security_app/models/auth_model.dart';
+import '../models/auth_model.dart';
 
 /// Service layer for handling authentication API calls.
 class AuthService {

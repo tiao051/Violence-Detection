@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:security_app/services/auth_service.dart';
-import 'package:security_app/models/auth_model.dart';
+import '../services/auth_service.dart';
+import '../models/auth_model.dart';
 
 /// Provider for managing authentication state.
 class AuthProvider with ChangeNotifier {
