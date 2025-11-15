@@ -234,6 +234,7 @@ class AuthService {
   /// 3. Update password
   ///
   /// Throws [Exception] if current password is wrong or update fails
+  /// NOTE: Re-authentication does NOT sign out the user on failure
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -247,7 +248,10 @@ class AuthService {
         throw Exception('No user is currently logged in');
       }
 
+      print('AuthService: Current user: ${user.email}');
+
       // Re-authenticate user with current password
+      // This is required by Firebase before allowing password change
       final AuthCredential credential = EmailAuthProvider.credential(
         email: user.email!,
         password: currentPassword,
@@ -257,8 +261,23 @@ class AuthService {
         await user.reauthenticateWithCredential(credential);
         print('AuthService: Re-authentication successful');
       } on FirebaseAuthException catch (e) {
-        if (e.code == 'wrong-password') {
+        print('AuthService: Re-authentication failed - Code: ${e.code}');
+        
+        // CRITICAL: Verify user is still logged in after re-auth failure
+        // Firebase does NOT sign out user when re-auth fails
+        // But let's verify to be absolutely sure
+        final stillLoggedIn = _firebaseAuth.currentUser != null;
+        print('AuthService: User still logged in after re-auth failure: $stillLoggedIn');
+        
+        // User remains logged in, just can't change password
+        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
           throw Exception('Current password is incorrect');
+        } else if (e.code == 'user-mismatch') {
+          throw Exception('User mismatch error');
+        } else if (e.code == 'user-not-found') {
+          throw Exception('User not found');
+        } else if (e.code == 'invalid-email') {
+          throw Exception('Invalid email');
         }
         throw Exception('Re-authentication failed: ${e.message}');
       }
@@ -372,6 +391,29 @@ class AuthService {
     } catch (e) {
       print('AuthService: Error getting ID token: $e');
       return null;
+    }
+  }
+
+  /// Sends a password reset email to the specified email address
+  ///
+  /// Firebase will send an email with a link to reset the password.
+  /// User can click the link and set a new password.
+  ///
+  /// Throws [Exception] if email not found or other Firebase errors
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      print('AuthService: Sending password reset email to: $email');
+      await _firebaseAuth.sendPasswordResetEmail(email: email);
+      print('AuthService: Password reset email sent successfully');
+    } on FirebaseAuthException catch (e) {
+      print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      if (e.code == 'user-not-found') {
+        throw Exception('Email not found');
+      }
+      throw Exception('Failed to send password reset email: ${e.message}');
+    } catch (e) {
+      print('AuthService: Send password reset email error: $e');
+      throw Exception('Failed to send password reset email: $e');
     }
   }
 

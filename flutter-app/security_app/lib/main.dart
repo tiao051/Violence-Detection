@@ -130,7 +130,13 @@ GoRouter _buildRouter(AuthProvider authProvider) {
         return null;
       }
       
-      // FIX 2: If there is an error message, DON'T redirect.
+      // FIX 2: If changing password, DON'T redirect.
+      // This prevents logout when re-authentication fails.
+      if (authProvider.isChangingPassword) {
+        return null;
+      }
+      
+      // FIX 3: If there is an error message, DON'T redirect.
       // Stay on the page to let the UI show the error.
       if (authProvider.errorMessage != null) {
         return null;

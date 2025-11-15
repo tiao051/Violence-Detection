@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:security_app/providers/profile_provider.dart';
 import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/theme/app_theme.dart';
+import 'package:security_app/dialogs/change_password_dialog.dart';
 
 /// Screen displaying user profile and account settings
 class ProfileScreen extends StatefulWidget {
@@ -186,8 +187,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           subtitle: const Text('Update your password'),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Change password feature coming soon')),
+            showDialog(
+              context: context,
+              builder: (context) => const ChangePasswordDialog(),
             );
           },
         ),
