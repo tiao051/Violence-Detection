@@ -108,6 +108,9 @@ lib/generated_plugin_registrant.dart
 utils/test_data/outputs/*
 !.gitkeep
 
+# Dataset
+dataset/
+
 # Docker volumes and data
 docker-data/
 *.volume/

@@ -6,6 +6,7 @@ Integrates frame extraction, SME (motion), and STE (feature extraction).
 """
 
 import os
+import sys
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
@@ -13,6 +14,10 @@ import cv2
 import numpy as np
 from torch.utils.data import Dataset
 import logging
+
+# Fix encoding for Windows
+if sys.platform.startswith('win'):
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 logger = logging.getLogger(__name__)
 
@@ -76,16 +81,31 @@ class VideoDatasetLoader:
                 
                 label = 'Violence' if cls == 'Fight' else 'NonViolence'
                 
-                for video_file in sorted(cls_dir.iterdir()):
-                    if video_file.suffix.lower() not in self.SUPPORTED_FORMATS:
+                try:
+                    video_files = os.listdir(cls_dir)
+                except Exception as e:
+                    print(f"ERROR: Cannot read directory {cls_dir}: {e}")
+                    continue
+                
+                for video_file in sorted(video_files):
+                    video_path = cls_dir / video_file
+                    
+                    if not video_path.is_file():
                         continue
                     
-                    item = VideoItem(
-                        path=str(video_file),
-                        label=label,
-                        split=split
-                    )
-                    items[split].append(item)
+                    if video_path.suffix.lower() not in self.SUPPORTED_FORMATS:
+                        continue
+                    
+                    try:
+                        item = VideoItem(
+                            path=str(video_path),
+                            label=label,
+                            split=split
+                        )
+                        items[split].append(item)
+                    except FileNotFoundError:
+                        print(f"WARNING: Video file not found: {video_path}")
+                        continue
         
         return items
 
@@ -204,7 +224,9 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
                 logger.warning(f"Failed to read frame: {frame_file}")
                 continue
             
-            frames.append(frame)
+            # Convert BGR (from imread) to RGB for model input
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame_rgb)
         
         if len(frames) == 0:
             raise RuntimeError(f"Failed to load any frames from: {frames_dir}")
@@ -218,7 +240,6 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
                 f"expected (..., 224, 224, 3)"
             )
         
-        # Frames are stored as RGB (no conversion needed)
         return frames
     
     def __len__(self) -> int:
