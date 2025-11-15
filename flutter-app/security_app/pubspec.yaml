@@ -1,0 +1,67 @@
+name: security_app
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # For playing video streams from network (RTSP/HTTP)
+  flutter_vlc_player: ^7.4.1
+
+  # For state management
+  provider: ^6.1.2
+
+  # For making HTTP requests to login/signup APIs
+  http: ^1.2.1
+
+  # For storing login tokens locally
+  shared_preferences: ^2.2.3
+
+  # For routing and navigation between screens
+  go_router: ^14.1.0
+
+  # Firebase dependencies for push notifications and authentication
+  firebase_core: ^3.1.1
+  firebase_messaging: ^15.0.1
+  firebase_auth: ^5.1.1
+  cloud_firestore: ^5.0.0
+
+  # For beautiful loading spinners
+  flutter_spinkit: ^5.2.1
+
+  # For iOS-style icons
+  cupertino_icons: ^1.0.6
+
+  # For video playback
+  video_player: ^2.5.1
+
+  # For professional video player controls
+  chewie: ^1.8.0
+
+  # For internationalization and localization
+  intl: ^0.19.0
+
+  # For Google Sign-In authentication
+  google_sign_in: ^6.2.1
+
+  # For Font Awesome icons (including Google logo)
+  font_awesome_flutter: ^10.7.0
+
+  # For retrieving app package information (version, build number, etc.)
+  package_info_plus: ^7.0.0
+
+# Development dependencies
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+# Flutter configuration
+flutter:
+  uses-material-design: true
