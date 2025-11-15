@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
 import cv2
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 import logging
 
@@ -203,19 +204,22 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
     
     def _load_frames(self, frames_dir: str) -> np.ndarray:
         """
-        Load all frames from a directory.
+        Load frames from a directory (up to target_frames).
         
         Args:
             frames_dir: Directory containing frame_*.jpg files
         
         Returns:
-            np.ndarray of shape (N, 224, 224, 3) in uint8 RGB
+            np.ndarray of shape (N, 224, 224, 3) in uint8 RGB where N <= target_frames
         """
         frame_dir = Path(frames_dir)
         frame_files = sorted(frame_dir.glob('frame_*.jpg'))
         
         if len(frame_files) == 0:
             raise FileNotFoundError(f"No frames found in: {frames_dir}")
+        
+        # Limit to target_frames
+        frame_files = frame_files[:self.target_frames]
         
         frames = []
         for frame_file in frame_files:
@@ -246,7 +250,7 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
         """Return number of videos in dataset."""
         return len(self.video_items)
     
-    def __getitem__(self, idx: int) -> Tuple[np.ndarray, int]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         """
         Get a single training sample.
         
@@ -255,31 +259,32 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
         
         Returns:
             Tuple of (features, label) where:
-                - features: np.ndarray of shape (feature_dim,) from STE
+                - features: torch.Tensor of shape (T/3, C, H, W) from STE
+                           e.g., (10, 1280, 7, 7) for MobileNetV2 backbone
                 - label: int label (0 for Violence, 1 for NonViolence)
         """
         item = self.video_items[idx]
         
-        # Load frames
+        # Load frames as (30, 224, 224, 3) RGB uint8
         frames = self._load_frames(item['frames_dir'])
         
         # Apply SME (spatial motion extraction)
+        # Input: (30, 224, 224, 3) RGB uint8
+        # Output: (30, 224, 224, 3) motion uint8
         if self.sme_extractor is not None:
             motion_frames = self.sme_extractor.process_batch(frames)
         else:
             motion_frames = frames
         
         # Apply STE (spatial temporal feature extraction)
+        # Input: (30, 224, 224, 3) motion uint8
+        # Output: STEOutput with features of shape (T/3, C, H, W) e.g., (10, 1280, 7, 7)
         if self.ste_extractor is not None:
-            features = self.ste_extractor.process(motion_frames)
-            # Flatten features for compatibility
-            if isinstance(features, np.ndarray):
-                features = features.flatten()
-            else:
-                # Handle torch tensor
-                import torch
-                features = features.flatten().cpu().numpy() if torch.is_tensor(features) else features
+            ste_output = self.ste_extractor.process(motion_frames)
+            # Extract the feature tensor from STEOutput dataclass
+            features = ste_output.features  # torch.Tensor (T/3, C, H, W)
         else:
-            features = motion_frames
+            # Fallback: return motion frames as tensor
+            features = torch.from_numpy(motion_frames).permute(0, 3, 1, 2).float()  # (30, 3, 224, 224)
         
         return features, item['label']
