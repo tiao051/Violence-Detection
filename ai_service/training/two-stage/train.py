@@ -25,20 +25,17 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+import os
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import importlib.util
-spec = importlib.util.spec_from_file_location("data_loader", str(Path(__file__).parent / "data_loader.py"))
-data_loader_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(data_loader_module)
-VideoDataLoader = data_loader_module.VideoDataLoader
 
-from remonet.sme.extractor import SMEExtractor
-from remonet.ste.extractor import STEExtractor
+# Import VideoDataLoader trực tiếp để hỗ trợ multiprocessing trên Windows
+from data_loader import VideoDataLoader
 from remonet.gte.extractor import GTEExtractor
 
 
@@ -46,12 +43,13 @@ from remonet.gte.extractor import GTEExtractor
 class TrainConfig:
     """Training configuration."""
     epochs: int = 100
-    batch_size: int = 2
+    batch_size: int = 16
     learning_rate: float = 1e-3
     weight_decay: float = 1e-2
     adam_epsilon: float = 1e-9
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
-    extracted_frames_dir: str = None  # Will be set from dataset_root
+    extracted_frames_dir: str = None
+    num_workers: int = 2
     
     # OneCycle LR Scheduler config
     scheduler_min_lr: float = 1e-8
@@ -77,10 +75,7 @@ class Trainer:
         self.logger.info(f"Adam epsilon: {config.adam_epsilon}")
         self.logger.info(f"Device: {self.device}")
         self.logger.info(f"Extracted frames: {config.extracted_frames_dir}")
-        
-        # Initialize feature extractors
-        self.sme = SMEExtractor()
-        self.ste = STEExtractor(device=config.device, training_mode=True)
+        self.logger.info(f"Num workers: {config.num_workers}")
         
         # Create data loaders
         self.train_loader = self._create_dataloader('train')
@@ -89,15 +84,11 @@ class Trainer:
         self.logger.info(f"Train samples: {len(self.train_loader.dataset)}")
         self.logger.info(f"Val samples: {len(self.val_loader.dataset)}\n")
         
-        # Get STE output shape from first batch to initialize GTE
-        sample_features, _ = next(iter(self.train_loader))
-        sample_features = sample_features.to(self.device)
-        self.logger.info(f"STE feature shape: {tuple(sample_features.shape)}\n")
+        # Use default feature shape from STE (MobileNetV2)
+        num_channels = 1280
+        temporal_dim = 10  # 30 frames / 3 = 10
+        self.logger.info(f"Expected STE feature shape: ({temporal_dim}, {num_channels}, H, W)\n")
         
-        # STE output shape is (T/3, C, H, W), e.g., (10, 1280, 7, 7)
-        # Extract C (channels) for GTE initialization
-        num_channels = sample_features.shape[1] if sample_features.dim() == 4 else 1280
-        temporal_dim = sample_features.shape[0] if sample_features.dim() == 4 else 10
         
         # Initialize GTE model
         self.model = GTEExtractor(
@@ -108,16 +99,15 @@ class Trainer:
         )
         
         # Loss and optimizer
-        # Note: GTE outputs logits (not probabilities), so we use CrossEntropyLoss
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = Adam(
-            self.model.model.parameters(),  # GTE.model contains the actual nn.Module parameters
+            self.model.parameters(),
             lr=config.learning_rate,
             eps=config.adam_epsilon,
             weight_decay=config.weight_decay
         )
         
-        # LR Scheduler (ReduceLROnPlateau similar to OneCycle behavior)
+        # Learning rate scheduler
         self.scheduler = ReduceLROnPlateau(
             self.optimizer,
             mode='max',
@@ -166,16 +156,14 @@ class Trainer:
         """Create data loader for train/val split."""
         dataset = VideoDataLoader(
             extracted_frames_dir=self.config.extracted_frames_dir,
-            split=split,
-            sme_extractor=self.sme,
-            ste_extractor=self.ste
+            split=split
         )
         
         return DataLoader(
             dataset,
             batch_size=self.config.batch_size,
             shuffle=(split == 'train'),
-            num_workers=0  # Set to 0 for Windows compatibility
+            num_workers=self.config.num_workers
         )
     
     def train_epoch(self) -> dict:
@@ -185,8 +173,8 @@ class Trainer:
         correct = 0
         total = 0
         
-        for features_batch, labels in self.train_loader:
-            # features_batch: (batch_size, T/3, C, H, W) e.g., (2, 10, 1280, 7, 7)
+        for features_batch, labels in tqdm(self.train_loader, desc='Train', leave=False):
+            # features_batch: (batch_size, T/3, C, H, W)
             features_batch = features_batch.to(self.device).float()
             labels = labels.to(self.device).long()
             
@@ -196,7 +184,7 @@ class Trainer:
             batch_size = features_batch.shape[0]
             batch_logits = []
             
-            # Process each sample in the batch through GTE
+            # Process each sample through GTE
             for i in range(batch_size):
                 features = features_batch[i]  # (T/3, C, H, W)
                 logits = self.model.forward(features)  # (num_classes,)
@@ -210,7 +198,7 @@ class Trainer:
             loss.backward()
             self.optimizer.step()
             
-            # Metrics
+            # Calculate metrics
             total_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
@@ -229,19 +217,17 @@ class Trainer:
         total_loss = 0.0
         
         with torch.no_grad():
-            for features_batch, labels in self.val_loader:
-                # features_batch: (batch_size, T/3, C, H, W) e.g., (2, 10, 1280, 7, 7)
+            for features_batch, labels in tqdm(self.val_loader, desc='Val', leave=False):
+                # features_batch: (batch_size, T/3, C, H, W)
                 features_batch = features_batch.to(self.device).float()
                 labels = labels.to(self.device).long()
                 
                 batch_size = features_batch.shape[0]
                 batch_logits = []
                 
-                # Process each sample in the batch
+                # Process each sample
                 for i in range(batch_size):
                     features = features_batch[i]  # (T/3, C, H, W)
-                    
-                    # Forward pass through GTE
                     logits = self.model.forward(features)  # (num_classes,)
                     batch_logits.append(logits)
                 
@@ -278,12 +264,12 @@ class Trainer:
             self.train_accs.append(train_metrics['accuracy'])
             self.val_accs.append(val_metrics['accuracy'])
             
-            # Update LR scheduler
+            # Update learning rate
             old_lr = self.optimizer.param_groups[0]['lr']
             self.scheduler.step(val_metrics['accuracy'])
             new_lr = self.optimizer.param_groups[0]['lr']
             
-            # Calculate metrics
+            # Get metrics
             train_loss = train_metrics['loss']
             val_loss = val_metrics['loss']
             train_acc = train_metrics['accuracy']
@@ -291,7 +277,7 @@ class Trainer:
             
             # Detect overfitting
             overfitting_gap = train_acc - val_acc
-            is_overfitting = overfitting_gap > 0.15  # >15% gap
+            is_overfitting = overfitting_gap > 0.15
             
             # Log
             self.logger.info(f"Epoch {epoch+1}/{self.config.epochs}")
@@ -303,20 +289,20 @@ class Trainer:
             
             # Check overfitting
             if is_overfitting:
-                self.logger.warning(f" OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
+                self.logger.warning(f"OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
             
             # Save best model
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 self.best_epoch = epoch + 1
                 self._save_model('best_model.pt')
-                self.logger.info(f" Saved best model (val acc: {self.best_val_acc:.4f})")
+                self.logger.info(f"Saved best model (val acc: {self.best_val_acc:.4f})")
             
-            # Early stopping check
+            # Early stopping
             if epoch > 0:
                 prev_best = max(self.val_accs[:-1]) if len(self.val_accs) > 1 else 0
                 if val_acc <= prev_best and epoch - self.best_epoch > 10:
-                    self.logger.warning(f" No improvement for 10 epochs, consider stopping")
+                    self.logger.warning(f"No improvement for 10 epochs")
             
             self.logger.info("")
         
@@ -344,7 +330,7 @@ class Trainer:
         # Check if model improved significantly
         max_val_acc = max(self.val_accs)
         if max_val_acc < 0.6:
-            self.logger.warning(" Model accuracy is low (<60%)")
+            self.logger.warning("Model accuracy is low (<60%)")
     
     def _save_model(self, filename: str):
         """Save model checkpoint."""
@@ -367,9 +353,10 @@ def main():
     
     parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs (default: 100)')
-    parser.add_argument('--batch-size', type=int, default=2, help='Batch size (default: 2)')
+    parser.add_argument('--batch-size', type=int, default=16, help='Batch size (default: 16)')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate (default: 1e-3)')
     parser.add_argument('--device', type=str, default=None, help='Device: cpu/cuda (default: auto)')
+    parser.add_argument('--num-workers', type=int, default=2, help='Number of DataLoader workers (default: 2)')
     
     args = parser.parse_args()
     
@@ -382,7 +369,7 @@ def main():
     extracted_frames_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
     if not extracted_frames_dir.exists():
         print(f"ERROR: Extracted frames directory not found: {extracted_frames_dir}")
-        print(f"       Run frame_extractor.py first")
+        print(f"Run frame_extractor.py first")
         sys.exit(1)
     
     # Create config
@@ -391,16 +378,16 @@ def main():
         batch_size=args.batch_size,
         learning_rate=args.lr,
         device=args.device or ('cuda' if torch.cuda.is_available() else 'cpu'),
-        extracted_frames_dir=str(extracted_frames_dir)
+        extracted_frames_dir=str(extracted_frames_dir),
+        num_workers=args.num_workers
     )
     
-    # Train
+    # Start training
     trainer = Trainer(config)
     trainer.train()
     
     trainer.logger.info(f"Best validation accuracy: {trainer.best_val_acc:.4f}")
     trainer.logger.info(f"Best model saved to: checkpoints/best_model.pt")
-
 
 if __name__ == '__main__':
     main()

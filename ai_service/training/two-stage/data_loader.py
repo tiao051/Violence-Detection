@@ -16,9 +16,14 @@ import torch
 from torch.utils.data import Dataset
 import logging
 
-# Fix encoding for Windows
+# Sửa encoding cho Windows
 if sys.platform.startswith('win'):
     os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+# Thêm các import này để worker có thể tự khởi tạo
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from remonet.sme.extractor import SMEExtractor
+from remonet.ste.extractor import STEExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +125,11 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
     Output: (features, label) where features are spatiotemporal embeddings
     """
     
+    
     def __init__(
         self,
         extracted_frames_dir: str,
         split: str = 'train',
-        sme_extractor=None,
-        ste_extractor=None,
         target_frames: int = 30,
     ):
         """
@@ -135,16 +139,18 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
             extracted_frames_dir: Path to directory with extracted frames
                                  Structure: split/label/video_hash/frame_*.jpg
             split: Dataset split ('train' or 'val')
-            sme_extractor: SMEExtractor instance for motion extraction
-            ste_extractor: STEExtractor instance for feature extraction
             target_frames: Expected number of frames per video (default: 30)
         """
         self.extracted_frames_dir = Path(extracted_frames_dir)
         self.split = split
-        self.sme_extractor = sme_extractor
-        self.ste_extractor = ste_extractor
         self.target_frames = target_frames
         
+        # Trạng thái (None) để worker tự khởi tạo
+        self.sme_extractor = None
+        self.ste_extractor = None
+        # Thiết bị sẽ được sử dụng bởi STEExtractor
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         if not self.extracted_frames_dir.exists():
             raise ValueError(f"Extracted frames directory not found: {extracted_frames_dir}")
         
@@ -250,6 +256,7 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
         """Return number of videos in dataset."""
         return len(self.video_items)
     
+    
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         """
         Get a single training sample.
@@ -263,28 +270,39 @@ class VideoDataLoader(VideoDatasetLoader, Dataset):
                            e.g., (10, 1280, 7, 7) for MobileNetV2 backbone
                 - label: int label (0 for Violence, 1 for NonViolence)
         """
+        
+        # Khởi tạo extractor bên trong worker (chỉ 1 lần/worker)
+        if self.sme_extractor is None:
+            self.sme_extractor = SMEExtractor()
+            self.ste_extractor = STEExtractor(device=self.device, training_mode=True)
+
         item = self.video_items[idx]
         
-        # Load frames as (30, 224, 224, 3) RGB uint8
-        frames = self._load_frames(item['frames_dir'])
+        try:
+            # Load frames as (30, 224, 224, 3) RGB uint8
+            frames = self._load_frames(item['frames_dir'])
+        except (FileNotFoundError, RuntimeError) as e:
+            logger.error(f"Failed to load frames for item {idx} ({item['frames_dir']}): {e}")
+            # Trả về tensor rỗng với shape chuẩn để collate không lỗi
+            # (10, 1280, 7, 7) là shape giả định của GTE input
+            return torch.zeros((10, 1280, 7, 7)), item['label']
+            
         
-        # Apply SME (spatial motion extraction)
-        # Input: (30, 224, 224, 3) RGB uint8
-        # Output: (30, 224, 224, 3) motion uint8
-        if self.sme_extractor is not None:
-            motion_frames = self.sme_extractor.process_batch(frames)
-        else:
-            motion_frames = frames
-        
-        # Apply STE (spatial temporal feature extraction)
-        # Input: (30, 224, 224, 3) motion uint8
-        # Output: STEOutput with features of shape (T/3, C, H, W) e.g., (10, 1280, 7, 7)
-        if self.ste_extractor is not None:
-            ste_output = self.ste_extractor.process(motion_frames)
-            # Extract the feature tensor from STEOutput dataclass
-            features = ste_output.features  # torch.Tensor (T/3, C, H, W)
-        else:
-            # Fallback: return motion frames as tensor
-            features = torch.from_numpy(motion_frames).permute(0, 3, 1, 2).float()  # (30, 3, 224, 224)
+        # Bọc toàn bộ quá trình xử lý model (SME, STE) trong torch.no_grad()
+        # để vô hiệu hóa việc tính gradient
+        with torch.no_grad():
+            # Áp dụng SME (Spatial Motion Extraction)
+            if self.sme_extractor is not None:
+                motion_frames = self.sme_extractor.process_batch(frames)
+            else:
+                motion_frames = frames
+            
+            # Áp dụng STE (Spatial Temporal Feature Extraction)
+            if self.ste_extractor is not None:
+                ste_output = self.ste_extractor.process(motion_frames)
+                features = ste_output.features  # torch.Tensor (T/3, C, H, W)
+            else:
+                # Fallback: trả về motion frames dưới dạng tensor
+                features = torch.from_numpy(motion_frames).permute(0, 3, 1, 2).float()
         
         return features, item['label']
