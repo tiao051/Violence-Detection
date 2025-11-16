@@ -222,12 +222,164 @@ class VideoDataLoader(Dataset):
         
         return items
     
+    @staticmethod
+    def load_hockey_fight_videos(dataset_root: str) -> Dict[str, List[Dict]]:
+        """
+        Load HockeyFight dataset using predefined train/val split.
+        
+        Args:
+            dataset_root: Root directory containing HockeyFight folder
+        
+        Returns:
+            Dict mapping 'train'/'val' -> list of dicts with 'path' and 'label' keys
+        """
+        dataset_root = Path(dataset_root)
+        hockey_root = dataset_root / 'HockeyFight'
+        if not hockey_root.exists():
+            raise ValueError(f"HockeyFight folder not found: {hockey_root}")
+        
+        items = {'train': [], 'val': []}
+        
+        for split in ['train', 'val']:
+            for cls in ['Fight', 'NonFight']:
+                cls_dir = hockey_root / split / cls
+                if not cls_dir.exists():
+                    continue
+                
+                label = 'Violence' if cls == 'Fight' else 'NonViolence'
+                
+                for video_file in sorted(cls_dir.iterdir()):
+                    if not video_file.is_file():
+                        continue
+                    
+                    if video_file.suffix.lower() not in VideoDataLoader.SUPPORTED_FORMATS:
+                        continue
+                    
+                    items[split].append({
+                        'path': str(video_file),
+                        'label': label,
+                        'split': split
+                    })
+        
+        return items
+    
+    @staticmethod
+    def load_hockey_fight_videos_auto_split(dataset_root: str, train_ratio: float = 0.7, 
+                                            val_ratio: float = 0.15, test_ratio: float = 0.15) -> Dict[str, List[Dict]]:
+        """
+        Load HockeyFight dataset and auto-split into train/val/test if not already split.
+        
+        Args:
+            dataset_root: Root directory containing HockeyFight folder
+            train_ratio: Proportion for training (default: 0.7)
+            val_ratio: Proportion for validation (default: 0.15)
+            test_ratio: Proportion for testing (default: 0.15)
+        
+        Returns:
+            Dict mapping 'train'/'val'/'test' -> list of dicts with 'path' and 'label' keys
+        """
+        import random
+        
+        dataset_root = Path(dataset_root)
+        hockey_root = dataset_root / 'HockeyFight'
+        if not hockey_root.exists():
+            raise ValueError(f"HockeyFight folder not found: {hockey_root}")
+        
+        items = {'train': [], 'val': [], 'test': []}
+        
+        # Collect all videos by class
+        videos_by_class = {'Fight': [], 'NonFight': []}
+        
+        for cls in ['Fight', 'NonFight']:
+            # Check if already split into train/val/test
+            split_dir = hockey_root / 'train' / cls
+            if split_dir.exists():
+                # Already split, use existing structure but adapt for test
+                for split in ['train', 'val']:
+                    split_path = hockey_root / split / cls
+                    if split_path.exists():
+                        for video_file in sorted(split_path.iterdir()):
+                            if not video_file.is_file():
+                                continue
+                            if video_file.suffix.lower() not in VideoDataLoader.SUPPORTED_FORMATS:
+                                continue
+                            
+                            label = 'Violence' if cls == 'Fight' else 'NonViolence'
+                            items[split].append({
+                                'path': str(video_file),
+                                'label': label,
+                                'split': split
+                            })
+                
+                # No test split yet, return as-is
+                items['test'] = []
+                return items
+            
+            # Not split yet, collect all videos from single directory
+            videos_dir = hockey_root / cls
+            if videos_dir.exists():
+                for video_file in sorted(videos_dir.iterdir()):
+                    if not video_file.is_file():
+                        continue
+                    if video_file.suffix.lower() not in VideoDataLoader.SUPPORTED_FORMATS:
+                        continue
+                    
+                    videos_by_class[cls].append(str(video_file))
+        
+        # If no videos found in class directories, return empty
+        if not videos_by_class['Fight'] and not videos_by_class['NonFight']:
+            return items
+        
+        # Auto-split each class
+        for cls, video_paths in videos_by_class.items():
+            if not video_paths:
+                continue
+            
+            # Shuffle videos
+            random.shuffle(video_paths)
+            
+            # Calculate split indices
+            n = len(video_paths)
+            train_count = int(n * train_ratio)
+            val_count = int(n * val_ratio)
+            
+            train_videos = video_paths[:train_count]
+            val_videos = video_paths[train_count:train_count + val_count]
+            test_videos = video_paths[train_count + val_count:]
+            
+            label = 'Violence' if cls == 'Fight' else 'NonViolence'
+            
+            # Add to splits
+            for video_path in train_videos:
+                items['train'].append({
+                    'path': video_path,
+                    'label': label,
+                    'split': 'train'
+                })
+            
+            for video_path in val_videos:
+                items['val'].append({
+                    'path': video_path,
+                    'label': label,
+                    'split': 'val'
+                })
+            
+            for video_path in test_videos:
+                items['test'].append({
+                    'path': video_path,
+                    'label': label,
+                    'split': 'test'
+                })
+        
+        return items
+    
     def __init__(
         self,
         extracted_frames_dir: str,
         split: str = 'train',
         target_frames: int = 30,
         augmentation_config: AugmentationConfig = None,
+        dataset: str = 'rwf-2000',
     ):
         """
         Initialize VideoDataLoader.
@@ -238,10 +390,12 @@ class VideoDataLoader(Dataset):
             split: Dataset split ('train' or 'val')
             target_frames: Expected number of frames per video (default: 30)
             augmentation_config: Augmentation configuration (optional)
+            dataset: Dataset name ('rwf-2000' or 'hockey-fight'), default: 'rwf-2000'
         """
         self.extracted_frames_dir = Path(extracted_frames_dir)
         self.split = split
         self.target_frames = target_frames
+        self.dataset = dataset
         
         # Initialize augmentor (only apply to training split, not validation)
         aug_config = augmentation_config or AugmentationConfig()
@@ -257,12 +411,15 @@ class VideoDataLoader(Dataset):
         if not self.extracted_frames_dir.exists():
             raise ValueError(f"Extracted frames directory not found: {extracted_frames_dir}")
         
-        if split not in ['train', 'val']:
-            raise ValueError(f"Invalid split: {split}")
+        if split not in ['train', 'val', 'test']:
+            raise ValueError(f"Invalid split: {split}. Must be 'train', 'val', or 'test'")
+        
+        if dataset not in ['rwf-2000', 'hockey-fight']:
+            raise ValueError(f"Invalid dataset: {dataset}. Must be 'rwf-2000' or 'hockey-fight'")
         
         # Load video metadata
         self.video_items = self._load_video_metadata()
-        logger.info(f"Loaded {len(self.video_items)} videos for split '{split}' with augmentation={aug_config.enable_augmentation}")
+        logger.info(f"Loaded {len(self.video_items)} videos for {dataset} split '{split}' with augmentation={aug_config.enable_augmentation}")
 
     
     def _load_video_metadata(self) -> List[Dict]:

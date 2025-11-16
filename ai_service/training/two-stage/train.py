@@ -2,17 +2,23 @@
 Training script for RWF-2000 violence detection using SME+STE features.
 
 Usage:
-    python train.py --dataset-root <path> [OPTIONS]
+    python train.py --dataset {rwf-2000|hockey-fight} [OPTIONS]
 
 Arguments:
-    --dataset-root PATH         Path to dataset root (required)
-    --epochs EPOCHS             Number of epochs (default: 20)
-    --batch-size BATCH_SIZE     Batch size (default: 32)
-    --lr LEARNING_RATE          Learning rate (default: 0.001)
-    --device DEVICE             Device to use: cpu/cuda (default: cuda if available)
+    --dataset {rwf-2000,hockey-fight}  Dataset to use for training (required)
 
-Example:
-    python train.py --dataset-root d:/DATN/violence-detection/dataset --epochs 20 --batch-size 32
+Options:
+    --dataset-root PATH                Path to dataset root (default: auto-detect from workspace)
+    --epochs EPOCHS                    Number of epochs (default: 100)
+    --batch-size BATCH_SIZE            Batch size (default: 2)
+    --lr LEARNING_RATE                 Learning rate (default: 0.001)
+    --device DEVICE                    Device to use: cpu/cuda (default: cuda if available)
+    --num-workers NUM_WORKERS          Number of DataLoader workers (default: 2)
+
+Examples:
+    python train.py --dataset rwf-2000 --epochs 20
+    python train.py --dataset hockey-fight --epochs 50 --batch-size 4
+    python train.py --dataset rwf-2000 --dataset-root d:/custom/path --epochs 50
 """
 
 import argparse
@@ -46,6 +52,7 @@ class TrainConfig:
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     extracted_frames_dir: str = None
     num_workers: int = 2
+    dataset: str = None  # Dataset name: 'rwf-2000' or 'hockey-fight' (required)
     
     # One-Cycle LR Scheduler config (per paper)
     scheduler_max_lr: float = 1e-3
@@ -165,11 +172,12 @@ class Trainer:
         return logger
     
     def _create_dataloader(self, split: str) -> DataLoader:
-        """Create data loader for train/val split."""
+        """Create data loader for train/val/test split."""
         dataset = VideoDataLoader(
             extracted_frames_dir=self.config.extracted_frames_dir,
             split=split,
-            augmentation_config=self.config.augmentation_config
+            augmentation_config=self.config.augmentation_config,
+            dataset=self.config.dataset
         )
         
         return DataLoader(
@@ -259,6 +267,45 @@ class Trainer:
             'accuracy': correct / total
         }
     
+    def test(self) -> dict:
+        """Test model on test split (if available)."""
+        try:
+            test_loader = self._create_dataloader('test')
+        except ValueError:
+            self.logger.warning("Test split not available for this dataset")
+            return None
+        
+        self.model.eval()
+        correct = 0
+        total = 0
+        total_loss = 0.0
+        
+        with torch.no_grad():
+            for features_batch, labels in tqdm(test_loader, desc='Test', leave=False):
+                features_batch = features_batch.to(self.device).float()
+                labels = labels.to(self.device).long()
+                
+                batch_size = features_batch.shape[0]
+                batch_logits = []
+                
+                for i in range(batch_size):
+                    features = features_batch[i]
+                    logits = self.model.forward(features)
+                    batch_logits.append(logits)
+                
+                outputs = torch.stack(batch_logits)
+                loss = self.criterion(outputs, labels)
+                
+                total_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                correct += (predicted == labels).sum().item()
+                total += labels.size(0)
+        
+        return {
+            'loss': total_loss / len(test_loader),
+            'accuracy': correct / total
+        }
+    
     def train(self):
         """Train for multiple epochs with early stopping."""
         self.logger.info("="*60)
@@ -324,6 +371,13 @@ class Trainer:
             self.logger.info("")
         
         self._log_summary()
+        
+        # Test on test split if available
+        test_metrics = self.test()
+        if test_metrics:
+            self.logger.info(f"\nTest Results:")
+            self.logger.info(f"  Test Loss: {test_metrics['loss']:.4f}")
+            self.logger.info(f"  Test Accuracy: {test_metrics['accuracy']:.4f}")
     
     def _log_summary(self):
         """Log training summary."""
@@ -368,7 +422,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root')
+    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000', 'hockey-fight'],
+                        help='Dataset to use for training (required: rwf-2000 or hockey-fight)')
+    parser.add_argument('--dataset-root', type=str, default=None, 
+                        help='Path to dataset root (default: auto-detect from workspace)')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs (default: 100)')
     parser.add_argument('--batch-size', type=int, default=2, help='Batch size (default: 2)')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate (default: 1e-3)')
@@ -377,16 +434,48 @@ def main():
     
     args = parser.parse_args()
     
+    # Auto-detect dataset root if not provided
+    if args.dataset_root:
+        dataset_root = Path(args.dataset_root).resolve()
+    else:
+        # Try to find dataset root: look for 'dataset' directory in parent directories
+        current_dir = Path(__file__).parent
+        dataset_root = None
+        
+        # Check common locations relative to this script
+        for candidate in [
+            current_dir.parent.parent.parent / 'dataset',  # violence-detection/dataset
+            Path.cwd() / 'dataset',  # Current working dir / dataset
+            Path.cwd().parent / 'dataset',  # Parent dir / dataset
+        ]:
+            if candidate.exists():
+                dataset_root = candidate.resolve()
+                break
+        
+        if not dataset_root:
+            print(f"ERROR: Could not auto-detect dataset root")
+            print(f"Please specify --dataset-root explicitly")
+            sys.exit(1)
+    
     # Validate dataset root
-    dataset_root = Path(args.dataset_root).resolve()
     if not dataset_root.exists():
         print(f"ERROR: Dataset root not found: {dataset_root}")
         sys.exit(1)
     
-    extracted_frames_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
+    print(f"Using dataset root: {dataset_root}")
+    
+    # Determine extracted frames directory based on dataset
+    if args.dataset == 'rwf-2000':
+        extracted_frames_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
+    elif args.dataset == 'hockey-fight':
+        extracted_frames_dir = dataset_root / 'HockeyFight' / 'extracted_frames'
+    else:
+        print(f"ERROR: Unknown dataset: {args.dataset}")
+        sys.exit(1)
+    
     if not extracted_frames_dir.exists():
         print(f"ERROR: Extracted frames directory not found: {extracted_frames_dir}")
-        print(f"Run frame_extractor.py first")
+        print(f"Run frame_extractor.py first: python frame_extractor.py --dataset {args.dataset}")
         sys.exit(1)
     
     # Create config
@@ -396,7 +485,8 @@ def main():
         learning_rate=args.lr,
         device=args.device or ('cuda' if torch.cuda.is_available() else 'cpu'),
         extracted_frames_dir=str(extracted_frames_dir),
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        dataset=args.dataset
     )
     
     # Start training
