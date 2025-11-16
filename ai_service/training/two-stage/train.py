@@ -43,7 +43,7 @@ from remonet.gte.extractor import GTEExtractor
 
 @dataclass
 class TrainConfig:
-    """Training configuration (per RWF-2000 paper)."""
+    """Training configuration"""
     epochs: int = 100
     batch_size: int = 2
     learning_rate: float = 1e-3
