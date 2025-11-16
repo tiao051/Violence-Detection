@@ -11,6 +11,7 @@ import cv2
 
 from .rtsp_client import RTSPClient
 from ..memory import get_frame_buffer
+from ..inference import get_inference_service
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,9 @@ class CameraWorker:
         self.start_time: Optional[datetime] = None
         self.last_sample_time: float = 0  # Track last sampled frame time
         self.sample_interval: float = 1.0 / sample_rate  # seconds between samples
+        
+        # Inference service
+        self.inference_service = get_inference_service()
     
     async def start(self) -> None:
         """Start the camera worker background task."""
@@ -186,13 +190,17 @@ class CameraWorker:
                     frame_seq=self.frames_sampled,
                 )
                 
-                # Push metadata to Redis
+                # Perform violence detection inference
+                detection_result = self.inference_service.detect_frame(resized_frame)
+                
+                # Push metadata and detection result to Redis
                 try:
                     await self.redis_producer.add_frame_metadata(
                         camera_id=self.camera_id,
                         frame_id=frame_id,
                         timestamp=current_time,
                         frame_seq=self.frames_sampled,
+                        detection=detection_result,  # Add detection result
                     )
                     self.frames_sent_to_redis += 1
                     
