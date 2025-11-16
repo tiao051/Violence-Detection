@@ -4,20 +4,21 @@ Frame Extraction Module.
 Extracts frames from videos at specified FPS and resizes to target size.
 
 Usage:
-    python frame_extractor.py --dataset rwf-2000 --dataset-root <path> [OPTIONS]
+    python frame_extractor.py --dataset {rwf-2000|hockey-fight} [OPTIONS]
 
 Arguments:
-    --dataset {rwf-2000}           Dataset to extract frames from (required)
-    --dataset-root PATH            Path to dataset root directory (required)
+    --dataset {rwf-2000,hockey-fight}  Dataset to extract frames from (required)
 
 Options:
-    --target-fps FPS               Target FPS for frame extraction (default: 30)
-    --target-size W H              Target frame size in pixels (default: 224 224)
-    --jpeg-quality QUALITY         JPEG quality 0-100 (default: 85)
+    --dataset-root PATH                Path to dataset root (default: auto-detect from workspace)
+    --target-fps FPS                   Target FPS for frame extraction (default: 30)
+    --target-size W H                  Target frame size in pixels (default: 224 224)
+    --jpeg-quality QUALITY             JPEG quality 0-100 (default: 85)
 
-Example:
-    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/violence-detection/dataset
-    python frame_extractor.py --dataset rwf-2000 --dataset-root d:/DATN/violence-detection/dataset --target-fps 30 --target-size 256 256
+Examples:
+    python frame_extractor.py --dataset rwf-2000
+    python frame_extractor.py --dataset hockey-fight
+    python frame_extractor.py --dataset rwf-2000 --target-fps 30 --target-size 256 256
 """
 
 import cv2
@@ -27,16 +28,22 @@ from pathlib import Path
 from typing import Dict, List
 from dataclasses import dataclass
 
-# Import from same directory
-import importlib.util
-spec = importlib.util.spec_from_file_location("data_loader", str(Path(__file__).parent / "data_loader.py"))
-data_loader_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(data_loader_module)
-VideoDatasetLoader = data_loader_module.VideoDatasetLoader
+# Add current directory to path for data_loader import
+sys.path.insert(0, str(Path(__file__).parent))
+from data_loader import VideoDataLoader
 
 # Add ai_service to path for SME import
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from remonet.sme.extractor import SMEPreprocessor
+
+
+# Helper class for frame extraction
+class VideoItem:
+    """Video item for frame extraction."""
+    def __init__(self, path: str, label: str, split: str):
+        self.path = path
+        self.label = label
+        self.split = split
 
 
 @dataclass
@@ -165,19 +172,44 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000'], help='Dataset to extract frames from')
-    parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root directory')
+    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000', 'hockey-fight'], 
+                        help='Dataset to extract frames from')
+    parser.add_argument('--dataset-root', type=str, default=None, 
+                        help='Path to dataset root (default: auto-detect from workspace)')
     parser.add_argument('--target-fps', type=int, default=30, help='Target FPS for frame extraction (default: 30)')
     parser.add_argument('--target-size', type=int, nargs=2, default=[224, 224], help='Target frame size (width height) (default: 224 224)')
     parser.add_argument('--jpeg-quality', type=int, default=85, help='JPEG quality (0-100) (default: 85)')
     
     args = parser.parse_args()
     
-    dataset_root = Path(args.dataset_root).resolve()
+    # Auto-detect dataset root if not provided
+    if args.dataset_root:
+        dataset_root = Path(args.dataset_root).resolve()
+    else:
+        # Try to find dataset root: look for 'dataset' directory in parent directories
+        current_dir = Path(__file__).parent
+        dataset_root = None
+        
+        # Check common locations relative to this script
+        for candidate in [
+            current_dir.parent.parent.parent / 'dataset',  # violence-detection/dataset
+            Path.cwd() / 'dataset',  # Current working dir / dataset
+            Path.cwd().parent / 'dataset',  # Parent dir / dataset
+        ]:
+            if candidate.exists():
+                dataset_root = candidate.resolve()
+                break
+        
+        if not dataset_root:
+            print(f"ERROR: Could not auto-detect dataset root")
+            print(f"Please specify --dataset-root explicitly")
+            sys.exit(1)
     
     if not dataset_root.exists():
         print(f"ERROR: Dataset root not found: {dataset_root}")
         sys.exit(1)
+    
+    print(f"Using dataset root: {dataset_root}")
     
     # Create config and extractor
     config = ExtractionConfig(
@@ -190,8 +222,7 @@ def main():
     
     if args.dataset == 'rwf-2000':
         print(f"Loading RWF-2000 dataset from {dataset_root}")
-        loader = VideoDatasetLoader(str(dataset_root))
-        videos = loader.load_rwf2000()
+        videos = VideoDataLoader.load_rwf2000_videos(str(dataset_root))
         
         total_videos = len(videos['train']) + len(videos['val'])
         print(f"Found {total_videos} videos (train: {len(videos['train'])}, val: {len(videos['val'])})")
@@ -204,9 +235,61 @@ def main():
             if not split_videos:
                 print(f"WARNING: No videos for split: {split}")
                 continue
+            
+            # Convert dict items to VideoItem objects
+            video_items = [
+                VideoItem(
+                    path=video_info['path'],
+                    label=video_info['label'],
+                    split=video_info['split']
+                )
+                for video_info in split_videos
+            ]
         
             extractor.extract_batch(
-                video_items=split_videos,
+                video_items=video_items,
+                output_base_dir=str(output_dir)
+            )
+        
+        print(f"Frames saved to: {output_dir}")
+    
+    elif args.dataset == 'hockey-fight':
+        print(f"Loading HockeyFight dataset from {dataset_root}")
+        # Auto-split HockeyFight dataset into train/val/test (70/15/15)
+        videos = VideoDataLoader.load_hockey_fight_videos_auto_split(
+            str(dataset_root),
+            train_ratio=0.7,
+            val_ratio=0.15,
+            test_ratio=0.15
+        )
+        
+        total_videos = len(videos['train']) + len(videos['val']) + len(videos.get('test', []))
+        print(f"Found {total_videos} videos")
+        print(f"  Train: {len(videos['train'])} videos (70%)")
+        print(f"  Val:   {len(videos['val'])} videos (15%)")
+        print(f"  Test:  {len(videos.get('test', []))} videos (15%)")
+        
+        output_dir = dataset_root / 'HockeyFight' / 'extracted_frames'
+        
+        # Extract frames for each split
+        for split in ['train', 'val', 'test']:
+            split_videos = videos.get(split, [])
+            if not split_videos:
+                print(f"WARNING: No videos for split: {split}")
+                continue
+            
+            # Convert dict items to VideoItem objects
+            video_items = [
+                VideoItem(
+                    path=video_info['path'],
+                    label=video_info['label'],
+                    split=video_info['split']
+                )
+                for video_info in split_videos
+            ]
+        
+            extractor.extract_batch(
+                video_items=video_items,
                 output_base_dir=str(output_dir)
             )
         

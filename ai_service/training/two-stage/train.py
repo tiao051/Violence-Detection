@@ -2,17 +2,23 @@
 Training script for RWF-2000 violence detection using SME+STE features.
 
 Usage:
-    python train.py --dataset-root <path> [OPTIONS]
+    python train.py --dataset {rwf-2000|hockey-fight} [OPTIONS]
 
 Arguments:
-    --dataset-root PATH         Path to dataset root (required)
-    --epochs EPOCHS             Number of epochs (default: 20)
-    --batch-size BATCH_SIZE     Batch size (default: 32)
-    --lr LEARNING_RATE          Learning rate (default: 0.001)
-    --device DEVICE             Device to use: cpu/cuda (default: cuda if available)
+    --dataset {rwf-2000,hockey-fight}  Dataset to use for training (required)
 
-Example:
-    python train.py --dataset-root d:/DATN/violence-detection/dataset --epochs 20 --batch-size 32
+Options:
+    --dataset-root PATH                Path to dataset root (default: auto-detect from workspace)
+    --epochs EPOCHS                    Number of epochs (default: 100)
+    --batch-size BATCH_SIZE            Batch size (default: 2)
+    --lr LEARNING_RATE                 Learning rate (default: 0.001)
+    --device DEVICE                    Device to use: cpu/cuda (default: cuda if available)
+    --num-workers NUM_WORKERS          Number of DataLoader workers (default: 2)
+
+Examples:
+    python train.py --dataset rwf-2000 --epochs 20
+    python train.py --dataset hockey-fight --epochs 50 --batch-size 4
+    python train.py --dataset rwf-2000 --dataset-root d:/custom/path --epochs 50
 """
 
 import argparse
@@ -26,35 +32,42 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import os
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import OneCycleLR
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-
-# Import VideoDataLoader trực tiếp để hỗ trợ multiprocessing trên Windows
-from data_loader import VideoDataLoader
+from data_loader import VideoDataLoader, AugmentationConfig
 from remonet.gte.extractor import GTEExtractor
-
 
 @dataclass
 class TrainConfig:
-    """Training configuration."""
+    """Training configuration (per RWF-2000 paper)."""
     epochs: int = 100
-    batch_size: int = 16
+    batch_size: int = 2
     learning_rate: float = 1e-3
     weight_decay: float = 1e-2
     adam_epsilon: float = 1e-9
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     extracted_frames_dir: str = None
     num_workers: int = 2
+    dataset: str = None  # Dataset name: 'rwf-2000' or 'hockey-fight' (required)
     
-    # OneCycle LR Scheduler config
+    # One-Cycle LR Scheduler config (per paper)
+    scheduler_max_lr: float = 1e-3
     scheduler_min_lr: float = 1e-8
-    scheduler_patience: int = 2
-    scheduler_factor: float = 0.5
+    
+    # Early stopping config
+    early_stopping_patience: int = 10  # Stop if no improvement for N epochs
+    
+    # Augmentation config
+    augmentation_config: AugmentationConfig = None
+    
+    def __post_init__(self):
+        """Initialize default augmentation config if not provided."""
+        if self.augmentation_config is None:
+            self.augmentation_config = AugmentationConfig(enable_augmentation=True)
 
 
 class Trainer:
@@ -107,13 +120,18 @@ class Trainer:
             weight_decay=config.weight_decay
         )
         
-        # Learning rate scheduler
-        self.scheduler = ReduceLROnPlateau(
+        # Learning rate scheduler (One-Cycle per paper)
+        # total_steps = num_batches * num_epochs
+        num_batches = len(self.train_loader)
+        total_steps = num_batches * config.epochs
+        
+        self.scheduler = OneCycleLR(
             self.optimizer,
-            mode='max',
-            factor=config.scheduler_factor,
-            patience=config.scheduler_patience,
-            min_lr=config.scheduler_min_lr
+            max_lr=config.scheduler_max_lr,
+            total_steps=total_steps,
+            pct_start=0.3,
+            anneal_strategy='cos',
+            cycle_momentum=False
         )
         
         # Metrics
@@ -123,6 +141,7 @@ class Trainer:
         self.val_losses = []
         self.train_accs = []
         self.val_accs = []
+        self.epochs_without_improvement = 0  # For early stopping
     
     def _setup_logger(self) -> logging.Logger:
         """Setup logging to file and console."""
@@ -153,10 +172,12 @@ class Trainer:
         return logger
     
     def _create_dataloader(self, split: str) -> DataLoader:
-        """Create data loader for train/val split."""
+        """Create data loader for train/val/test split."""
         dataset = VideoDataLoader(
             extracted_frames_dir=self.config.extracted_frames_dir,
-            split=split
+            split=split,
+            augmentation_config=self.config.augmentation_config,
+            dataset=self.config.dataset
         )
         
         return DataLoader(
@@ -197,6 +218,7 @@ class Trainer:
             # Backward pass
             loss.backward()
             self.optimizer.step()
+            self.scheduler.step()  # OneCycleLR steps after each batch
             
             # Calculate metrics
             total_loss += loss.item()
@@ -245,10 +267,51 @@ class Trainer:
             'accuracy': correct / total
         }
     
+    def test(self) -> dict:
+        """Test model on test split (if available)."""
+        try:
+            test_loader = self._create_dataloader('test')
+        except ValueError:
+            self.logger.warning("Test split not available for this dataset")
+            return None
+        
+        self.model.eval()
+        correct = 0
+        total = 0
+        total_loss = 0.0
+        
+        with torch.no_grad():
+            for features_batch, labels in tqdm(test_loader, desc='Test', leave=False):
+                features_batch = features_batch.to(self.device).float()
+                labels = labels.to(self.device).long()
+                
+                batch_size = features_batch.shape[0]
+                batch_logits = []
+                
+                for i in range(batch_size):
+                    features = features_batch[i]
+                    logits = self.model.forward(features)
+                    batch_logits.append(logits)
+                
+                outputs = torch.stack(batch_logits)
+                loss = self.criterion(outputs, labels)
+                
+                total_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                correct += (predicted == labels).sum().item()
+                total += labels.size(0)
+        
+        return {
+            'loss': total_loss / len(test_loader),
+            'accuracy': correct / total
+        }
+    
     def train(self):
-        """Train for multiple epochs."""
+        """Train for multiple epochs with early stopping."""
         self.logger.info("="*60)
         self.logger.info("Starting Training")
+        self.logger.info(f"Early stopping patience: {self.config.early_stopping_patience} epochs")
+        self.logger.info(f"Augmentation enabled: {self.config.augmentation_config.enable_augmentation}")
         self.logger.info("="*60 + "\n")
         
         for epoch in range(self.config.epochs):
@@ -264,11 +327,6 @@ class Trainer:
             self.train_accs.append(train_metrics['accuracy'])
             self.val_accs.append(val_metrics['accuracy'])
             
-            # Update learning rate
-            old_lr = self.optimizer.param_groups[0]['lr']
-            self.scheduler.step(val_metrics['accuracy'])
-            new_lr = self.optimizer.param_groups[0]['lr']
-            
             # Get metrics
             train_loss = train_metrics['loss']
             val_loss = val_metrics['loss']
@@ -280,33 +338,46 @@ class Trainer:
             is_overfitting = overfitting_gap > 0.15
             
             # Log
-            self.logger.info(f"Epoch {epoch+1}/{self.config.epochs}")
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.logger.info(f"Epoch {epoch+1}/{self.config.epochs} (LR: {current_lr:.2e})")
             self.logger.info(f"  Train - Loss: {train_loss:.4f}, Acc: {train_acc:.4f}")
             self.logger.info(f"  Val   - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
-            
-            if old_lr != new_lr:
-                self.logger.info(f"  LR adjusted: {old_lr:.2e} → {new_lr:.2e}")
+            self.logger.info(f"  Overfitting gap: {overfitting_gap:.4f}")
             
             # Check overfitting
             if is_overfitting:
-                self.logger.warning(f"OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
+                self.logger.warning(f"⚠️  OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
             
-            # Save best model
+            # Early stopping: check if validation accuracy improved
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 self.best_epoch = epoch + 1
+                self.epochs_without_improvement = 0
                 self._save_model('best_model.pt')
-                self.logger.info(f"Saved best model (val acc: {self.best_val_acc:.4f})")
-            
-            # Early stopping
-            if epoch > 0:
-                prev_best = max(self.val_accs[:-1]) if len(self.val_accs) > 1 else 0
-                if val_acc <= prev_best and epoch - self.best_epoch > 10:
-                    self.logger.warning(f"No improvement for 10 epochs")
+                self.logger.info(f"✓ Saved best model (val acc: {self.best_val_acc:.4f})")
+            else:
+                self.epochs_without_improvement += 1
+                self.logger.info(f"No improvement for {self.epochs_without_improvement}/{self.config.early_stopping_patience} epochs")
+                
+                # Early stopping
+                if self.epochs_without_improvement >= self.config.early_stopping_patience:
+                    self.logger.warning(f"\n{'='*60}")
+                    self.logger.warning(f"EARLY STOPPING TRIGGERED!")
+                    self.logger.warning(f"No improvement for {self.config.early_stopping_patience} epochs")
+                    self.logger.warning(f"Best validation accuracy: {self.best_val_acc:.4f} at epoch {self.best_epoch}")
+                    self.logger.warning(f"{'='*60}\n")
+                    break
             
             self.logger.info("")
         
         self._log_summary()
+        
+        # Test on test split if available
+        test_metrics = self.test()
+        if test_metrics:
+            self.logger.info(f"\nTest Results:")
+            self.logger.info(f"  Test Loss: {test_metrics['loss']:.4f}")
+            self.logger.info(f"  Test Accuracy: {test_metrics['accuracy']:.4f}")
     
     def _log_summary(self):
         """Log training summary."""
@@ -351,25 +422,60 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument('--dataset-root', type=str, required=True, help='Path to dataset root')
+    parser.add_argument('--dataset', type=str, required=True, choices=['rwf-2000', 'hockey-fight'],
+                        help='Dataset to use for training (required: rwf-2000 or hockey-fight)')
+    parser.add_argument('--dataset-root', type=str, default=None, 
+                        help='Path to dataset root (default: auto-detect from workspace)')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs (default: 100)')
-    parser.add_argument('--batch-size', type=int, default=16, help='Batch size (default: 16)')
+    parser.add_argument('--batch-size', type=int, default=2, help='Batch size (default: 2)')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate (default: 1e-3)')
     parser.add_argument('--device', type=str, default=None, help='Device: cpu/cuda (default: auto)')
     parser.add_argument('--num-workers', type=int, default=2, help='Number of DataLoader workers (default: 2)')
     
     args = parser.parse_args()
     
+    # Auto-detect dataset root if not provided
+    if args.dataset_root:
+        dataset_root = Path(args.dataset_root).resolve()
+    else:
+        # Try to find dataset root: look for 'dataset' directory in parent directories
+        current_dir = Path(__file__).parent
+        dataset_root = None
+        
+        # Check common locations relative to this script
+        for candidate in [
+            current_dir.parent.parent.parent / 'dataset',  # violence-detection/dataset
+            Path.cwd() / 'dataset',  # Current working dir / dataset
+            Path.cwd().parent / 'dataset',  # Parent dir / dataset
+        ]:
+            if candidate.exists():
+                dataset_root = candidate.resolve()
+                break
+        
+        if not dataset_root:
+            print(f"ERROR: Could not auto-detect dataset root")
+            print(f"Please specify --dataset-root explicitly")
+            sys.exit(1)
+    
     # Validate dataset root
-    dataset_root = Path(args.dataset_root).resolve()
     if not dataset_root.exists():
         print(f"ERROR: Dataset root not found: {dataset_root}")
         sys.exit(1)
     
-    extracted_frames_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
+    print(f"Using dataset root: {dataset_root}")
+    
+    # Determine extracted frames directory based on dataset
+    if args.dataset == 'rwf-2000':
+        extracted_frames_dir = dataset_root / 'RWF-2000' / 'extracted_frames'
+    elif args.dataset == 'hockey-fight':
+        extracted_frames_dir = dataset_root / 'HockeyFight' / 'extracted_frames'
+    else:
+        print(f"ERROR: Unknown dataset: {args.dataset}")
+        sys.exit(1)
+    
     if not extracted_frames_dir.exists():
         print(f"ERROR: Extracted frames directory not found: {extracted_frames_dir}")
-        print(f"Run frame_extractor.py first")
+        print(f"Run frame_extractor.py first: python frame_extractor.py --dataset {args.dataset}")
         sys.exit(1)
     
     # Create config
@@ -379,7 +485,8 @@ def main():
         learning_rate=args.lr,
         device=args.device or ('cuda' if torch.cuda.is_available() else 'cpu'),
         extracted_frames_dir=str(extracted_frames_dir),
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        dataset=args.dataset
     )
     
     # Start training
