@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/settings_model.dart';
+import 'package:security_app/models/settings_model.dart';
 
 /// Provider for managing app settings with SharedPreferences persistence.
 class SettingsProvider with ChangeNotifier {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/auth_service.dart';
-import '../models/auth_model.dart';
+import 'package:security_app/services/auth_service.dart';
+import 'package:security_app/models/auth_model.dart';
 
 /// Provider for managing authentication state.
 class AuthProvider with ChangeNotifier {
@@ -12,6 +12,7 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingGoogle = false;
   bool _isLoadingSignUp = false;
+  bool _isChangingPassword = false;
   String? _errorMessage;
   AuthModel? _user;
 
@@ -30,6 +31,7 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isLoadingGoogle => _isLoadingGoogle;
   bool get isLoadingSignUp => _isLoadingSignUp;
+  bool get isChangingPassword => _isChangingPassword;
   String? get errorMessage => _errorMessage;
   AuthModel? get user => _user;
 
@@ -182,7 +184,6 @@ class AuthProvider with ChangeNotifier {
       _errorMessage = e.toString();
       _isLoadingSignUp = false;
       notifyListeners();
-      rethrow;
     }
   }
 
@@ -242,6 +243,7 @@ class AuthProvider with ChangeNotifier {
     required String newPassword,
   }) async {
     _isLoading = true;
+    _isChangingPassword = true; // Set flag to prevent redirect
     _errorMessage = null;
     notifyListeners();
 
@@ -256,13 +258,15 @@ class AuthProvider with ChangeNotifier {
       print('AuthProvider: Password changed successfully');
 
       _isLoading = false;
+      _isChangingPassword = false; // Clear flag
       notifyListeners();
     } catch (e) {
       print('AuthProvider: Change password error: $e');
       _errorMessage = e.toString();
       _isLoading = false;
+      _isChangingPassword = false; // Clear flag even on error
       notifyListeners();
-      rethrow;
+      rethrow; // Re-throw to let dialog handle the error message
     }
   }
 
@@ -294,6 +298,55 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('AuthProvider: Update profile error: $e');
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Checks if an email is already registered
+  ///
+  /// Returns true if email exists, false otherwise
+  /// Non-blocking - does not set loading state
+  Future<bool> checkEmailExists(String email) async {
+    try {
+      print('AuthProvider: Checking if email exists: $email');
+      final exists = await _authService.emailExists(email);
+      print('AuthProvider: Email exists result: $exists');
+      return exists;
+    } catch (e) {
+      print('AuthProvider: Error checking email: $e');
+      return false;
+    }
+  }
+
+  /// Clears the current error message
+  ///
+  /// Used to reset error state after displaying to user
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Sends a password reset email
+  ///
+  /// Sets loading state and clears error message
+  /// Shows error if email not found or other Firebase errors
+  Future<void> sendPasswordResetEmail(String email) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      print('AuthProvider: Sending password reset email for: $email');
+      await _authService.sendPasswordResetEmail(email);
+      print('AuthProvider: Password reset email sent successfully');
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      print('AuthProvider: Send password reset email error: $e');
       _errorMessage = e.toString();
       _isLoading = false;
       notifyListeners();

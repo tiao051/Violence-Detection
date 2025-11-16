@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/camera_model.dart';
-import '../services/camera_service.dart';
+import 'package:security_app/models/camera_model.dart';
+import 'package:security_app/services/camera_service.dart';
 
 /// Provider for managing camera-related state.
 class CameraProvider with ChangeNotifier {

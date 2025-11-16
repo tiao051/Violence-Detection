@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/profile_model.dart';
-import '../services/auth_service.dart';
+import 'package:security_app/models/profile_model.dart';
+import 'package:security_app/services/auth_service.dart';
 
 /// Provider for managing user profile state
 class ProfileProvider with ChangeNotifier {

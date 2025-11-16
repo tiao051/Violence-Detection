@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import '../providers/camera_provider.dart';
-import '../providers/event_provider.dart';
-import '../providers/settings_provider.dart';
-import '../theme/app_theme.dart';
+import 'package:security_app/providers/auth_provider.dart';
+import 'package:security_app/providers/camera_provider.dart';
+import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/providers/settings_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 /// Settings screen for app configuration and preferences.
 class SettingsScreen extends StatefulWidget {

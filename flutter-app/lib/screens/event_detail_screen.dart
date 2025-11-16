@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/event_model.dart';
-import '../providers/event_provider.dart';
+import 'package:security_app/models/event_model.dart';
+import 'package:security_app/providers/event_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import '../widgets/error_widget.dart' as error_widget;
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel event;
@@ -25,8 +25,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Mark event as viewed when screen loads
-    context.read<EventProvider>().markEventAsViewed(widget.event.id);
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Check if mounted just in case
+      if (mounted) {
+        context.read<EventProvider>().markEventAsViewedInDb(widget.event.id);
+      }
+    });
+    
     _initializePlayer();
   }
 
@@ -68,31 +74,33 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   void dispose() {
-    _chewieController.dispose();
-    _controller.dispose();
+    // Check if controllers were initialized before disposing
+    if (_isLoadingVideo == false && _errorMessage == null) {
+      _chewieController.dispose();
+      _controller.dispose();
+    }
     super.dispose();
   }
 
   /// Handles the "Report false detection" button press.
-  ///
-  /// Uses context.read() because we only need to call the provider method,
-  /// not rebuild when state changes. Shows success/error SnackBar.
   Future<void> _handleReport() async {
     final eventProvider = context.read<EventProvider>();
-    final bool success = await eventProvider.reportEvent(widget.event.id);
+    
+    // SỬA LỖI 3: Dùng hàm reportEvent mới từ EventProvider
+    final success = await context.read<EventProvider>().reportEvent(widget.event.id);
 
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Report sent successfully (simulated)"),
+            content: Text("Report sent successfully!"),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: ${eventProvider.reportError ?? 'Unknown'}"),
+            content: Text("Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -103,9 +111,27 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // SỬA LỖI 1: Lấy event từ Provider thay vì widget
+    // Điều này đảm bảo chúng ta có 'viewed' status mới nhất
+    // (trong trường hợp optimistic update thất bại và bị revert)
+    final event = context.watch<EventProvider>().events.firstWhere(
+          (e) => e.id == widget.event.id,
+          orElse: () => widget.event, // Fallback to original event
+        );
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("Event Details: ${widget.event.id}"),
+        title: Text("Event Details: ${event.id}"),
+        // Thêm icon trạng thái "đã xem"
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Icon(
+              event.viewed ? Icons.visibility_off : Icons.visibility,
+              color: event.viewed ? Colors.grey : Theme.of(context).colorScheme.primary,
+            ),
+          )
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -146,26 +172,40 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               const SizedBox(height: 16),
 
               Text(
-                "Camera: ${widget.event.cameraName}",
+                "Camera: ${event.cameraName}",
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 8),
               Text(
-                "Time: ${DateFormat('HH:mm:ss - dd/MM/yyyy').format(widget.event.timestamp)}",
+                "Time: ${DateFormat('HH:mm:ss - dd/MM/yyyy').format(event.timestamp)}",
                 style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Status: ${event.status.toUpperCase()}",
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: event.status == 'reported_false' ? Colors.orange : null,
+                ),
               ),
               
               const SizedBox(height: 32),
 
-              // Consumer enables per-button loading state by listening to
-              // the specific event ID's reporting status
               Consumer<EventProvider>(
                 builder: (context, eventProvider, child) {
-                  final isReporting = eventProvider.isReporting(widget.event.id);
+                  final isReporting = eventProvider.isReporting(event.id);
                   final hasReportError = eventProvider.reportError != null;
                   final errorColor = Theme.of(context).colorScheme.error;
                   
-                  // Disable button if already reporting or if there's a network error
+                  // Disable button if already reported
+                  if (event.status == 'reported_false') {
+                    return const Center(
+                      child: Chip(
+                        label: Text('Reported as false'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  }
+
                   final isDisabled = isReporting || hasReportError;
 
                   return Container(
@@ -191,7 +231,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             disabledBackgroundColor: Colors.transparent,
                             elevation: 0,
                           ),
-                          // Disable button while reporting or if network error
                           onPressed: isDisabled ? null : _handleReport,
                           icon: isReporting 
                             ? const SizedBox(
@@ -204,14 +243,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             isReporting 
                               ? "Sending..." 
                               : hasReportError 
-                                ? "No Internet Connection"
+                                ? "Report failed (Network error?)"
                                 : "Report false detection"
                           ),
                         ),
-                        // Show error message if report failed
                         if (hasReportError)
                           Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
+                            padding: const EdgeInsets.all(8.0),
                             child: Text(
                               "Error: ${eventProvider.reportError}",
                               style: const TextStyle(

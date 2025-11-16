@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../providers/camera_provider.dart';
-import '../../widgets/error_widget.dart' as error_widget;
-import '../../widgets/empty_state_widget.dart';
+import 'package:security_app/providers/camera_provider.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import 'package:security_app/widgets/empty_state_widget.dart';
 
 /// Tab that displays the list of available cameras.
 class CameraTab extends StatefulWidget {

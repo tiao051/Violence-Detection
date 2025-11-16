@@ -3,10 +3,10 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../providers/event_provider.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/error_widget.dart' as error_widget;
-import '../../widgets/empty_state_widget.dart';
+import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
+import 'package:security_app/widgets/error_widget.dart' as error_widget;
+import 'package:security_app/widgets/empty_state_widget.dart';
 
 /// Tab that displays detected events (alarms) from cameras.
 class EventTab extends StatefulWidget {
@@ -181,6 +181,10 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
 
                           return Card(
                             margin: const EdgeInsets.all(8.0),
+                            // === SỬA LỖI 1: Thêm màu nền (tint) ===
+                            color: !event.viewed
+                                ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+                                : null,
                             child: ListTile(
                               leading: SizedBox(
                                 width: 100.0,
@@ -236,9 +240,32 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                         ),
                                 ),
                               ),
-                              title: Text('Detected at ${event.cameraName}'),
+                              // === SỬA LỖI 2: In đậm tiêu đề ===
+                              title: Text(
+                                'Detected at ${event.cameraName}',
+                                style: TextStyle(
+                                  fontWeight: !event.viewed 
+                                      ? FontWeight.bold 
+                                      : FontWeight.normal,
+                                ),
+                              ),
                               subtitle: Text(formattedTime),
-                              trailing: const Icon(Icons.chevron_right),
+                              // === SỬA LỖI 3: Thêm "chấm chưa đọc" ===
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!event.viewed)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8.0),
+                                      child: Icon(
+                                        Icons.circle,
+                                        size: 12,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                  const Icon(Icons.chevron_right), // Mũi tên cũ
+                                ],
+                              ),
                               onTap: () {
                                 // Use extra to pass event object since GoRouter can't serialize complex objects in path
                                 context.push('/event_detail', extra: event);

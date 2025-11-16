@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../providers/profile_provider.dart';
-import '../providers/auth_provider.dart';
-import '../theme/app_theme.dart';
+import 'package:security_app/providers/profile_provider.dart';
+import 'package:security_app/providers/auth_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
+import 'package:security_app/dialogs/change_password_dialog.dart';
 
 /// Screen displaying user profile and account settings
 class ProfileScreen extends StatefulWidget {
@@ -16,15 +17,24 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _appVersion = '';
+  bool _isEditingName = false;
+  late TextEditingController _nameEditController;
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
+    _nameEditController = TextEditingController();
     // Load profile when screen opens
     Future.microtask(() {
       context.read<ProfileProvider>().loadProfile();
     });
+  }
+
+  @override
+  void dispose() {
+    _nameEditController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAppVersion() async {
@@ -135,12 +145,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Display name
-            Text(
-              profile.displayName ?? 'User',
-              style: Theme.of(context).textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
+            // Display name - Editable
+            if (!_isEditingName)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isEditingName = true;
+                    _nameEditController.text = profile.displayName ?? 'User';
+                  });
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        profile.displayName ?? 'User',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.edit, size: 18, color: Colors.grey),
+                  ],
+                ),
+              )
+            else
+              // Edit mode
+              Column(
+                children: [
+                  TextField(
+                    controller: _nameEditController,
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      hintText: 'Enter new name',
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      isDense: true,
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('Save'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                        onPressed: () async {
+                          final newName = _nameEditController.text.trim();
+                          if (newName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Name cannot be empty')),
+                            );
+                            return;
+                          }
+
+                          try {
+                            // Call profile provider to update name
+                            await context.read<ProfileProvider>().updateDisplayName(newName);
+
+                            if (mounted) {
+                              setState(() {
+                                _isEditingName = false;
+                              });
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Display name updated successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error updating name: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Cancel'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isEditingName = false;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             const SizedBox(height: 8),
 
             // Email
@@ -175,8 +288,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           subtitle: const Text('Update your information'),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
+            setState(() {
+              _isEditingName = true;
+              _nameEditController.text = context.read<ProfileProvider>().profile?.displayName ?? 'User';
+            });
+            // Scroll to top to see the edit field
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Edit profile feature coming soon')),
+              const SnackBar(content: Text('Tap on your name above to edit it')),
             );
           },
         ),
@@ -186,8 +304,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           subtitle: const Text('Update your password'),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Change password feature coming soon')),
+            showDialog(
+              context: context,
+              builder: (context) => const ChangePasswordDialog(),
             );
           },
         ),
