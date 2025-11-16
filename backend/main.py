@@ -6,6 +6,7 @@ Clean Architecture setup with dependency injection
 import asyncio
 import logging
 import time
+import os
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
@@ -16,6 +17,7 @@ from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
+from src.infrastructure.inference import get_inference_service
 
 # Setup logging
 setup_logging()
@@ -49,6 +51,23 @@ async def startup() -> None:
     startup_time = time.time()
 
     try:
+        # Load violence detection model
+        logger.info("Loading violence detection model...")
+        inference_service = get_inference_service()
+        model_path = os.getenv('MODEL_PATH')
+        inference_device = os.getenv('INFERENCE_DEVICE', 'cuda')
+        confidence_threshold = float(os.getenv('VIOLENCE_CONFIDENCE_THRESHOLD', 0.5))
+        
+        if not model_path:
+            logger.warning("MODEL_PATH not set, inference disabled")
+        else:
+            try:
+                inference_service.initialize(model_path, inference_device, confidence_threshold)
+                logger.info(f"✅ Violence detection model loaded successfully (device: {inference_device})")
+            except Exception as e:
+                logger.error(f"Failed to load violence detection model: {e}", exc_info=True)
+                # Continue anyway, inference will fail gracefully
+        
         # Connect to Redis
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
@@ -217,8 +236,10 @@ async def get_stats():
 
 # TODO: Register API routers
 # from src.presentation.api import camera_router, stream_router
+# from src.presentation.routes import threat_router
 # app.include_router(camera_router, prefix="/api/v1")
 # app.include_router(stream_router, prefix="/api/v1")
+# app.include_router(threat_router)
 
 
 if __name__ == "__main__":

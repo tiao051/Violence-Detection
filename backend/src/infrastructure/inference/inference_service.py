@@ -1,0 +1,119 @@
+"""Inference service for violence detection."""
+
+import sys
+from pathlib import Path
+from typing import Dict, Optional
+import logging
+import numpy as np
+
+# Add ai_service to path
+ai_service_path = Path(__file__).parent.parent.parent.parent.parent / 'ai_service'
+sys.path.insert(0, str(ai_service_path))
+
+from inference.inference_model import ViolenceDetectionModel, InferenceConfig
+
+logger = logging.getLogger(__name__)
+
+
+class InferenceService:
+    """
+    Service for violence detection inference.
+    
+    Wraps ViolenceDetectionModel with singleton pattern and error handling.
+    """
+    
+    _instance: Optional['InferenceService'] = None
+    
+    def __new__(cls):
+        """Singleton pattern."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        """Initialize inference service."""
+        if self._initialized:
+            return
+        
+        self.model: Optional[ViolenceDetectionModel] = None
+        self._initialized = True
+    
+    def initialize(self, model_path: str, device: str = 'cuda', confidence_threshold: float = 0.5) -> None:
+        """
+        Initialize violence detection model.
+        
+        Args:
+            model_path: Path to trained model checkpoint
+            device: Device to use ('cuda' or 'cpu')
+            confidence_threshold: Confidence threshold for violence detection
+        """
+        try:
+            config = InferenceConfig(
+                model_path=model_path,
+                device=device,
+                confidence_threshold=confidence_threshold
+            )
+            self.model = ViolenceDetectionModel(config)
+            logger.info(f"InferenceService initialized with model: {model_path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize InferenceService: {e}")
+            raise
+    
+    def detect_frame(self, frame: np.ndarray) -> Dict:
+        """
+        Add frame and perform inference if buffer is full.
+        
+        Args:
+            frame: Input frame (BGR, uint8)
+        
+        Returns:
+            Dict with detection results:
+                - violence: bool
+                - confidence: float (0-1)
+                - class_id: int (0=Violence, 1=NonViolence)
+                - buffer_size: int
+        """
+        if self.model is None:
+            logger.warning("Model not initialized")
+            return {
+                'violence': False,
+                'confidence': 0.0,
+                'class_id': 1,
+                'error': 'Model not initialized'
+            }
+        
+        try:
+            # Add frame to buffer
+            self.model.add_frame(frame)
+            
+            # Predict if buffer is full
+            result = self.model.predict()
+            return result
+        
+        except Exception as e:
+            logger.error(f"Detection error: {e}")
+            return {
+                'violence': False,
+                'confidence': 0.0,
+                'class_id': 1,
+                'error': str(e)
+            }
+    
+    def reset(self) -> None:
+        """Reset frame buffer."""
+        if self.model:
+            self.model.reset_buffer()
+            logger.info("Frame buffer reset")
+
+
+# Singleton instance
+_inference_service: Optional[InferenceService] = None
+
+
+def get_inference_service() -> InferenceService:
+    """Get inference service singleton."""
+    global _inference_service
+    if _inference_service is None:
+        _inference_service = InferenceService()
+    return _inference_service

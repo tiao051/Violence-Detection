@@ -53,10 +53,15 @@ services:
       API_V1_PREFIX: /api/v1
       HOST: 0.0.0.0
       PORT: 8000
+      # Violence Detection Model
+      MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
+      INFERENCE_DEVICE: cuda
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - ../ai_service:/app/ai_service
       - /app/__pycache__
     depends_on:
       postgres:
