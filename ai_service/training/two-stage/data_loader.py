@@ -9,23 +9,159 @@ import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 import logging
+import random
 
-# Sửa encoding cho Windows
+# Fix encoding for Windows compatibility
 if sys.platform.startswith('win'):
     os.environ['PYTHONIOENCODING'] = 'utf-8'
 
-# Thêm các import này để worker có thể tự khởi tạo
+# Add parent directory to path so workers can initialize extractors
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from remonet.sme.extractor import SMEExtractor
 from remonet.ste.extractor import STEExtractor
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AugmentationConfig:
+    """Data augmentation configuration."""
+    enable_augmentation: bool = True
+    crop_size: int = 200  # Random crop from 224x224 to 200x200
+    flip_prob: float = 0.5  # Horizontal flip probability
+    color_brightness: float = 0.3  # Color brightness jitter
+    color_contrast: float = 0.3  # Color contrast jitter
+    color_saturation: float = 0.3  # Color saturation jitter
+    rotation_degrees: int = 10  # Rotation range in degrees
+
+
+class FrameAugmentor:
+    """Apply augmentations to frames (as RGB numpy arrays)."""
+    
+    def __init__(self, config: AugmentationConfig = None, is_training: bool = True):
+        """
+        Initialize augmentor.
+        
+        Args:
+            config: AugmentationConfig for augmentation parameters
+            is_training: If False, skip augmentation even if enabled
+        """
+        self.config = config or AugmentationConfig()
+        self.is_training = is_training
+    
+    def augment_frames(self, frames: np.ndarray) -> np.ndarray:
+        """
+        Apply augmentations to all frames in batch.
+        
+        Args:
+            frames: numpy array of shape (T, H, W, 3) in uint8 RGB
+        
+        Returns:
+            Augmented frames of same shape
+        """
+        if not self.is_training or not self.config.enable_augmentation:
+            return frames
+        
+        # Apply same augmentation to all frames in sequence for consistency
+        # This preserves temporal coherence (all frames undergo same crop/flip)
+        
+        # Random crop
+        if random.random() > 0.3:  # 70% chance to crop
+            frames = self._random_crop(frames)
+        
+        # Random horizontal flip (with high probability, 50%)
+        if random.random() < self.config.flip_prob:
+            frames = self._horizontal_flip(frames)
+        
+        # Random color jitter
+        if random.random() > 0.4:  # 60% chance to jitter colors
+            frames = self._color_jitter(frames)
+        
+        # Random rotation (with small probability)
+        if random.random() < 0.3:  # 30% chance to rotate
+            frames = self._rotate(frames)
+        
+        return frames
+    
+    def _random_crop(self, frames: np.ndarray) -> np.ndarray:
+        """
+        Apply random crop to all frames.
+        
+        Args:
+            frames: (T, H, W, 3)
+        
+        Returns:
+            Cropped frames (T, crop_size, crop_size, 3)
+        """
+        H, W = frames.shape[1], frames.shape[2]
+        crop_size = self.config.crop_size
+        
+        if H < crop_size or W < crop_size:
+            return frames
+        
+        # Random top-left corner
+        top = random.randint(0, H - crop_size)
+        left = random.randint(0, W - crop_size)
+        
+        return frames[:, top:top+crop_size, left:left+crop_size, :]
+    
+    def _horizontal_flip(self, frames: np.ndarray) -> np.ndarray:
+        """Flip frames horizontally (left-right)."""
+        return np.flip(frames, axis=2)  # Flip width dimension
+    
+    def _color_jitter(self, frames: np.ndarray) -> np.ndarray:
+        """Apply color jitter (brightness, contrast, hue)."""
+        frames_jittered = frames.astype(np.float32)
+        
+        # Brightness jitter
+        if random.random() > 0.5:
+            brightness_factor = 1.0 + random.uniform(-self.config.color_brightness, self.config.color_brightness)
+            frames_jittered = frames_jittered * brightness_factor
+        
+        # Contrast jitter
+        if random.random() > 0.5:
+            contrast_factor = 1.0 + random.uniform(-self.config.color_contrast, self.config.color_contrast)
+            mean_val = frames_jittered.mean(axis=(1, 2), keepdims=True)
+            frames_jittered = mean_val + contrast_factor * (frames_jittered - mean_val)
+        
+        # Hue/saturation jitter (simpler approach without HSV conversion per frame)
+        if random.random() > 0.5:
+            saturation_factor = 1.0 + random.uniform(-self.config.color_saturation, self.config.color_saturation)
+            # Apply to each channel with slight variation
+            mean_rgb = frames_jittered.mean(axis=(1, 2), keepdims=True)
+            frames_jittered = mean_rgb + saturation_factor * (frames_jittered - mean_rgb)
+        
+        # Clip to valid range and convert back to uint8
+        frames_jittered = np.clip(frames_jittered, 0, 255).astype(np.uint8)
+        return frames_jittered
+    
+    def _rotate(self, frames: np.ndarray) -> np.ndarray:
+        """Apply random rotation to frames."""
+        angle = random.uniform(-self.config.rotation_degrees, self.config.rotation_degrees)
+        H, W = frames.shape[1], frames.shape[2]
+        center = (W // 2, H // 2)
+        
+        # Get rotation matrix
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        
+        # Apply rotation to each frame
+        rotated_frames = []
+        for frame in frames:
+            rotated = cv2.warpAffine(
+                frame, 
+                rotation_matrix, 
+                (W, H),
+                borderMode=cv2.BORDER_REFLECT_101
+            )
+            rotated_frames.append(rotated)
+        
+        return np.array(rotated_frames)
 
 
 class VideoDataLoader(Dataset):
@@ -91,6 +227,7 @@ class VideoDataLoader(Dataset):
         extracted_frames_dir: str,
         split: str = 'train',
         target_frames: int = 30,
+        augmentation_config: AugmentationConfig = None,
     ):
         """
         Initialize VideoDataLoader.
@@ -100,15 +237,21 @@ class VideoDataLoader(Dataset):
                                  Structure: split/label/video_hash/frame_*.jpg
             split: Dataset split ('train' or 'val')
             target_frames: Expected number of frames per video (default: 30)
+            augmentation_config: Augmentation configuration (optional)
         """
         self.extracted_frames_dir = Path(extracted_frames_dir)
         self.split = split
         self.target_frames = target_frames
         
-        # Trạng thái (None) để worker tự khởi tạo
+        # Initialize augmentor (only apply to training split, not validation)
+        aug_config = augmentation_config or AugmentationConfig()
+        self.augmentor = FrameAugmentor(aug_config, is_training=(split == 'train'))
+        
+        # Extractors initialized to None, will be created lazily per worker
+        # This avoids pickling issues with multiprocessing
         self.sme_extractor = None
         self.ste_extractor = None
-        # Thiết bị sẽ được sử dụng bởi STEExtractor
+        # Detect GPU availability for feature extraction
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if not self.extracted_frames_dir.exists():
@@ -119,7 +262,8 @@ class VideoDataLoader(Dataset):
         
         # Load video metadata
         self.video_items = self._load_video_metadata()
-        logger.info(f"Loaded {len(self.video_items)} videos for split '{split}'")
+        logger.info(f"Loaded {len(self.video_items)} videos for split '{split}' with augmentation={aug_config.enable_augmentation}")
+
     
     def _load_video_metadata(self) -> List[Dict]:
         """
@@ -135,7 +279,7 @@ class VideoDataLoader(Dataset):
             logger.warning(f"Split directory not found: {split_dir}")
             return items
         
-        # Iterate through labels
+        # Iterate through label subdirectories (Violence/NonViolence)
         for label_dir in sorted(split_dir.iterdir()):
             if not label_dir.is_dir():
                 continue
@@ -147,12 +291,12 @@ class VideoDataLoader(Dataset):
             
             label_id = self.LABEL_MAP[label_name]
             
-            # Iterate through video hashes
+            # Iterate through individual video directories
             for video_dir in sorted(label_dir.iterdir()):
                 if not video_dir.is_dir():
                     continue
                 
-                # Check if this directory has frames
+                # Check if video directory contains extracted frames
                 frames = list(video_dir.glob('frame_*.jpg'))
                 if len(frames) == 0:
                     logger.warning(f"No frames found in: {video_dir}")
@@ -184,7 +328,7 @@ class VideoDataLoader(Dataset):
         if len(frame_files) == 0:
             raise FileNotFoundError(f"No frames found in: {frames_dir}")
         
-        # Limit to target_frames
+        # Take only the first target_frames (usually 30 frames per video)
         frame_files = frame_files[:self.target_frames]
         
         frames = []
@@ -194,16 +338,17 @@ class VideoDataLoader(Dataset):
                 logger.warning(f"Failed to read frame: {frame_file}")
                 continue
             
-            # Convert BGR (from imread) to RGB for model input
+            # Convert BGR (OpenCV default) to RGB for consistent color ordering
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frames.append(frame_rgb)
         
         if len(frames) == 0:
             raise RuntimeError(f"Failed to load any frames from: {frames_dir}")
         
+        # Stack frames into single numpy array
         frames = np.array(frames, dtype=np.uint8)
         
-        # Validate shape
+        # Validate frame dimensions match expected size
         if frames.shape[1:] != (224, 224, 3):
             logger.warning(
                 f"Unexpected frame shape {frames.shape} in {frames_dir}, "
@@ -231,7 +376,8 @@ class VideoDataLoader(Dataset):
                 - label: int label (0 for Violence, 1 for NonViolence)
         """
         
-        # Khởi tạo extractor bên trong worker (chỉ 1 lần/worker)
+        # Initialize feature extractors lazily (once per worker process)
+        # Lazy initialization prevents pickling issues in multiprocessing
         if self.sme_extractor is None:
             self.sme_extractor = SMEExtractor()
             self.ste_extractor = STEExtractor(device=self.device, training_mode=True)
@@ -239,30 +385,38 @@ class VideoDataLoader(Dataset):
         item = self.video_items[idx]
         
         try:
-            # Load frames as (30, 224, 224, 3) RGB uint8
+            # Load raw video frames: shape (30, 224, 224, 3) in RGB uint8
             frames = self._load_frames(item['frames_dir'])
         except (FileNotFoundError, RuntimeError) as e:
             logger.error(f"Failed to load frames for item {idx} ({item['frames_dir']}): {e}")
-            # Trả về tensor rỗng với shape chuẩn để collate không lỗi
-            # (10, 1280, 7, 7) là shape giả định của GTE input
+            # Return zeros with expected GTE input shape on error
+            # This allows batch processing to continue without crashes
             return torch.zeros((10, 1280, 7, 7)), item['label']
-            
         
-        # Bọc toàn bộ quá trình xử lý model (SME, STE) trong torch.no_grad()
-        # để vô hiệu hóa việc tính gradient
+        # Wrap feature extraction in no_grad context (no gradients needed for pretrained models)
         with torch.no_grad():
-            # Áp dụng SME (Spatial Motion Extraction)
+            # Step 1: Apply SME (Spatial Motion Extraction)
+            # IMPORTANT: SME computes optical flow between consecutive frames
+            # Must run on ORIGINAL frames to compute valid motion vectors
             if self.sme_extractor is not None:
                 motion_frames = self.sme_extractor.process_batch(frames)
             else:
                 motion_frames = frames
             
-            # Áp dụng STE (Spatial Temporal Feature Extraction)
+            # Step 2: Apply data augmentation AFTER SME
+            # Augmenting motion-enhanced frames is safe because:
+            # - Optical flow already computed (step 1)
+            # - Augmentation adds variation to motion signal to prevent overfitting
+            # - Essential for small datasets like RWF-2000 (1,600 training videos)
+            motion_frames = self.augmentor.augment_frames(motion_frames)
+            
+            # Step 3: Apply STE (Spatial Temporal Feature Extraction)
+            # Extracts MobileNetV2 backbone features from motion-enhanced frames
             if self.ste_extractor is not None:
                 ste_output = self.ste_extractor.process(motion_frames)
-                features = ste_output.features  # torch.Tensor (T/3, C, H, W)
+                features = ste_output.features  # shape: (T/3, C, H, W) = (10, 1280, 7, 7)
             else:
-                # Fallback: trả về motion frames dưới dạng tensor
+                # Fallback: convert motion frames to tensor if STE not available
                 features = torch.from_numpy(motion_frames).permute(0, 3, 1, 2).float()
         
         return features, item['label']

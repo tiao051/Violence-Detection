@@ -32,7 +32,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from data_loader import VideoDataLoader
+from data_loader import VideoDataLoader, AugmentationConfig
 from remonet.gte.extractor import GTEExtractor
 
 @dataclass
@@ -50,6 +50,17 @@ class TrainConfig:
     # One-Cycle LR Scheduler config (per paper)
     scheduler_max_lr: float = 1e-3
     scheduler_min_lr: float = 1e-8
+    
+    # Early stopping config
+    early_stopping_patience: int = 10  # Stop if no improvement for N epochs
+    
+    # Augmentation config
+    augmentation_config: AugmentationConfig = None
+    
+    def __post_init__(self):
+        """Initialize default augmentation config if not provided."""
+        if self.augmentation_config is None:
+            self.augmentation_config = AugmentationConfig(enable_augmentation=True)
 
 
 class Trainer:
@@ -123,6 +134,7 @@ class Trainer:
         self.val_losses = []
         self.train_accs = []
         self.val_accs = []
+        self.epochs_without_improvement = 0  # For early stopping
     
     def _setup_logger(self) -> logging.Logger:
         """Setup logging to file and console."""
@@ -156,7 +168,8 @@ class Trainer:
         """Create data loader for train/val split."""
         dataset = VideoDataLoader(
             extracted_frames_dir=self.config.extracted_frames_dir,
-            split=split
+            split=split,
+            augmentation_config=self.config.augmentation_config
         )
         
         return DataLoader(
@@ -247,9 +260,11 @@ class Trainer:
         }
     
     def train(self):
-        """Train for multiple epochs."""
+        """Train for multiple epochs with early stopping."""
         self.logger.info("="*60)
         self.logger.info("Starting Training")
+        self.logger.info(f"Early stopping patience: {self.config.early_stopping_patience} epochs")
+        self.logger.info(f"Augmentation enabled: {self.config.augmentation_config.enable_augmentation}")
         self.logger.info("="*60 + "\n")
         
         for epoch in range(self.config.epochs):
@@ -280,23 +295,31 @@ class Trainer:
             self.logger.info(f"Epoch {epoch+1}/{self.config.epochs} (LR: {current_lr:.2e})")
             self.logger.info(f"  Train - Loss: {train_loss:.4f}, Acc: {train_acc:.4f}")
             self.logger.info(f"  Val   - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
+            self.logger.info(f"  Overfitting gap: {overfitting_gap:.4f}")
             
             # Check overfitting
             if is_overfitting:
-                self.logger.warning(f"OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
+                self.logger.warning(f"⚠️  OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
             
-            # Save best model
+            # Early stopping: check if validation accuracy improved
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 self.best_epoch = epoch + 1
+                self.epochs_without_improvement = 0
                 self._save_model('best_model.pt')
-                self.logger.info(f"Saved best model (val acc: {self.best_val_acc:.4f})")
-            
-            # Early stopping
-            if epoch > 0:
-                prev_best = max(self.val_accs[:-1]) if len(self.val_accs) > 1 else 0
-                if val_acc <= prev_best and epoch - self.best_epoch > 10:
-                    self.logger.warning(f"No improvement for 10 epochs")
+                self.logger.info(f"✓ Saved best model (val acc: {self.best_val_acc:.4f})")
+            else:
+                self.epochs_without_improvement += 1
+                self.logger.info(f"No improvement for {self.epochs_without_improvement}/{self.config.early_stopping_patience} epochs")
+                
+                # Early stopping
+                if self.epochs_without_improvement >= self.config.early_stopping_patience:
+                    self.logger.warning(f"\n{'='*60}")
+                    self.logger.warning(f"EARLY STOPPING TRIGGERED!")
+                    self.logger.warning(f"No improvement for {self.config.early_stopping_patience} epochs")
+                    self.logger.warning(f"Best validation accuracy: {self.best_val_acc:.4f} at epoch {self.best_epoch}")
+                    self.logger.warning(f"{'='*60}\n")
+                    break
             
             self.logger.info("")
         
