@@ -1,92 +1,74 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// Model representing an event in the security app.
 class EventModel {
-  /// Unique identifier for the event.
   final String id;
-
-  /// Name of the camera that captured the event.
+  final String userId;
+  final String cameraId;
   final String cameraName;
-
-  /// URL for the event's thumbnail image.
+  final String type;
+  final String status;
   final String thumbnailUrl;
-
-  /// URL for the video clip of the event.
   final String videoUrl;
-
-  /// Timestamp when the event occurred.
   final DateTime timestamp;
-
-  /// Whether the event has been viewed by the user.
-  final bool isViewed;
+  final bool viewed; // Dùng 'viewed' (thay vì 'isViewed') để khớp rule
 
   EventModel({
     required this.id,
+    required this.userId,
+    required this.cameraId,
     required this.cameraName,
+    required this.type,
+    required this.status,
     required this.thumbnailUrl,
     required this.videoUrl,
     required this.timestamp,
-    this.isViewed = false,
+    required this.viewed,
   });
 
+  /// Factory constructor to create an EventModel from a Firestore document.
+  factory EventModel.fromJson(Map<String, dynamic> json, String documentId) {
+    final timestamp = (json['timestamp'] as Timestamp? ?? Timestamp.now()).toDate();
+
+    return EventModel(
+      id: documentId,
+      userId: json['userId'] as String? ?? '',
+      cameraId: json['cameraId'] as String? ?? '',
+      cameraName: json['cameraName'] as String? ?? 'Unknown Camera',
+      type: json['type'] as String? ?? 'unknown',
+      status: json['status'] as String? ?? 'new',
+      thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
+      videoUrl: json['videoUrl'] as String? ?? '',
+      timestamp: timestamp,
+      viewed: json['viewed'] as bool? ?? false,
+    );
+  }
+
   /// Create a copy of this event with optional field overrides.
+  /// (ĐÃ THÊM TRỞ LẠI)
   EventModel copyWith({
     String? id,
+    String? userId,
+    String? cameraId,
     String? cameraName,
+    String? type,
+    String? status,
     String? thumbnailUrl,
     String? videoUrl,
     DateTime? timestamp,
-    bool? isViewed,
+    bool? viewed,
   }) {
     return EventModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
+      cameraId: cameraId ?? this.cameraId,
       cameraName: cameraName ?? this.cameraName,
+      type: type ?? this.type,
+      status: status ?? this.status,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       videoUrl: videoUrl ?? this.videoUrl,
       timestamp: timestamp ?? this.timestamp,
-      isViewed: isViewed ?? this.isViewed,
+      viewed: viewed ?? this.viewed,
     );
   }
 }
-
-/// Dummy list of events for initial UI display.
-final List<EventModel> dummyEvents = [
-  EventModel(
-    id: 'evt_001',
-    cameraName: 'Front Gate Camera',
-    thumbnailUrl: 'https://picsum.photos/seed/event1/120/90',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    isViewed: false, // Unviewed - will show in badge
-  ),
-  EventModel(
-    id: 'evt_002',
-    cameraName: 'Kitchen Camera',
-    thumbnailUrl: 'https://picsum.photos/seed/event2/120/90',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-    isViewed: true, // Viewed - won't count in badge
-  ),
-  EventModel(
-    id: 'evt_003',
-    cameraName: 'Back Door Camera',
-    thumbnailUrl: 'https://picsum.photos/seed/event3/120/90',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-    isViewed: false, // Unviewed - will show in badge
-  ),
-  EventModel(
-    id: 'evt_004',
-    cameraName: 'Front Gate Camera',
-    thumbnailUrl: 'https://picsum.photos/seed/event4/120/90',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-    isViewed: false, // Unviewed - will show in badge
-  ),
-  EventModel(
-    id: 'evt_005',
-    cameraName: 'Parking Lot Camera',
-    thumbnailUrl: 'https://picsum.photos/seed/event5/120/90',
-    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-    isViewed: true, // Viewed - won't count in badge
-  ),
-];
