@@ -44,3 +44,39 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+/android/.gradle/
+.gradle/
+
+# iOS build artifacts
+/ios/build/
+/ios/Flutter/Flutter.framework/
+/ios/Flutter/.last_build_id
+/ios/Flutter/Generated.xcconfig
+
+# Local configuration files
+google-services.json
+firebase_options.dart
+
+# Gradle build output
+build/
+.gradle/
+
+# Generated code
+generated_plugins.cmake
+generated_plugin_registrant.cc
+generated_plugin_registrant.h
+GeneratedPluginRegistrant.swift
+
+# macOS build artifacts
+/macos/build/
+
+# Web build artifacts
+/web/build/
+
+# Linux build artifacts
+/linux/build/
+
+# Windows build artifacts
+/windows/build/
+
