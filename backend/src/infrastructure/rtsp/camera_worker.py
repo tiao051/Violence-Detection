@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import uuid
+import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -14,6 +15,10 @@ from ..memory import get_frame_buffer
 from ..inference import get_inference_service
 
 logger = logging.getLogger(__name__)
+
+# Frame saving directory for violence detections
+VIOLENCE_FRAME_DIR = "/app/backend/detections"
+os.makedirs(VIOLENCE_FRAME_DIR, exist_ok=True)
 
 
 class CameraWorker:
@@ -193,6 +198,10 @@ class CameraWorker:
                 # Perform violence detection inference
                 detection_result = self.inference_service.detect_frame(resized_frame)
                 
+                # Save frame if violence detected
+                if detection_result.get('violence', False):
+                    self._save_detection_frame(resized_frame, detection_result, frame_id)
+                
                 # Push metadata and detection result to Redis
                 try:
                     await self.redis_producer.add_frame_metadata(
@@ -210,9 +219,6 @@ class CameraWorker:
                         e2e_latency = (time.time() - processing_start) * 1000
                         logger.info(f"[{self.camera_id}] End-to-end latency: {e2e_latency:.2f}ms (read → resize → buffer → Redis)")
 
-
-                    if self.frames_sampled % 100 == 0:
-                        await self.redis_producer.cleanup_old_frames(self.camera_id)
                 except Exception as e:
                     logger.error(f"[{self.camera_id}] Redis error: {str(e)}")
         
@@ -223,6 +229,40 @@ class CameraWorker:
             logger.error(f"[{self.camera_id}] Worker error: {str(e)}")
             self.is_running = False
             self.client.close()
+    
+    
+    def _save_detection_frame(self, frame: Any, detection_result: Dict, frame_id: str) -> None:
+        """
+        Save frame when violence is detected.
+        
+        Args:
+            frame: The frame to save
+            detection_result: Detection result with confidence
+            frame_id: Unique frame identifier
+        """
+        try:
+            if not detection_result.get('violence', False):
+                return  # Only save if violence detected
+            
+            confidence = detection_result.get('confidence', 0)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            
+            # Create subdirectory for this camera
+            cam_dir = os.path.join(VIOLENCE_FRAME_DIR, self.camera_id)
+            os.makedirs(cam_dir, exist_ok=True)
+            
+            # Save frame with timestamp and confidence
+            filename = f"{timestamp}_{confidence:.2f}_{frame_id}.jpg"
+            filepath = os.path.join(cam_dir, filename)
+            
+            success = cv2.imwrite(filepath, frame)
+            if success:
+                # Silent save - don't log every frame
+                pass
+            else:
+                logger.error(f"[{self.camera_id}] Failed to save frame: {filepath}")
+        except Exception as e:
+            logger.error(f"[{self.camera_id}] Error saving detection frame: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
         """

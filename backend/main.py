@@ -13,11 +13,17 @@ import redis.asyncio as redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi.staticfiles import StaticFiles
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
+
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
+from src.infrastructure.websocket import get_threat_broadcaster
+from src.presentation.routes import threat_router
 
 # Setup logging
 setup_logging()
@@ -28,6 +34,7 @@ redis_client: redis.Redis = None
 redis_producer: RedisStreamProducer = None
 camera_workers: list = []
 startup_time: float = 0
+threat_broadcaster = None
 
 
 @asynccontextmanager
@@ -46,11 +53,15 @@ async def lifespan(app: FastAPI):
 
 async def startup() -> None:
     """Initialize application on startup."""
-    global redis_client, redis_producer, camera_workers, startup_time
+    global redis_client, redis_producer, camera_workers, startup_time, threat_broadcaster
 
     startup_time = time.time()
 
     try:
+        # Initialize threat broadcaster
+        threat_broadcaster = get_threat_broadcaster()
+        logger.info("Threat broadcaster initialized")
+        
         # Load violence detection model
         logger.info("Loading violence detection model...")
         inference_service = get_inference_service()
@@ -157,6 +168,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register threat API routes
+app.include_router(threat_router)
+
+# Mount static files for frontend (React build output)
+# This serves the React app from /
+# import os
+# static_dir = os.path.join(os.path.dirname(__file__), "src/presentation/static")
+# if os.path.exists(static_dir):
+#     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+
 
 @app.get("/")
 async def root():
@@ -234,12 +255,64 @@ async def get_stats():
     }
 
 
-# TODO: Register API routers
+@app.get("/hls/{camera_id}/index.m3u8")
+async def get_hls_playlist(camera_id: str):
+    """Proxy HLS playlist from MediaMTX."""
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://rtsp-server:8888/{camera_id}/index.m3u8")
+            return Response(content=response.content, media_type="application/vnd.apple.mpegurl")
+    except Exception as e:
+        logger.error(f"Failed to get HLS playlist: {e}")
+        raise
+
+
+@app.get("/hls/{camera_id}/{segment}")
+async def get_hls_segment(camera_id: str, segment: str):
+    """Proxy HLS segment from MediaMTX."""
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://rtsp-server:8888/{camera_id}/{segment}")
+            return Response(content=response.content, media_type="video/mp2t")
+    except Exception as e:
+        logger.error(f"Failed to get HLS segment: {e}")
+        raise
+
+
+@app.websocket("/ws/threats")
+async def websocket_threats(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time threat detection alerts.
+    
+    Clients connect here to receive live threat detection updates
+    as they occur across all 4 cameras.
+    """
+    global threat_broadcaster
+    
+    broadcaster = get_threat_broadcaster()
+    await broadcaster.connect(websocket)
+    
+    try:
+        # Keep connection alive - threat updates sent via broadcast_status when detection occurs
+        while True:
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        broadcaster.disconnect(websocket)
+        logger.info("WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+        try:
+            broadcaster.disconnect(websocket)
+        except:
+            pass
+
+
+# TODO: Register API routers for camera and stream endpoints
 # from src.presentation.api import camera_router, stream_router
-# from src.presentation.routes import threat_router
 # app.include_router(camera_router, prefix="/api/v1")
 # app.include_router(stream_router, prefix="/api/v1")
-# app.include_router(threat_router)
 
 
 if __name__ == "__main__":

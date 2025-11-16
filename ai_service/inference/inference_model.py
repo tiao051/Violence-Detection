@@ -81,8 +81,8 @@ class ViolenceDetectionModel:
         # Load checkpoint
         try:
             checkpoint = torch.load(model_path, map_location=self.device)
-            gte_model.model.load_state_dict(checkpoint['model_state_dict'])
-            gte_model.model.eval()
+            gte_model.load_state_dict(checkpoint['model_state_dict'])
+            gte_model.eval()
             logger.info(f"Loaded model from {model_path}")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")

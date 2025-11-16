@@ -1,26 +1,6 @@
 name: violence-detection
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: violence-detection-db
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-violence_detection}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
   # Redis
   redis:
     image: redis:7-alpine
@@ -41,11 +21,10 @@ services:
   # Backend
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: violence-detection-backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-violence_detection}
       REDIS_URL: redis://redis:6379/0
       RTSP_BASE_URL: rtsp://rtsp-server:8554
       APP_ENV: ${APP_ENV:-development}
@@ -55,17 +34,15 @@ services:
       PORT: 8000
       # Violence Detection Model
       MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
-      INFERENCE_DEVICE: cuda
+      INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
-      - ../ai_service:/app/ai_service
+      - ./backend:/app
+      - ./ai_service:/app/ai_service
       - /app/__pycache__
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -78,10 +55,11 @@ services:
     container_name: rtsp-server
     ports:
       - "8554:8554"        # RTSP
+      - "8888:8888"        # HLS
     volumes:
-      - ./mediamtx.yml:/etc/mediamtx/mediamtx.yml
+      - ./mediamtx.yml:/mediamtx.yml
     environment:
-      MEDIAMTX_LOGFILE: ""  # Log to stdout
+      MEDIAMTX_LOGLEVEL: info
     networks:
       - app-network
 
@@ -94,8 +72,9 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
-      - ../utils/test_inputs:/videos
+      - ./utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
+    restart: on-failure
     networks:
       - app-network
 
@@ -107,8 +86,9 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
-      - ../utils/test_inputs:/videos
+      - ./utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
+    restart: on-failure
     networks:
       - app-network
 
@@ -120,8 +100,9 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
-      - ../utils/test_inputs:/videos
+      - ./utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
+    restart: on-failure
     networks:
       - app-network
 
@@ -133,8 +114,23 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
-      - ../utils/test_inputs:/videos
+      - ./utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
+    restart: on-failure
+    networks:
+      - app-network
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    container_name: violence-detection-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+      - rtsp-server
     networks:
       - app-network
 
@@ -143,5 +139,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
   redis_data:

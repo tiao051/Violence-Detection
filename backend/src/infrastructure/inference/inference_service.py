@@ -7,10 +7,15 @@ import logging
 import numpy as np
 
 # Add ai_service to path
-ai_service_path = Path(__file__).parent.parent.parent.parent.parent / 'ai_service'
+ai_service_path = Path(__file__).parent.parent.parent.parent / 'ai_service'
 sys.path.insert(0, str(ai_service_path))
 
-from inference.inference_model import ViolenceDetectionModel, InferenceConfig
+try:
+    from ai_service.inference.inference_model import ViolenceDetectionModel, InferenceConfig
+except ImportError:
+    # Fallback if ai_service not available
+    ViolenceDetectionModel = None
+    InferenceConfig = None
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,7 @@ class InferenceService:
         if self._initialized:
             return
         
-        self.model: Optional[ViolenceDetectionModel] = None
+        self.model: Optional[object] = None
         self._initialized = True
     
     def initialize(self, model_path: str, device: str = 'cuda', confidence_threshold: float = 0.5) -> None:
@@ -49,6 +54,11 @@ class InferenceService:
             confidence_threshold: Confidence threshold for violence detection
         """
         try:
+            if ViolenceDetectionModel is None:
+                logger.warning("ViolenceDetectionModel not available, using dummy model")
+                self.model = None
+                return
+                
             config = InferenceConfig(
                 model_path=model_path,
                 device=device,
