@@ -537,7 +537,9 @@ class VideoDataLoader(Dataset):
         # Lazy initialization prevents pickling issues in multiprocessing
         if self.sme_extractor is None:
             self.sme_extractor = SMEExtractor()
-            self.ste_extractor = STEExtractor(device=self.device, training_mode=True)
+            # CRITICAL: Keep STE in eval mode to freeze pretrained backbone (prevents overfitting)
+            # Only GTE parameters should be trained on small datasets
+            self.ste_extractor = STEExtractor(device=self.device, training_mode=False)
 
         item = self.video_items[idx]
         
