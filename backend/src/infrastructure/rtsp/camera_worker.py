@@ -190,8 +190,12 @@ class CameraWorker:
                     frame_seq=self.frames_sampled,
                 )
                 
-                # Perform violence detection inference
-                detection_result = self.inference_service.detect_frame(resized_frame)
+                # Perform violence detection inference (async, non-blocking)
+                detection_result = await self.inference_service.detect_frame_async(resized_frame)
+                
+                # Log inference latency if available
+                if 'latency_ms' in detection_result and detection_result['latency_ms'] > 0:
+                    logger.debug(f"[{self.camera_id}] Inference latency: {detection_result['latency_ms']:.2f}ms")
                 
                 # Push metadata and detection result to Redis
                 try:

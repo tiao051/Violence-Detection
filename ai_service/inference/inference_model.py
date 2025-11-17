@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Dict, Optional
 import logging
 from dataclasses import dataclass
+import asyncio
+import time
 
 from ai_service.remonet.sme.extractor import SMEExtractor
 from ai_service.remonet.ste.extractor import STEExtractor
@@ -60,6 +62,10 @@ class ViolenceDetectionModel:
         # Frame buffer for temporal aggregation
         self.frame_buffer = []
         self.MAX_BUFFER_SIZE = config.num_frames
+        
+        # Latency tracking
+        self.last_inference_time = 0.0
+        self.last_inference_latency = 0.0
         
         logger.info(f"ViolenceDetectionModel initialized on {self.device}")
     
@@ -120,6 +126,7 @@ class ViolenceDetectionModel:
                 - violence: bool (True if violence detected)
                 - confidence: float (0-1)
                 - class_id: int (0=Violence, 1=NonViolence)
+                - latency_ms: float (inference time in ms)
         """
         # Need minimum frames for inference
         if len(self.frame_buffer) < self.MAX_BUFFER_SIZE:
@@ -127,10 +134,13 @@ class ViolenceDetectionModel:
                 'violence': False,
                 'confidence': 0.0,
                 'class_id': 1,
-                'buffer_size': len(self.frame_buffer)
+                'buffer_size': len(self.frame_buffer),
+                'latency_ms': 0.0
             }
         
         try:
+            inference_start = time.time()
+            
             # Convert buffer to numpy array
             frames = np.array(self.frame_buffer, dtype=np.uint8)  # (30, 224, 224, 3)
             
@@ -148,16 +158,21 @@ class ViolenceDetectionModel:
                 # Get predictions
                 probabilities = torch.softmax(logits, dim=0).cpu().numpy()
                 class_id = int(torch.argmax(logits).cpu().numpy())
-                confidence = float(probabilities[0])  # Violence confidence
+                confidence = float(probabilities[class_id])  # Confidence of predicted class
             
-            # Determine if violence detected
+            # Calculate latency
+            self.last_inference_latency = (time.time() - inference_start) * 1000  # ms
+            self.last_inference_time = time.time()
+            
+            # Determine if violence detected (class_id=0 is Violence)
             is_violence = (class_id == 0) and (confidence >= self.config.confidence_threshold)
             
             return {
                 'violence': is_violence,
                 'confidence': confidence,
                 'class_id': class_id,
-                'buffer_size': len(self.frame_buffer)
+                'buffer_size': len(self.frame_buffer),
+                'latency_ms': self.last_inference_latency
             }
         
         except Exception as e:
@@ -166,7 +181,8 @@ class ViolenceDetectionModel:
                 'violence': False,
                 'confidence': 0.0,
                 'class_id': 1,
-                'error': str(e)
+                'error': str(e),
+                'latency_ms': 0.0
             }
     
     def reset_buffer(self) -> None:

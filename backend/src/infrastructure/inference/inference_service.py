@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Dict, Optional
 import logging
 import numpy as np
+import asyncio
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 # Add ai_service to path
 ai_service_path = Path(__file__).parent.parent.parent.parent / 'ai_service'
@@ -43,6 +46,9 @@ class InferenceService:
         
         self.model: Optional[object] = None
         self._initialized = True
+        
+        # Thread pool for async inference
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference_")
     
     def initialize(self, model_path: str, device: str = 'cuda', confidence_threshold: float = 0.5) -> None:
         """
@@ -83,6 +89,7 @@ class InferenceService:
                 - confidence: float (0-1)
                 - class_id: int (0=Violence, 1=NonViolence)
                 - buffer_size: int
+                - latency_ms: float (inference time)
         """
         if self.model is None:
             logger.warning("Model not initialized")
@@ -90,7 +97,8 @@ class InferenceService:
                 'violence': False,
                 'confidence': 0.0,
                 'class_id': 1,
-                'error': 'Model not initialized'
+                'error': 'Model not initialized',
+                'latency_ms': 0.0
             }
         
         try:
@@ -107,8 +115,22 @@ class InferenceService:
                 'violence': False,
                 'confidence': 0.0,
                 'class_id': 1,
-                'error': str(e)
+                'error': str(e),
+                'latency_ms': 0.0
             }
+    
+    async def detect_frame_async(self, frame: np.ndarray) -> Dict:
+        """
+        Add frame and perform inference asynchronously.
+        
+        Args:
+            frame: Input frame (BGR, uint8)
+        
+        Returns:
+            Dict with detection results
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self.detect_frame, frame)
     
     def reset(self) -> None:
         """Reset frame buffer."""
