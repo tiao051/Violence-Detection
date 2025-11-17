@@ -1,9 +1,9 @@
 /**
  * CameraGrid Component - Displays 2x2 grid of camera feeds with detection overlays.
+ * Uses WebRTC (WHEP) for low-latency streaming (< 1s).
  */
 
 import React, { useEffect, useRef } from 'react';
-import HLS from 'hls.js';
 import { CameraStatus } from '../types/detection';
 import DetectionOverlay from './DetectionOverlay';
 
@@ -14,59 +14,86 @@ interface CameraGridProps {
 export const CameraGrid: React.FC<CameraGridProps> = ({ threats }: CameraGridProps) => {
   const cameraIds = ['cam1', 'cam2', 'cam3', 'cam4'];
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
 
-  // Get HLS URL for camera
-  const getHlsUrl = (cameraId: string) => `/hls/${cameraId}/index.m3u8`;
+  // Get WHEP URL for camera
+  const getWhepUrl = (cameraId: string) => `/webrtc/${cameraId}/whep`;
 
-  // Initialize HLS.js for each video
+  // Initialize WebRTC for each camera
   useEffect(() => {
-    cameraIds.forEach((cameraId) => {
+    const setupWebRTC = async (cameraId: string) => {
       const video = videoRefs.current[cameraId];
       if (!video) return;
 
-      // Destroy existing HLS instance
-      const videoWithHls = video as any;
-      if (videoWithHls.hls) {
-        videoWithHls.hls.destroy();
-      }
-
-      if (HLS.isSupported()) {
-        const hls = new HLS({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 90,
+      try {
+        // Create RTCPeerConnection
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
         });
 
-        hls.loadSource(getHlsUrl(cameraId));
-        hls.attachMedia(video);
-        videoWithHls.hls = hls;
+        // Add transceiver for receiving video
+        pc.addTransceiver('video', { direction: 'recvonly' });
 
-        hls.on(HLS.Events.MANIFEST_PARSED, () => {
-          video.play().catch((err) => console.error(`Play error for ${cameraId}:`, err));
-        });
+        // Handle incoming tracks
+        pc.ontrack = (event) => {
+          console.log(`[${cameraId}] Received track:`, event.track.kind);
+          video.srcObject = event.streams[0];
+        };
 
-        hls.on(HLS.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            console.error(`HLS fatal error for ${cameraId}:`, data);
+        // Handle connection state
+        pc.onconnectionstatechange = () => {
+          console.log(`[${cameraId}] Connection state:`, pc.connectionState);
+          if (pc.connectionState === 'failed') {
+            console.error(`[${cameraId}] Connection failed, retrying...`);
+            setTimeout(() => setupWebRTC(cameraId), 3000);
           }
+        };
+
+        // Create offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // Send offer to MediaMTX WHEP endpoint
+        const response = await fetch(getWhepUrl(cameraId), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/sdp',
+          },
+          body: offer.sdp,
         });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari native HLS support
-        video.src = getHlsUrl(cameraId);
-        video.play().catch((err) => console.error(`Play error for ${cameraId}:`, err));
+
+        if (!response.ok) {
+          throw new Error(`WHEP request failed: ${response.status}`);
+        }
+
+        // Get answer and set remote description
+        const answer = await response.text();
+        await pc.setRemoteDescription({
+          type: 'answer',
+          sdp: answer,
+        });
+
+        peerConnectionsRef.current[cameraId] = pc;
+        console.log(`[${cameraId}] WebRTC connection established`);
+      } catch (error) {
+        console.error(`[${cameraId}] WebRTC setup error:`, error);
+        // Retry after 3 seconds
+        setTimeout(() => setupWebRTC(cameraId), 3000);
       }
+    };
+
+    // Setup WebRTC for all cameras
+    cameraIds.forEach((cameraId) => {
+      setupWebRTC(cameraId);
     });
 
     // Cleanup
     return () => {
       cameraIds.forEach((cameraId) => {
-        const video = videoRefs.current[cameraId];
-        if (video) {
-          const videoWithHls = video as any;
-          if (videoWithHls.hls) {
-            videoWithHls.hls.destroy();
-          }
+        const pc = peerConnectionsRef.current[cameraId];
+        if (pc) {
+          pc.close();
+          delete peerConnectionsRef.current[cameraId];
         }
       });
     };

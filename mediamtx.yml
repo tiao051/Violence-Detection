@@ -1,4 +1,8 @@
-# Empty config - MediaMTX will use all default settings
+# MediaMTX configuration for low-latency streaming
+
+# WebRTC for real-time streaming (< 1s latency)
+webrtc: true
+webrtcAddress: :8889
 
 paths:
   cam1: {}
