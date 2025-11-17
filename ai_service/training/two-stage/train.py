@@ -308,12 +308,6 @@ class Trainer:
     
     def train(self):
         """Train for multiple epochs with early stopping."""
-        self.logger.info("="*60)
-        self.logger.info("Starting Training")
-        self.logger.info(f"Early stopping patience: {self.config.early_stopping_patience} epochs")
-        self.logger.info(f"Augmentation enabled: {self.config.augmentation_config.enable_augmentation}")
-        self.logger.info("="*60 + "\n")
-        
         for epoch in range(self.config.epochs):
             # Train
             train_metrics = self.train_epoch()
@@ -342,11 +336,7 @@ class Trainer:
             self.logger.info(f"Epoch {epoch+1}/{self.config.epochs} (LR: {current_lr:.2e})")
             self.logger.info(f"  Train - Loss: {train_loss:.4f}, Acc: {train_acc:.4f}")
             self.logger.info(f"  Val   - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
-            self.logger.info(f"  Overfitting gap: {overfitting_gap:.4f}")
-            
-            # Check overfitting
-            if is_overfitting:
-                self.logger.warning(f"⚠️  OVERFITTING DETECTED! Gap: {overfitting_gap:.4f}")
+            self.logger.info(f"  Gap: {overfitting_gap:+.4f}")
             
             # Early stopping: check if validation accuracy improved
             if val_acc > self.best_val_acc:
@@ -357,15 +347,11 @@ class Trainer:
                 self.logger.info(f"✓ Saved best model (val acc: {self.best_val_acc:.4f})")
             else:
                 self.epochs_without_improvement += 1
-                self.logger.info(f"No improvement for {self.epochs_without_improvement}/{self.config.early_stopping_patience} epochs")
                 
                 # Early stopping
                 if self.epochs_without_improvement >= self.config.early_stopping_patience:
-                    self.logger.warning(f"\n{'='*60}")
-                    self.logger.warning(f"EARLY STOPPING TRIGGERED!")
-                    self.logger.warning(f"No improvement for {self.config.early_stopping_patience} epochs")
-                    self.logger.warning(f"Best validation accuracy: {self.best_val_acc:.4f} at epoch {self.best_epoch}")
-                    self.logger.warning(f"{'='*60}\n")
+                    self.logger.info(f"\nEarly stopping at epoch {epoch+1} (no improvement for {self.config.early_stopping_patience} epochs)")
+                    self.logger.info(f"Best: {self.best_val_acc:.4f} at epoch {self.best_epoch}\n")
                     break
             
             self.logger.info("")
@@ -381,27 +367,11 @@ class Trainer:
     
     def _log_summary(self):
         """Log training summary."""
-        self.logger.info("Training Summary")
-        self.logger.info(f"Best epoch: {self.best_epoch}")
-        self.logger.info(f"Best validation accuracy: {self.best_val_acc:.4f}")
-        
-        # Best val accuracy epoch
-        best_val_idx = self.val_accs.index(max(self.val_accs))
-        self.logger.info(f"  Train acc at best epoch: {self.train_accs[best_val_idx]:.4f}")
-        self.logger.info(f"  Train loss at best epoch: {self.train_losses[best_val_idx]:.4f}")
-        self.logger.info(f"  Val loss at best epoch: {self.val_losses[best_val_idx]:.4f}")
-        
-        # Final metrics
-        self.logger.info(f"\nFinal epoch ({len(self.train_accs)}):")
-        self.logger.info(f"  Train acc: {self.train_accs[-1]:.4f}")
-        self.logger.info(f"  Val acc: {self.val_accs[-1]:.4f}")
-        self.logger.info(f"  Train loss: {self.train_losses[-1]:.4f}")
-        self.logger.info(f"  Val loss: {self.val_losses[-1]:.4f}")
-        
-        # Check if model improved significantly
-        max_val_acc = max(self.val_accs)
-        if max_val_acc < 0.6:
-            self.logger.warning("Model accuracy is low (<60%)")
+        self.logger.info(f"\n" + "="*60)
+        self.logger.info("Training Complete")
+        self.logger.info(f"Best: Epoch {self.best_epoch} | Val Acc: {self.best_val_acc:.4f}")
+        self.logger.info(f"Final: Epoch {len(self.train_accs)} | Train: {self.train_accs[-1]:.4f} | Val: {self.val_accs[-1]:.4f}")
+        self.logger.info("="*60)
     
     def _save_model(self, filename: str):
         """Save model checkpoint."""
@@ -453,16 +423,12 @@ def main():
                 break
         
         if not dataset_root:
-            print(f"ERROR: Could not auto-detect dataset root")
-            print(f"Please specify --dataset-root explicitly")
+            print(f"ERROR: Could not auto-detect dataset root. Please specify --dataset-root")
             sys.exit(1)
     
-    # Validate dataset root
     if not dataset_root.exists():
         print(f"ERROR: Dataset root not found: {dataset_root}")
         sys.exit(1)
-    
-    print(f"Using dataset root: {dataset_root}")
     
     # Determine extracted frames directory based on dataset
     if args.dataset == 'rwf-2000':
@@ -474,8 +440,7 @@ def main():
         sys.exit(1)
     
     if not extracted_frames_dir.exists():
-        print(f"ERROR: Extracted frames directory not found: {extracted_frames_dir}")
-        print(f"Run frame_extractor.py first: python frame_extractor.py --dataset {args.dataset}")
+        print(f"ERROR: Extracted frames not found. Run: python frame_extractor.py --dataset {args.dataset}")
         sys.exit(1)
     
     # Create config
@@ -492,9 +457,6 @@ def main():
     # Start training
     trainer = Trainer(config)
     trainer.train()
-    
-    trainer.logger.info(f"Best validation accuracy: {trainer.best_val_acc:.4f}")
-    trainer.logger.info(f"Best model saved to: checkpoints/best_model.pt")
 
 if __name__ == '__main__':
     main()

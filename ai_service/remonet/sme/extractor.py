@@ -89,13 +89,13 @@ class SMEPreprocessor:
 class SMEExtractor:
     """Spatial Motion Extractor - Extract motion features from consecutive frames."""
 
-    def __init__(self, kernel_size=3, iteration=12, threshold=50, use_squared_distance=False):
+    def __init__(self, kernel_size=3, iteration=8, threshold=50, use_squared_distance=False):
         """
         Initialize SME processor.
         
         Args:
             kernel_size: Size of dilation kernel (default: 3)
-            iteration: Number of dilation iterations (default: 12, per paper)
+            iteration: Number of dilation iterations (default: 8, balanced for better precision)
             threshold: Binary threshold for motion mask (default: 50)
                       Higher values = stricter motion detection
                       Lower values = more sensitive to small changes

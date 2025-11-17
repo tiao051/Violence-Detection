@@ -39,6 +39,8 @@ class AugmentationConfig:
     color_contrast: float = 0.3  # Color contrast jitter
     color_saturation: float = 0.3  # Color saturation jitter
     rotation_degrees: int = 10  # Rotation range in degrees
+    temporal_jitter_prob: float = 0.3  # Probability to apply temporal jitter
+    temporal_jitter_range: int = 2  # Max frames to shift (+/- range)
 
 
 class FrameAugmentor:
@@ -70,6 +72,10 @@ class FrameAugmentor:
         
         # Apply same augmentation to all frames in sequence for consistency
         # This preserves temporal coherence (all frames undergo same crop/flip)
+        
+        # Temporal jitter (apply first to vary temporal patterns)
+        if random.random() < self.config.temporal_jitter_prob:
+            frames = self._temporal_jitter(frames)
         
         # Random crop
         if random.random() > 0.3:  # 70% chance to crop
@@ -162,6 +168,40 @@ class FrameAugmentor:
             rotated_frames.append(rotated)
         
         return np.array(rotated_frames)
+    
+    def _temporal_jitter(self, frames: np.ndarray) -> np.ndarray:
+        """Apply temporal jitter by randomly shifting frame indices.
+        
+        This augmentation helps model learn temporal invariance and not overfit
+        to specific temporal patterns. Randomly drops or duplicates frames.
+        
+        Args:
+            frames: (T, H, W, 3) numpy array
+        
+        Returns:
+            Temporally jittered frames with same shape (T, H, W, 3)
+        """
+        T = len(frames)
+        jitter_range = self.config.temporal_jitter_range
+        
+        # Random shift between -jitter_range and +jitter_range
+        shift = random.randint(-jitter_range, jitter_range)
+        
+        if shift == 0:
+            return frames
+        
+        # Create new indices with shift
+        new_indices = []
+        for i in range(T):
+            new_idx = i + shift
+            # Clamp to valid range [0, T-1]
+            new_idx = max(0, min(T - 1, new_idx))
+            new_indices.append(new_idx)
+        
+        # Gather frames with new indices
+        jittered_frames = frames[new_indices]
+        
+        return jittered_frames
 
 
 class VideoDataLoader(Dataset):
