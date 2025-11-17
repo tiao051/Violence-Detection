@@ -39,6 +39,7 @@ class CameraService {
     }
   }
 
+  /// đéo xài được
   /// Fetches the stream URL for a specific camera from its document.
   Future<String> getStreamUrl(String cameraId) async {
     print("CameraService: Getting stream URL for camera $cameraId");

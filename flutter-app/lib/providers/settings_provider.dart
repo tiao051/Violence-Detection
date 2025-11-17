@@ -42,15 +42,15 @@ class SettingsProvider with ChangeNotifier {
       if (json != null) {
         final decoded = jsonDecode(json) as Map<String, dynamic>;
         _settings = SettingsModel.fromJson(decoded);
-        print('✅ Settings loaded from storage');
+        print('Settings loaded from storage');
       } else {
         _settings = SettingsModel.defaults();
-        print('📝 Using default settings (none saved yet)');
+        print('Using default settings (none saved yet)');
       }
     } catch (e) {
       _error = e.toString();
       _settings = SettingsModel.defaults();
-      print('❌ Failed to load settings: $e');
+      print('Failed to load settings: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -56,7 +56,6 @@ class EventService {
   }
   
   /// TEST RULE: Updates an event's 'viewed' status
-  /// (ĐÃ XÓA CODE DEBUG)
   Future<void> markEventAsViewed(String eventId) async {
     print("EventService: Marking event $eventId as viewed (Firestore)");
     
@@ -68,7 +67,7 @@ class EventService {
     try {
       // Attempt the update
       await _firestore.collection('events').doc(eventId).update({
-        'viewed': true, // <--- CỐ TÌNH GÕ SAI
+        'viewed': true, 
       });
       
       print("EventService: Event $eventId 'viewed' status updated.");
