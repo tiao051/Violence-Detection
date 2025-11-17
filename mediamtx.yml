@@ -1,0 +1,18 @@
+logLevel: info
+logDestinations: [stdout]
+
+rtsp:
+  protocols: [tcp, udp]
+  ports: [8554]
+
+hls:
+  address: 0.0.0.0:8888
+
+paths:
+  cam1: {}
+  cam2: {}
+  cam3: {}
+  cam4: {}
+
+
+

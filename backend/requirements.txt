@@ -17,6 +17,13 @@ aioredis==2.0.1
 opencv-python-headless==4.8.1.78
 numpy==1.26.2
 
+# ML/AI
+torch==2.1.2
+torchvision==0.16.2
+ultralytics==8.0.238
+onnx==1.14.1
+onnxruntime==1.17.0
+
 # Dependency Injection
 dependency-injector==4.41.0
 
