@@ -34,8 +34,8 @@ export const CameraGrid: React.FC<CameraGridProps> = ({ threats }: CameraGridPro
         const hls = new HLS({
           debug: false,
           enableWorker: true,
-          maxBufferSize: 60 * 1000 * 1000, // 60MB
-          maxBufferLength: 30,
+          lowLatencyMode: true,
+          backBufferLength: 90,
         });
 
         hls.loadSource(getHlsUrl(cameraId));
@@ -47,7 +47,9 @@ export const CameraGrid: React.FC<CameraGridProps> = ({ threats }: CameraGridPro
         });
 
         hls.on(HLS.Events.ERROR, (_, data) => {
-          console.error(`HLS error for ${cameraId}:`, data);
+          if (data.fatal) {
+            console.error(`HLS fatal error for ${cameraId}:`, data);
+          }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Safari native HLS support
@@ -82,7 +84,7 @@ export const CameraGrid: React.FC<CameraGridProps> = ({ threats }: CameraGridPro
             className="w-full h-full object-cover"
             autoPlay
             muted
-            controls
+            playsInline
           />
 
           {/* Detection Overlay */}
