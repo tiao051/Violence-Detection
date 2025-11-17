@@ -2,41 +2,70 @@
  * DetectionOverlay Component - Renders real-time threat status on video feed.
  */
 
-import React, { useEffect, useRef } from 'react';
-import { CameraStatus } from '../types/detection';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { ICameraStatus } from '../types/detection';
 
-interface DetectionOverlayProps {
+interface IDetectionOverlayProps {
   cameraId: string;
-  threat?: CameraStatus;
+  threat?: ICameraStatus;
 }
 
-export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({ threat }: DetectionOverlayProps) => {
+interface ICanvasDrawConfig {
+  strokeColor: string;
+  fillColor: string;
+  lineWidth: number;
+  fontSize: string;
+  textPadding: { x: number; y: number };
+}
+
+const CANVAS_CONFIG: ICanvasDrawConfig = {
+  strokeColor: '#ef4444',
+  fillColor: '#ef4444',
+  lineWidth: 3,
+  fontSize: 'bold 16px Arial',
+  textPadding: { x: 10, y: 30 },
+};
+
+export const DetectionOverlay: React.FC<IDetectionOverlayProps> = ({ threat }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const clearCanvas = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number): void => {
+    ctx.clearRect(0, 0, width, height);
+  }, []);
+
+  const drawThreatBorder = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number): void => {
+    ctx.strokeStyle = CANVAS_CONFIG.strokeColor;
+    ctx.lineWidth = CANVAS_CONFIG.lineWidth;
+    ctx.strokeRect(0, 0, width, height);
+  }, []);
+
+  const drawConfidenceText = useCallback((ctx: CanvasRenderingContext2D, confidence: number): void => {
+    const text = `Confidence: ${(confidence * 100).toFixed(1)}%`;
+    ctx.fillStyle = CANVAS_CONFIG.fillColor;
+    ctx.font = CANVAS_CONFIG.fontSize;
+    ctx.fillText(text, CANVAS_CONFIG.textPadding.x, CANVAS_CONFIG.textPadding.y);
+  }, []);
+
   useEffect(() => {
-    if (!canvasRef.current || !threat) return;
-
     const canvas = canvasRef.current;
+    if (!canvas || !threat) {
+      return;
+    }
+
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    clearCanvas(ctx, canvas.width, canvas.height);
 
-    // Only draw if violence detected
-    if (!threat.violence) return;
+    if (!threat.violence) {
+      return;
+    }
 
-    // Draw threat border
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
-    // Draw confidence text
-    const text = `Confidence: ${(threat.confidence * 100).toFixed(1)}%`;
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(text, 10, 30);
-  }, [threat]);
+    drawThreatBorder(ctx, canvas.width, canvas.height);
+    drawConfidenceText(ctx, threat.confidence);
+  }, [threat, clearCanvas, drawThreatBorder, drawConfidenceText]);
 
   return (
     <canvas
