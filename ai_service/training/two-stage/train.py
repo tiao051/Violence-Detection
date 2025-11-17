@@ -59,7 +59,7 @@ class TrainConfig:
     scheduler_min_lr: float = 1e-8
     
     # Early stopping config
-    early_stopping_patience: int = 10  # Stop if no improvement for N epochs
+    early_stopping_patience: int = None  # Disabled
     
     # Augmentation config
     augmentation_config: AugmentationConfig = None
@@ -141,7 +141,6 @@ class Trainer:
         self.val_losses = []
         self.train_accs = []
         self.val_accs = []
-        self.epochs_without_improvement = 0  # For early stopping
     
     def _setup_logger(self) -> logging.Logger:
         """Setup logging to file and console."""
@@ -342,17 +341,8 @@ class Trainer:
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 self.best_epoch = epoch + 1
-                self.epochs_without_improvement = 0
                 self._save_model('best_model.pt')
-                self.logger.info(f"✓ Saved best model (val acc: {self.best_val_acc:.4f})")
-            else:
-                self.epochs_without_improvement += 1
-                
-                # Early stopping
-                if self.epochs_without_improvement >= self.config.early_stopping_patience:
-                    self.logger.info(f"\nEarly stopping at epoch {epoch+1} (no improvement for {self.config.early_stopping_patience} epochs)")
-                    self.logger.info(f"Best: {self.best_val_acc:.4f} at epoch {self.best_epoch}\n")
-                    break
+                self.logger.info(f"Saved best model (val acc: {self.best_val_acc:.4f})")
             
             self.logger.info("")
         
