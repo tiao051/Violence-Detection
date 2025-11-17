@@ -23,10 +23,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application code
 COPY . .
 
-# Create directory for ai_service (for model imports)
-# Note: ai_service will be mounted via docker-compose
-RUN mkdir -p /app/ai_service
-
 # Expose port
 EXPOSE 8000
 
