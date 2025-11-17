@@ -1,12 +1,4 @@
-logLevel: info
-logDestinations: [stdout]
-
-rtsp:
-  protocols: [tcp, udp]
-  ports: [8554]
-
-hls:
-  address: 0.0.0.0:8888
+# Empty config - MediaMTX will use all default settings
 
 paths:
   cam1: {}
