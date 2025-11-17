@@ -74,7 +74,7 @@ async def startup() -> None:
         else:
             try:
                 inference_service.initialize(model_path, inference_device, confidence_threshold)
-                logger.info(f"✅ Violence detection model loaded successfully (device: {inference_device})")
+                logger.info(f"Violence detection model loaded successfully (device: {inference_device})")
             except Exception as e:
                 logger.error(f"Failed to load violence detection model: {e}", exc_info=True)
                 # Continue anyway, inference will fail gracefully
