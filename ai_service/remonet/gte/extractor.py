@@ -68,9 +68,8 @@ class TemporalExcitation(nn.Module):
         if q.dim() == 1:
             q = q.unsqueeze(0)  # (1, temporal_dim)
         
-        # FC -> ReLU -> Dropout -> FC -> Sigmoid
+        # FC -> ReLU -> FC -> Sigmoid (no dropout - layer nhỏ, đã có weight_decay)
         h = self.relu(self.fc1(q))
-        h = nn.functional.dropout(h, p=0.3, training=self.training)
         E = self.sigmoid(self.fc2(h))
         
         # Reshape back to original shape
@@ -126,8 +125,8 @@ class GTEExtractor(nn.Module):
             reduction_factor=2
         )
         
-        # Dropout for regularization (critical for small datasets)
-        self.dropout = nn.Dropout(0.5)
+        # Light dropout for regularization (weight_decay=0.01 đã mạnh rồi)
+        self.dropout = nn.Dropout(0.2)
         
         # Classification head - FC layer for Violence/No Violence
         self.classifier = nn.Linear(num_channels, num_classes)
@@ -290,8 +289,9 @@ class GTEExtractor(nn.Module):
         # Step 5: Temporal Aggregation
         F = self.temporal_aggregation(S_prime)  # (C,)
         
-        # Step 5.5: Apply dropout for regularization
-        F = self.dropout(F)
+        # Step 5.5: Apply light dropout (only during training)
+        if self.training:
+            F = self.dropout(F)
         
         # Step 6: Classification
         logits = self.classifier(F)  # (num_classes,)
