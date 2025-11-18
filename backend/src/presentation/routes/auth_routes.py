@@ -222,7 +222,7 @@ def _verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
     """
     try:
         # Verify with Firebase Admin SDK
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=10)
         
         return {
             "uid": decoded_token.get("uid"),

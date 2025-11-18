@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:security_app/models/auth_model.dart';
+import 'package:security_app/config/app_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -418,19 +419,22 @@ class AuthService {
   ///   Map with 'access_token' and 'refresh_token'
   ///
   /// Throws Exception if backend verification fails
+  /// Exchanges Firebase ID token for backend JWT tokens
   Future<Map<String, String>> verifyFirebaseToken(String firebaseIdToken) async {
     try {
       print('AuthService: Exchanging Firebase token for JWT...');
+      
+      // FIX: Use AppConfig instead of hardcoded localhost
+      // This ensures we use the IP address loaded from .env
+      final uri = Uri.parse(AppConfig.authVerifyFirebaseUrl);
 
-      // TODO: Replace with actual backend URL from environment/config
-      const String backendUrl = 'http://localhost:8000';  // Dev only
-      final uri = Uri.parse('$backendUrl/api/v1/auth/verify-firebase');
+      print('AuthService: Connecting to verification endpoint: $uri'); // Debug log
 
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'firebase_token': firebaseIdToken}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30)); // Increased timeout for network operations
 
       print('AuthService: Backend response status: ${response.statusCode}');
 

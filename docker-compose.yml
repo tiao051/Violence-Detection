@@ -36,8 +36,11 @@ services:
       MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+
+      JWT_SECRET_KEY: "jwtsecretkey"
+
     ports:
-      - "8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       - ./backend:/app
       - ./ai_service:/app/ai_service
@@ -55,10 +58,10 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: rtsp-server
     ports:
-      - "8554:8554"        # RTSP
-      - "8888:8888"        # HLS
-      - "8889:8889"        # WebRTC HTTP
-      - "8189:8189/udp"    # WebRTC ICE/UDP
+      - "0.0.0.0:8554:8554"        # RTSP
+      - "0.0.0.0:8888:8888"        # HLS
+      - "0.0.0.0:8889:8889"        # WebRTC HTTP
+      - "0.0.0.0:8189:8189/udp"    # WebRTC ICE/UDP
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     environment:
@@ -76,7 +79,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -90,7 +92,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -104,7 +105,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -118,7 +118,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network

@@ -25,6 +25,7 @@ from src.infrastructure.inference import get_inference_service
 from src.infrastructure.websocket import get_threat_broadcaster
 from src.presentation.routes import threat_router
 from src.presentation.routes import auth_router
+from src.presentation.routes import camera_routes
 
 # Setup logging
 setup_logging()
@@ -174,6 +175,9 @@ app.include_router(threat_router)
 
 # Register authentication routes
 app.include_router(auth_router)
+
+# Register camera management routes
+app.include_router(camera_routes.router, prefix="/api/v1")
 
 # Mount static files for frontend (React build output)
 # This serves the React app from /

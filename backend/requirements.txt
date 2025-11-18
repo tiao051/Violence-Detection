@@ -5,7 +5,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 
 # Authentication & JWT
-PyJWT==2.8.1
+PyJWT==2.8.0
 python-jose[cryptography]==3.3.0
 requests==2.31.0
 firebase-admin==6.4.0
