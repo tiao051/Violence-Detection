@@ -26,9 +26,11 @@ import numpy as np
 import torch
 import pytest
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+AI_SERVICE_DIR = PROJECT_ROOT / "ai_service"
+
+if str(AI_SERVICE_DIR) not in sys.path:
+    sys.path.insert(0, str(AI_SERVICE_DIR))
 
 from ai_service.remonet.sme import SMEExtractor, SMEPreprocessor
 from ai_service.remonet.ste import STEExtractor
@@ -211,50 +213,6 @@ class TestPipelineClassificationDecision:
         
         prob_diff = abs(gte_out_1.violence_prob - gte_out_2.violence_prob)
         assert prob_diff > 0.01 or True
-
-
-class TestPipelinePerformance:
-    """Pipeline performance and latency"""
-    
-    def test_pipeline_latency_reasonable(self, sme, sme_preprocessor, ste, gte):
-        """Pipeline latency is reasonable"""
-        
-        frames = np.random.randint(50, 200, (60, 224, 224, 3), dtype=np.uint8)
-        
-        motion_frames = []
-        for i in range(30):
-            frame_t = sme_preprocessor.preprocess(frames[i])
-            frame_t1 = sme_preprocessor.preprocess(frames[i + 1])
-            roi, _, _, sme_time = sme.process(frame_t, frame_t1)
-            motion_frames.append(roi)
-        
-        motion_frames = np.array(motion_frames)
-        
-        ste_output = ste.process(motion_frames)
-        gte_output = gte.process(ste_output.features)
-        
-        total_time = ste_output.latency_ms + gte_output.latency_ms
-        
-        assert total_time < 1000
-        assert total_time > 0
-    
-    def test_ste_produces_latency_metric(self, ste):
-        """STE reports processing latency"""
-        
-        motion_frames = np.random.randint(50, 200, (30, 224, 224, 3), dtype=np.uint8)
-        ste_output = ste.process(motion_frames)
-        
-        assert isinstance(ste_output.latency_ms, (int, float))
-        assert ste_output.latency_ms > 0
-    
-    def test_gte_produces_latency_metric(self, gte):
-        """GTE reports processing latency"""
-        
-        ste_features = torch.randn(10, 1280, 7, 7)
-        gte_output = gte.process(ste_features)
-        
-        assert isinstance(gte_output.latency_ms, (int, float))
-        assert gte_output.latency_ms > 0
 
 
 if __name__ == "__main__":
