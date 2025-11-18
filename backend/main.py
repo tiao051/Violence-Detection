@@ -255,32 +255,6 @@ async def get_stats():
     }
 
 
-@app.get("/hls/{camera_id}/index.m3u8")
-async def get_hls_playlist(camera_id: str):
-    """Proxy HLS playlist from MediaMTX."""
-    import httpx
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://rtsp-server:8888/{camera_id}/index.m3u8")
-            return Response(content=response.content, media_type="application/vnd.apple.mpegurl")
-    except Exception as e:
-        logger.error(f"Failed to get HLS playlist: {e}")
-        raise
-
-
-@app.get("/hls/{camera_id}/{segment}")
-async def get_hls_segment(camera_id: str, segment: str):
-    """Proxy HLS segment from MediaMTX."""
-    import httpx
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://rtsp-server:8888/{camera_id}/{segment}")
-            return Response(content=response.content, media_type="video/mp2t")
-    except Exception as e:
-        logger.error(f"Failed to get HLS segment: {e}")
-        raise
-
-
 @app.websocket("/ws/threats")
 async def websocket_threats(websocket: WebSocket):
     """

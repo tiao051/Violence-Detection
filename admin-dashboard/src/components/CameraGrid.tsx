@@ -1,5 +1,5 @@
 /**
- * CameraGrid Component - Displays 2x2 grid of camera feeds with detection overlays.
+` * CameraGrid Component - Displays 2x2 grid of camera feeds with detection overlays.
  * Uses WebRTC (WHEP) for low-latency streaming (< 1s).
  * Features: Double-click for fullscreen, zoom, and pan controls.
  */
