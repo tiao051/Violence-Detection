@@ -66,6 +66,7 @@ out/
 .env
 .env.local
 .env.*.local
+backend/firebase-service-account.json
 
 # Test data outputs
 ai_service/utils/test_data/outputs/*
