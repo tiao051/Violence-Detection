@@ -45,7 +45,7 @@ from remonet.gte.extractor import GTEExtractor
 class TrainConfig:
     """Training configuration"""
     epochs: int = 100
-    batch_size: int = 2
+    batch_size: int = 8
     learning_rate: float = 1e-3
     weight_decay: float = 1e-2
     adam_epsilon: float = 1e-9
@@ -58,9 +58,6 @@ class TrainConfig:
     scheduler_max_lr: float = 1e-3
     scheduler_min_lr: float = 1e-8
     
-    # Early stopping config
-    early_stopping_patience: int = None  # Disabled
-    
     # Augmentation config
     augmentation_config: AugmentationConfig = None
     
@@ -71,6 +68,7 @@ class TrainConfig:
 
 
 class Trainer:
+    
     """Trainer for violence detection model."""
     
     def __init__(self, config: TrainConfig):

@@ -33,13 +33,12 @@ logger = logging.getLogger(__name__)
 class AugmentationConfig:
     """Data augmentation configuration."""
     enable_augmentation: bool = True
-    crop_size: int = 200  # Random crop from 224x224 to 200x200
-    flip_prob: float = 0.5  # Horizontal flip probability
-    color_brightness: float = 0.3  # Color brightness jitter
-    color_contrast: float = 0.3  # Color contrast jitter
-    color_saturation: float = 0.3  # Color saturation jitter
-    rotation_degrees: int = 10  # Rotation range in degrees
-    temporal_jitter_prob: float = 0.3  # Probability to apply temporal jitter
+    crop_size: int = 212  # Random crop from 224x224 to 212x212 (lighter)
+    flip_prob: float = 0.3  # Horizontal flip probability (30%)
+    color_brightness: float = 0.2  # Color brightness jitter (20%)
+    color_contrast: float = 0.2  # Color contrast jitter (20%)
+    color_saturation: float = 0.2  # Color saturation jitter (20%)
+    temporal_jitter_prob: float = 0.15  # Probability to apply temporal jitter (15%)
     temporal_jitter_range: int = 2  # Max frames to shift (+/- range)
 
 
@@ -77,21 +76,17 @@ class FrameAugmentor:
         if random.random() < self.config.temporal_jitter_prob:
             frames = self._temporal_jitter(frames)
         
-        # Random crop
-        if random.random() > 0.3:  # 70% chance to crop
+        # Random crop (35% = 30-40% range)
+        if random.random() < 0.35:
             frames = self._random_crop(frames)
         
-        # Random horizontal flip (with high probability, 50%)
+        # Random horizontal flip (30%)
         if random.random() < self.config.flip_prob:
             frames = self._horizontal_flip(frames)
         
-        # Random color jitter
-        if random.random() > 0.4:  # 60% chance to jitter colors
+        # Random color jitter (25% = 20-30% range)
+        if random.random() < 0.25:
             frames = self._color_jitter(frames)
-        
-        # Random rotation (with small probability)
-        if random.random() < 0.3:  # 30% chance to rotate
-            frames = self._rotate(frames)
         
         return frames
     
@@ -146,28 +141,6 @@ class FrameAugmentor:
         # Clip to valid range and convert back to uint8
         frames_jittered = np.clip(frames_jittered, 0, 255).astype(np.uint8)
         return frames_jittered
-    
-    def _rotate(self, frames: np.ndarray) -> np.ndarray:
-        """Apply random rotation to frames."""
-        angle = random.uniform(-self.config.rotation_degrees, self.config.rotation_degrees)
-        H, W = frames.shape[1], frames.shape[2]
-        center = (W // 2, H // 2)
-        
-        # Get rotation matrix
-        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        
-        # Apply rotation to each frame
-        rotated_frames = []
-        for frame in frames:
-            rotated = cv2.warpAffine(
-                frame, 
-                rotation_matrix, 
-                (W, H),
-                borderMode=cv2.BORDER_REFLECT_101
-            )
-            rotated_frames.append(rotated)
-        
-        return np.array(rotated_frames)
     
     def _temporal_jitter(self, frames: np.ndarray) -> np.ndarray:
         """Apply temporal jitter by randomly shifting frame indices.
