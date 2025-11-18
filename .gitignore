@@ -68,7 +68,7 @@ out/
 .env.*.local
 
 # Test data outputs
-utils/test_data/outputs/*
+ai_service/utils/test_data/outputs/*
 !.gitkeep
 
 # Dataset

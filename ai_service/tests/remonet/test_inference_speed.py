@@ -30,7 +30,7 @@ from ai_service.inference.inference_model import ViolenceDetectionModel, Inferen
 @pytest.fixture
 def test_frames_dir():
     """Get test frames directory."""
-    frames_dir = PROJECT_ROOT / "utils" / "test_data" / "inputs" / "frames"
+    frames_dir = PROJECT_ROOT / "ai_service" / "utils" / "test_data" / "inputs" / "frames"
     if not frames_dir.exists():
         pytest.skip(f"Test frames directory not found: {frames_dir}")
     return frames_dir

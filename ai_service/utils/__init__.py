@@ -1,7 +1,7 @@
 """
-Utility functions for violence detection
+Utility functions and modules for violence detection
 """
 
-from .visualization import draw_detections
+from .visualization import draw_detections, DatasetVisualizer
 
-__all__ = ['draw_detections']
+__all__ = ['draw_detections', 'DatasetVisualizer']

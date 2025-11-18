@@ -74,7 +74,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
-      - ./utils/test_data/inputs/videos:/videos
+      - ./ai_service/utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
     restart: on-failure
     networks:
@@ -88,7 +88,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
-      - ./utils/test_data/inputs/videos:/videos
+      - ./ai_service/utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
     restart: on-failure
     networks:
@@ -102,7 +102,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
-      - ./utils/test_data/inputs/videos:/videos
+      - ./ai_service/utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
     restart: on-failure
     networks:
@@ -116,7 +116,7 @@ services:
       -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
-      - ./utils/test_data/inputs/videos:/videos
+      - ./ai_service/utils/test_data/inputs/videos:/videos
     depends_on: [rtsp-server]
     restart: on-failure
     networks:
