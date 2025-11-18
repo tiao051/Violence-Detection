@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; 
@@ -21,6 +22,9 @@ import 'package:security_app/theme/app_theme.dart';
 void main() async {
   // Initialize Flutter bindings before async operations in main()
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables from .env file
+  await dotenv.load(fileName: ".env");
   
   // Initialize Firebase before using any Firebase services
   await Firebase.initializeApp(

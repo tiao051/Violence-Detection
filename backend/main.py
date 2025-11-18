@@ -24,6 +24,7 @@ from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
 from src.infrastructure.websocket import get_threat_broadcaster
 from src.presentation.routes import threat_router
+from src.presentation.routes import auth_router
 
 # Setup logging
 setup_logging()
@@ -171,6 +172,9 @@ app.add_middleware(
 # Register threat API routes
 app.include_router(threat_router)
 
+# Register authentication routes
+app.include_router(auth_router)
+
 # Mount static files for frontend (React build output)
 # This serves the React app from /
 # import os
@@ -260,25 +264,34 @@ async def websocket_threats(websocket: WebSocket):
     """
     WebSocket endpoint for real-time threat detection alerts.
     
-    Clients connect here to receive live threat detection updates
-    as they occur across all 4 cameras.
+    Clients must authenticate with a valid JWT token. Only threats from cameras
+    assigned to the user are broadcast to their connection.
+    
+    Authentication: Pass JWT token via query parameter ?token={jwt_token}
     """
     global threat_broadcaster
     
+    # Extract JWT token from query parameters
+    token = websocket.query_params.get("token")
+    
     broadcaster = get_threat_broadcaster()
-    await broadcaster.connect(websocket)
+    auth_ws = await broadcaster.connect(websocket, token)
+    
+    if not auth_ws:
+        # Connection was rejected during authentication
+        return
     
     try:
-        # Keep connection alive - threat updates sent via broadcast_status when detection occurs
+        # Keep connection alive - threat updates sent via broadcast_threat when detection occurs
         while True:
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
-        broadcaster.disconnect(websocket)
+        broadcaster.disconnect(auth_ws)
         logger.info("WebSocket disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
         try:
-            broadcaster.disconnect(websocket)
+            broadcaster.disconnect(auth_ws)
         except:
             pass
 

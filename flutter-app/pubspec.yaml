@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # For loading environment variables from .env file
+  flutter_dotenv: ^5.1.0
+
   # For playing video streams from network (RTSP/HTTP)
   flutter_vlc_player: ^7.4.1
 
@@ -43,6 +46,9 @@ dependencies:
 
   # For professional video player controls
   chewie: ^1.8.0
+
+  # For WebRTC peer-to-peer video streaming
+  flutter_webrtc: ^0.9.48
 
   # For internationalization and localization
   intl: ^0.19.0

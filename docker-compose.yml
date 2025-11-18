@@ -41,6 +41,7 @@ services:
     volumes:
       - ./backend:/app
       - ./ai_service:/app/ai_service
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json
       - /app/__pycache__
     depends_on:
       redis:

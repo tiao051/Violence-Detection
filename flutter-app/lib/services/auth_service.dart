@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:security_app/models/auth_model.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 /// Service layer for handling authentication API calls.
 class AuthService {
@@ -11,37 +13,6 @@ class AuthService {
   // Firestore instance for storing user data
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Simulates login API call with hardcoded credentials for development.
-  ///
-  /// Uses a 2-second delay to mimic real network latency.
-  /// Accepts only 'admin'/'admin' credentials until backend is integrated.
-  ///
-  /// Returns a mock JWT token on success.
-  /// Throws [Exception] on invalid credentials.
-  Future<String> login(String email, String password) async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (email == 'admin' && password == 'admin') {
-      print("AuthService: Login successful, returning fake token.");
-      return 'fake_jwt_token_1234567890';
-    } else {
-      print("AuthService: Invalid credentials.");
-      throw Exception('Invalid email or password');
-    }
-  }
-
-  /// Initiates Google Sign-In via Firebase Authentication.
-  ///
-  /// Flow:
-  /// 1. GoogleSignIn SDK shows Google account picker
-  /// 2. User selects account
-  /// 3. Firebase receives Google credential
-  /// 4. Firebase verifies with Google and creates/updates user
-  /// 5. Returns Firebase ID token (JWT from Firebase)
-  /// 6. Token is verified by backend at POST /auth/firebase-verify
-  ///
-  /// Returns the Firebase ID token to be sent to backend for verification.
-  /// Throws [Exception] if sign-in fails or user cancels.
   Future<String> signInWithGoogle() async {
     try {
       print('AuthService: Starting Google Sign-In via Firebase...');
@@ -124,8 +95,9 @@ class AuthService {
   /// 1. Create user with email/password in Firebase Auth
   /// 2. Update display name in Firebase Auth
   /// 3. Save user data to Firestore (users/{uid})
+  /// 4. Get Firebase ID token
   ///
-  /// Returns the Firebase user's UID on success
+  /// Returns the Firebase ID token (to be exchanged for JWT)
   /// Throws [Exception] if email already exists or validation fails
   Future<String> signUpWithEmail({
     required String email,
@@ -166,6 +138,15 @@ class AuthService {
 
       await _firestore.collection('users').doc(user.uid).set(authModel.toJson());
       print('AuthService: User data saved to Firestore');
+
+      // Step 4: Get Firebase ID token
+      final String? idToken = await user.getIdToken();
+      if (idToken == null) {
+        throw Exception('Failed to get Firebase ID token');
+      }
+
+      print('AuthService: Firebase ID token retrieved');
+      return idToken;
 
       return user.uid;
     } on FirebaseAuthException catch (e) {
@@ -211,7 +192,15 @@ class AuthService {
       }
 
       print('AuthService: Login successful: ${user.uid}');
-      return user.uid;
+
+      // Get Firebase ID token
+      final String? idToken = await user.getIdToken();
+      if (idToken == null) {
+        throw Exception('Failed to get Firebase ID token');
+      }
+
+      print('AuthService: Firebase ID token retrieved');
+      return idToken;
     } on FirebaseAuthException catch (e) {
       print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
       if (e.code == 'user-not-found') {
@@ -414,6 +403,58 @@ class AuthService {
     } catch (e) {
       print('AuthService: Send password reset email error: $e');
       throw Exception('Failed to send password reset email: $e');
+    }
+  }
+
+  /// Exchanges Firebase ID token for backend JWT tokens
+  ///
+  /// Calls backend POST /api/v1/auth/verify-firebase to exchange
+  /// Firebase ID token for JWT (access + refresh).
+  ///
+  /// Args:
+  ///   firebaseIdToken: Firebase ID token from Firebase Auth
+  ///
+  /// Returns:
+  ///   Map with 'access_token' and 'refresh_token'
+  ///
+  /// Throws Exception if backend verification fails
+  Future<Map<String, String>> verifyFirebaseToken(String firebaseIdToken) async {
+    try {
+      print('AuthService: Exchanging Firebase token for JWT...');
+
+      // TODO: Replace with actual backend URL from environment/config
+      const String backendUrl = 'http://localhost:8000';  // Dev only
+      final uri = Uri.parse('$backendUrl/api/v1/auth/verify-firebase');
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'firebase_token': firebaseIdToken}),
+      ).timeout(const Duration(seconds: 10));
+
+      print('AuthService: Backend response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['access_token'] == null || data['refresh_token'] == null) {
+          throw Exception('Invalid response: missing tokens');
+        }
+
+        print('AuthService: JWT tokens received successfully');
+
+        return {
+          'access_token': data['access_token'],
+          'refresh_token': data['refresh_token'],
+        };
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMsg = errorData['detail'] ?? 'Backend verification failed';
+        throw Exception('Backend error: $errorMsg');
+      }
+    } catch (e) {
+      print('AuthService: Token verification error: $e');
+      throw Exception('Failed to verify Firebase token: $e');
     }
   }
 
