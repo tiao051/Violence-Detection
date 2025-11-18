@@ -28,7 +28,7 @@ class _CameraTabState extends State<CameraTab> {
       final accessToken = authProvider.accessToken;
       
       if (accessToken == null || accessToken.isEmpty) {
-        context.read<CameraProvider>().errorMessage = 'Not authenticated';
+        context.read<CameraProvider>().setErrorMessage('Not authenticated');
         return;
       }
       

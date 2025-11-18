@@ -34,7 +34,7 @@ class WebRTCService {
   
   // Streams for state management
   final _connectionStateController = StreamController<RTCIceConnectionState>.broadcast();
-  final _statsController = StreamController<RTCStatsReport>.broadcast();
+  final _statsController = StreamController<List<dynamic>>.broadcast();
   
   // Callbacks
   Function(MediaStream)? onRemoteStreamReceived;
@@ -42,7 +42,7 @@ class WebRTCService {
   Function()? onConnectionFailed;
   
   Stream<RTCIceConnectionState> get connectionState => _connectionStateController.stream;
-  Stream<RTCStatsReport> get stats => _statsController.stream;
+  Stream<List<dynamic>> get stats => _statsController.stream;
   
   WebRTCService({required this.config});
 
@@ -72,9 +72,11 @@ class WebRTCService {
     
     try {
       // Create peer connection with ICE servers
-      final peerConnectionFactory = RTCPeerConnection(
+      final peerConnectionFactory = await createPeerConnection(
         {
           'iceServers': config.iceServers,
+        },
+        {
           'sdpSemantics': 'unified-plan',
         },
       );
@@ -83,8 +85,10 @@ class WebRTCService {
       
       // Add transceiver for receiving video only
       await _peerConnection!.addTransceiver(
-        RTCRtpMediaType.RTCRtpMediaTypeVideo,
-        RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(
+          direction: TransceiverDirection.RecvOnly,
+        ),
       );
       
       // Handle incoming remote stream
@@ -98,8 +102,7 @@ class WebRTCService {
       _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
         print('[WebRTC] Peer connection state: $state');
         
-        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected ||
-            state == RTCPeerConnectionState.RTCPeerConnectionStateCompleted) {
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           _connectionAttempts = 0; // Reset retry counter on success
         }
       };
@@ -203,10 +206,10 @@ class WebRTCService {
     
     try {
       final report = await _peerConnection!.getStats();
-      _statsController.add(report);
+      _statsController.add(report as List<dynamic>);
       
       // Log useful stats
-      for (var stat in report.stats) {
+      for (var stat in report) {
         if (stat.type == 'inbound-rtp' && stat.values['mediaType'] == 'video') {
           print('[WebRTC Stats] '
               'Bytes received: ${stat.values['bytesReceived']}, '

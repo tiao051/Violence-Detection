@@ -98,4 +98,9 @@ class CameraProvider with ChangeNotifier {
     _searchQuery = '';
     notifyListeners();
   }
+
+  void setErrorMessage(String message) {
+    _errorMessage = message;
+    notifyListeners();
+  }
 }
