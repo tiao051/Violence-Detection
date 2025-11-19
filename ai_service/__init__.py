@@ -1,14 +1,9 @@
 """
 Violence Detection AI Service
 
-A unified YOLO-based approach for violence detection in videos and images.
-Streamlined pipeline using YOLOv8 via RealtimeDetector.
+Using 3-stage RemoNet (SME->STE->GTE) for violence detection in videos.
+Lightweight and optimized for real-time inference.
 """
 
-from .detection import PyTorchDetector, ONNXYOLOInference
-
 __version__ = "2.0.0"
-__all__ = [
-    'PyTorchDetector',
-    'ONNXYOLOInference',
-]
+__all__ = []
