@@ -1,0 +1,54 @@
+/* Header - Ultra Minimalist */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding: 0 var(--space-lg);
+  border-bottom: var(--border-thin);
+  background-color: var(--color-bg-primary);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-light);
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.header-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: var(--border-thin);
+  border-radius: var(--border-radius-thin);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-fast);
+}
+
+.header-icon-button:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.header-icon-button:active {
+  border-color: var(--color-text-primary);
+}
