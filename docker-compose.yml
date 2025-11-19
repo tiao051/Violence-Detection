@@ -28,7 +28,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RTSP_BASE_URL: rtsp://rtsp-server:8554
       APP_ENV: ${APP_ENV:-development}
-      JWT_SECRET_KEY: "qMS6N67iLTsSmkyHsPQjo5Y_hvVPt09u7cT_AQm-DAk"
+      # JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your_jwt_secret_key}
       DEBUG: ${DEBUG:-true}
       API_V1_PREFIX: /api/v1
       HOST: 0.0.0.0
