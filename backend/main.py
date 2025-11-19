@@ -14,7 +14,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi.staticfiles import StaticFiles
-from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 
 from src.core.config import settings
@@ -22,8 +21,7 @@ from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
-from src.infrastructure.websocket import get_threat_broadcaster
-from src.presentation.routes import threat_router
+from src.presentation.routes.websocket_routes import router as websocket_router
 
 # Setup logging
 setup_logging()
@@ -34,7 +32,6 @@ redis_client: redis.Redis = None
 redis_producer: RedisStreamProducer = None
 camera_workers: list = []
 startup_time: float = 0
-threat_broadcaster = None
 
 
 @asynccontextmanager
@@ -44,6 +41,11 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up application...")
     await startup()
+    
+    # Set redis_producer in app state
+    app.state.redis_producer = redis_producer
+    logger.info("App state initialized with redis_producer")
+    
     yield
 
     # Shutdown
@@ -53,15 +55,11 @@ async def lifespan(app: FastAPI):
 
 async def startup() -> None:
     """Initialize application on startup."""
-    global redis_client, redis_producer, camera_workers, startup_time, threat_broadcaster
+    global redis_client, redis_producer, camera_workers, startup_time
 
     startup_time = time.time()
 
     try:
-        # Initialize threat broadcaster
-        threat_broadcaster = get_threat_broadcaster()
-        logger.info("Threat broadcaster initialized")
-        
         # Load violence detection model
         logger.info("Loading violence detection model...")
         inference_service = get_inference_service()
@@ -88,6 +86,12 @@ async def startup() -> None:
         # Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
 
+        # Set app state for WebSocket routes
+        from fastapi import FastAPI as FastAPIType
+        app_instance = None  # Will be set after app creation
+        
+        logger.info("Redis producer initialized")
+
         # Start RTSP camera workers if enabled
         if settings.rtsp_enabled:
             logger.info(f"Starting {len(settings.rtsp_cameras)} RTSP camera workers...")
@@ -104,7 +108,6 @@ async def startup() -> None:
                     sample_rate=settings.rtsp_sample_rate,
                     frame_width=settings.rtsp_frame_width,
                     frame_height=settings.rtsp_frame_height,
-                    jpeg_quality=settings.rtsp_jpeg_quality,
                 )
 
                 workers_to_start.append(worker)
@@ -159,6 +162,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Set redis_producer in app state after app creation (for WebSocket routes)
+app.state.redis_producer = None  # Will be set in startup
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -168,8 +174,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register threat API routes
-app.include_router(threat_router)
+# Register WebSocket routes
+app.include_router(websocket_router)
 
 # Mount static files for frontend (React build output)
 # This serves the React app from /
@@ -253,34 +259,6 @@ async def get_stats():
         "workers": workers_data,
         "redis_frames": redis_frames
     }
-
-
-@app.websocket("/ws/threats")
-async def websocket_threats(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time threat detection alerts.
-    
-    Clients connect here to receive live threat detection updates
-    as they occur across all 4 cameras.
-    """
-    global threat_broadcaster
-    
-    broadcaster = get_threat_broadcaster()
-    await broadcaster.connect(websocket)
-    
-    try:
-        # Keep connection alive - threat updates sent via broadcast_status when detection occurs
-        while True:
-            await asyncio.sleep(1.0)
-    except WebSocketDisconnect:
-        broadcaster.disconnect(websocket)
-        logger.info("WebSocket disconnected")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}", exc_info=True)
-        try:
-            broadcaster.disconnect(websocket)
-        except:
-            pass
 
 
 # TODO: Register API routers for camera and stream endpoints
