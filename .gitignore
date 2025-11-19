@@ -70,6 +70,7 @@ out/
 # Test data outputs
 ai_service/utils/test_data/outputs/*
 !.gitkeep
+backend/firebase-service-account.json
 
 # Dataset
 dataset/
