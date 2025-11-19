@@ -83,12 +83,7 @@ class InferenceService:
             frame: Input frame (BGR, uint8)
         
         Returns:
-            Dict with detection results:
-                - violence: bool
-                - confidence: float (0-1)
-                - class_id: int (0=Violence, 1=NonViolence)
-                - buffer_size: int
-                - latency_ms: float (inference time)
+            Dict with detection results, or None if buffer not full
         """
         if self.model is None:
             logger.warning("Model not initialized")
@@ -104,8 +99,19 @@ class InferenceService:
             # Add frame to buffer
             self.model.add_frame(frame)
             
-            # Predict if buffer is full
+            # Predict only if buffer is full (else returns None)
             result = self.model.predict()
+            
+            # If buffer not full yet, return dummy result
+            if result is None:
+                return {
+                    'violence': False,
+                    'confidence': 0.0,
+                    'class_id': 1,
+                    'buffer_size': len(self.model.frame_buffer),
+                    'latency_ms': 0.0
+                }
+            
             return result
         
         except Exception as e:
