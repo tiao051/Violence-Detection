@@ -15,7 +15,9 @@ dependencies:
   flutter_dotenv: ^5.1.0
 
   # For playing video streams from network (RTSP/HTTP)
-  flutter_vlc_player: ^7.4.1
+  media_kit: ^1.2.2
+  media_kit_video: ^1.2.4
+  media_kit_libs_android_video: ^1.2.4
 
   # For state management
   provider: ^6.1.2

@@ -28,6 +28,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RTSP_BASE_URL: rtsp://rtsp-server:8554
       APP_ENV: ${APP_ENV:-development}
+      JWT_SECRET_KEY: "qMS6N67iLTsSmkyHsPQjo5Y_hvVPt09u7cT_AQm-DAk"
       DEBUG: ${DEBUG:-true}
       API_V1_PREFIX: /api/v1
       HOST: 0.0.0.0
@@ -37,10 +38,8 @@ services:
       INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
 
-      JWT_SECRET_KEY: "jwtsecretkey"
-
     ports:
-      - "0.0.0.0:8000:8000"
+      - "8000:8000"
     volumes:
       - ./backend:/app
       - ./ai_service:/app/ai_service
@@ -58,10 +57,10 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: rtsp-server
     ports:
-      - "0.0.0.0:8554:8554"        # RTSP
-      - "0.0.0.0:8888:8888"        # HLS
-      - "0.0.0.0:8889:8889"        # WebRTC HTTP
-      - "0.0.0.0:8189:8189/udp"    # WebRTC ICE/UDP
+      - "8554:8554"        # RTSP
+      - "8888:8888"        # HLS
+      - "8889:8889"        # WebRTC HTTP
+      - "8189:8189/udp"    # WebRTC ICE/UDP
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     environment:

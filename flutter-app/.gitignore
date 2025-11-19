@@ -80,3 +80,5 @@ GeneratedPluginRegistrant.swift
 # Windows build artifacts
 /windows/build/
 
+# Firebase configuration files
+firebase_options.dart

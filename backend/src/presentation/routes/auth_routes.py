@@ -41,10 +41,6 @@ if not firebase_admin._apps:  # Only initialize if not already initialized
         raise
 
 
-# ============================================================================
-# Request/Response Models
-# ============================================================================
-
 class FirebaseTokenRequest(BaseModel):
     """Request to verify Firebase ID token."""
     firebase_token: str
@@ -72,10 +68,6 @@ class CameraModel(BaseModel):
     stream_url: str
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
 def _get_user_owned_cameras(user_id: str) -> list[str]:
     """
     Get list of camera IDs owned by user.
@@ -95,6 +87,8 @@ def _get_user_owned_cameras(user_id: str) -> list[str]:
     mock_camera_owners = {
         "user_123": ["cam1", "cam2", "cam3"],
         "user_456": ["cam4", "cam5"],
+        
+        "H2399Gybu8TeslP8zyEyP4uhn0l2": ["cam1", "cam2"],
     }
     
     return mock_camera_owners.get(user_id, [])
@@ -120,14 +114,14 @@ def _get_camera_by_id(camera_id: str) -> Optional[Dict[str, Any]]:
             "id": "cam1",
             "name": "Front Gate",
             "location": "Entrance",
-            "stream_url": "http://mediamtx:8889/cam1",
+            "stream_url": "rtsp://localhost:8554/cam1",
             "owner_uid": "user_123",
         },
         "cam2": {
             "id": "cam2",
             "name": "Back Yard",
             "location": "Rear",
-            "stream_url": "http://mediamtx:8889/cam2",
+            "stream_url": "rtsp://localhost:8554/cam2",
             "owner_uid": "user_123",
         },
         "cam3": {

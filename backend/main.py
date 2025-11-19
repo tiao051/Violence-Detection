@@ -13,19 +13,13 @@ import redis.asyncio as redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi.staticfiles import StaticFiles
-from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
-
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
-from src.infrastructure.websocket import get_threat_broadcaster
-from src.presentation.routes import threat_router
+
 from src.presentation.routes import auth_router
-from src.presentation.routes import camera_routes
 
 # Setup logging
 setup_logging()
@@ -36,7 +30,6 @@ redis_client: redis.Redis = None
 redis_producer: RedisStreamProducer = None
 camera_workers: list = []
 startup_time: float = 0
-threat_broadcaster = None
 
 
 @asynccontextmanager
@@ -55,15 +48,11 @@ async def lifespan(app: FastAPI):
 
 async def startup() -> None:
     """Initialize application on startup."""
-    global redis_client, redis_producer, camera_workers, startup_time, threat_broadcaster
+    global redis_client, redis_producer, camera_workers, startup_time
 
     startup_time = time.time()
 
     try:
-        # Initialize threat broadcaster
-        threat_broadcaster = get_threat_broadcaster()
-        logger.info("Threat broadcaster initialized")
-        
         # Load violence detection model
         logger.info("Loading violence detection model...")
         inference_service = get_inference_service()
@@ -170,21 +159,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register threat API routes
-app.include_router(threat_router)
-
 # Register authentication routes
 app.include_router(auth_router)
-
-# Register camera management routes
-app.include_router(camera_routes.router, prefix="/api/v1")
-
-# Mount static files for frontend (React build output)
-# This serves the React app from /
-# import os
-# static_dir = os.path.join(os.path.dirname(__file__), "src/presentation/static")
-# if os.path.exists(static_dir):
-#     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
 @app.get("/")
@@ -263,41 +239,7 @@ async def get_stats():
     }
 
 
-@app.websocket("/ws/threats")
-async def websocket_threats(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time threat detection alerts.
-    
-    Clients must authenticate with a valid JWT token. Only threats from cameras
-    assigned to the user are broadcast to their connection.
-    
-    Authentication: Pass JWT token via query parameter ?token={jwt_token}
-    """
-    global threat_broadcaster
-    
-    # Extract JWT token from query parameters
-    token = websocket.query_params.get("token")
-    
-    broadcaster = get_threat_broadcaster()
-    auth_ws = await broadcaster.connect(websocket, token)
-    
-    if not auth_ws:
-        # Connection was rejected during authentication
-        return
-    
-    try:
-        # Keep connection alive - threat updates sent via broadcast_threat when detection occurs
-        while True:
-            await asyncio.sleep(1.0)
-    except WebSocketDisconnect:
-        broadcaster.disconnect(auth_ws)
-        logger.info("WebSocket disconnected")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}", exc_info=True)
-        try:
-            broadcaster.disconnect(auth_ws)
-        except:
-            pass
+
 
 
 # TODO: Register API routers for camera and stream endpoints

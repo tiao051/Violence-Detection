@@ -51,6 +51,8 @@ class CameraService {
           );
         }).toList();
 
+        print("List of cameras fetched: $cameras");
+
         print("CameraService: Found ${cameras.length} cameras.");
         return cameras;
       } else if (response.statusCode == 401) {

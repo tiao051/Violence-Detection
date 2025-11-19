@@ -18,10 +18,12 @@ import 'package:security_app/screens/settings_screen.dart';
 import 'package:security_app/screens/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:security_app/theme/app_theme.dart'; 
+import 'package:media_kit/media_kit.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized before any asynchronous operations.
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   print("--- BOOTSTRAP: STARTING INITIALIZATION ---");
 
