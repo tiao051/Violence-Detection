@@ -75,7 +75,7 @@ class InferenceService:
             logger.error(f"Failed to initialize InferenceService: {e}")
             raise
     
-    def detect_frame(self, frame: np.ndarray) -> Dict:
+    def detect_frame(self, frame: np.ndarray) -> Optional[Dict]:
         """
         Add frame and perform inference if buffer is full.
         
@@ -83,46 +83,22 @@ class InferenceService:
             frame: Input frame (BGR, uint8)
         
         Returns:
-            Dict with detection results, or None if buffer not full
+            Dict with detection results if buffer is full, else None
         """
         if self.model is None:
             logger.warning("Model not initialized")
-            return {
-                'violence': False,
-                'confidence': 0.0,
-                'class_id': 1,
-                'error': 'Model not initialized',
-                'latency_ms': 0.0
-            }
+            return None
         
         try:
             # Add frame to buffer
             self.model.add_frame(frame)
             
-            # Predict only if buffer is full (else returns None)
-            result = self.model.predict()
-            
-            # If buffer not full yet, return dummy result
-            if result is None:
-                return {
-                    'violence': False,
-                    'confidence': 0.0,
-                    'class_id': 1,
-                    'buffer_size': len(self.model.frame_buffer),
-                    'latency_ms': 0.0
-                }
-            
-            return result
+            # Predict only if buffer is full (returns None otherwise)
+            return self.model.predict()
         
         except Exception as e:
             logger.error(f"Detection error: {e}")
-            return {
-                'violence': False,
-                'confidence': 0.0,
-                'class_id': 1,
-                'error': str(e),
-                'latency_ms': 0.0
-            }
+            return None
     
     async def detect_frame_async(self, frame: np.ndarray) -> Dict:
         """
