@@ -84,10 +84,12 @@ class InferenceService:
         
         Returns:
             Dict with detection results if buffer is full, else None
+        
+        Raises:
+            RuntimeError: If model not initialized
         """
         if self.model is None:
-            logger.warning("Model not initialized")
-            return None
+            raise RuntimeError("Model not initialized. Call initialize() first.")
         
         try:
             # Add frame to buffer
@@ -98,7 +100,7 @@ class InferenceService:
         
         except Exception as e:
             logger.error(f"Detection error: {e}")
-            return None
+            raise
     
     async def detect_frame_async(self, frame: np.ndarray) -> Dict:
         """
