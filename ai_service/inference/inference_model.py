@@ -117,26 +117,16 @@ class ViolenceDetectionModel:
         if len(self.frame_buffer) > self.MAX_BUFFER_SIZE:
             self.frame_buffer.pop(0)
     
-    def predict(self) -> Dict:
+    def predict(self) -> Optional[Dict]:
         """
         Perform inference on buffered frames.
         
         Returns:
-            Dict with keys:
-                - violence: bool (True if violence detected)
-                - confidence: float (0-1)
-                - class_id: int (0=Violence, 1=NonViolence)
-                - latency_ms: float (inference time in ms)
+            Dict with detection result if buffer is full, else None
         """
-        # Need minimum frames for inference
+        # Skip if buffer not full
         if len(self.frame_buffer) < self.MAX_BUFFER_SIZE:
-            return {
-                'violence': False,
-                'confidence': 0.0,
-                'class_id': 1,
-                'buffer_size': len(self.frame_buffer),
-                'latency_ms': 0.0
-            }
+            return None
         
         try:
             inference_start = time.time()
