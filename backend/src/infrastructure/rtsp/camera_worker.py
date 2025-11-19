@@ -61,8 +61,10 @@ class CameraWorker:
         self.frame_buffer.register_camera(camera_id)
         
         # Store target dimensions for resizing
-        self.target_width = frame_width
-        self.target_height = frame_height
+        # Note: resize to 224×224 directly for inference
+        # No need for intermediate 640×480 since SME will resize anyway
+        self.target_width = 224
+        self.target_height = 224
         
         # Create RTSP client
         self.client = RTSPClient(
@@ -193,6 +195,10 @@ class CameraWorker:
                 # Perform violence detection inference (async, non-blocking)
                 detection_result = await self.inference_service.detect_frame_async(resized_frame)
                 
+                # Skip metadata push if inference not ready (buffer not full yet)
+                if detection_result is None:
+                    continue
+                
                 # Log inference latency if available
                 if 'latency_ms' in detection_result and detection_result['latency_ms'] > 0:
                     logger.debug(f"[{self.camera_id}] Inference latency: {detection_result['latency_ms']:.2f}ms")
@@ -204,7 +210,7 @@ class CameraWorker:
                         frame_id=frame_id,
                         timestamp=current_time,
                         frame_seq=self.frames_sampled,
-                        detection=detection_result,  # Add detection result
+                        detection=detection_result,
                     )
                     self.frames_sent_to_redis += 1
                     

@@ -32,11 +32,6 @@ from dataclasses import dataclass
 sys.path.insert(0, str(Path(__file__).parent))
 from data_loader import VideoDataLoader
 
-# Add ai_service to path for SME import
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from remonet.sme.extractor import SMEPreprocessor
-
-
 # Helper class for frame extraction
 class VideoItem:
     """Video item for frame extraction."""
@@ -67,7 +62,6 @@ class FrameExtractor:
             config: ExtractionConfig object (uses defaults if None)
         """
         self.config = config or ExtractionConfig()
-        self.preprocessor = SMEPreprocessor(target_size=self.config.target_size)
     
     def extract_batch(self, video_items: List, output_base_dir: str) -> Dict:
         """
@@ -126,11 +120,12 @@ class FrameExtractor:
                     
                     if current_t + 1e-6 >= next_t:
                         try:
-                            # Preprocess frame: resize to 224x224 and convert to RGB
-                            resized_frame = self.preprocessor.preprocess(frame)
+                            # Preprocess frame: resize to target_size and convert to RGB
+                            resized_frame = cv2.resize(frame, self.config.target_size, cv2.INTER_LINEAR)
+                            frame_rgb = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
                             
                             # Convert RGB back to BGR for cv2.imwrite (OpenCV expects BGR)
-                            frame_bgr = cv2.cvtColor(resized_frame, cv2.COLOR_RGB2BGR)
+                            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
                             
                             # Save frame
                             frame_path = output_path / f"frame_{extracted_count:06d}.jpg"

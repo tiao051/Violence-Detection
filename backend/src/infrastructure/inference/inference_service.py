@@ -6,7 +6,6 @@ from typing import Dict, Optional
 import logging
 import numpy as np
 import asyncio
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 # Add ai_service to path
@@ -76,7 +75,7 @@ class InferenceService:
             logger.error(f"Failed to initialize InferenceService: {e}")
             raise
     
-    def detect_frame(self, frame: np.ndarray) -> Dict:
+    def detect_frame(self, frame: np.ndarray) -> Optional[Dict]:
         """
         Add frame and perform inference if buffer is full.
         
@@ -84,40 +83,24 @@ class InferenceService:
             frame: Input frame (BGR, uint8)
         
         Returns:
-            Dict with detection results:
-                - violence: bool
-                - confidence: float (0-1)
-                - class_id: int (0=Violence, 1=NonViolence)
-                - buffer_size: int
-                - latency_ms: float (inference time)
+            Dict with detection results if buffer is full, else None
+        
+        Raises:
+            RuntimeError: If model not initialized
         """
         if self.model is None:
-            logger.warning("Model not initialized")
-            return {
-                'violence': False,
-                'confidence': 0.0,
-                'class_id': 1,
-                'error': 'Model not initialized',
-                'latency_ms': 0.0
-            }
+            raise RuntimeError("Model not initialized. Call initialize() first.")
         
         try:
             # Add frame to buffer
             self.model.add_frame(frame)
             
-            # Predict if buffer is full
-            result = self.model.predict()
-            return result
+            # Predict only if buffer is full (returns None otherwise)
+            return self.model.predict()
         
         except Exception as e:
             logger.error(f"Detection error: {e}")
-            return {
-                'violence': False,
-                'confidence': 0.0,
-                'class_id': 1,
-                'error': str(e),
-                'latency_ms': 0.0
-            }
+            raise
     
     async def detect_frame_async(self, frame: np.ndarray) -> Dict:
         """
