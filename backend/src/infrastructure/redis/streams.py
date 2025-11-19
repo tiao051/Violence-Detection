@@ -121,67 +121,7 @@ class RedisStreamProducer:
         except Exception as e:
             logger.error(f"Failed to store threat detection for {camera_id}: {e}")
     
-    async def get_latest_threat(self, camera_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get latest threat detection for a camera.
-        
-        Args:
-            camera_id: Camera identifier
-        
-        Returns:
-            Latest threat detection dict or None if no threat
-        """
-        try:
-            threat_key = f"threat:{camera_id}"
-            threat_data = await self.redis_client.hgetall(threat_key)
-            
-            if not threat_data:
-                return None
-            
-            return {
-                "camera_id": threat_data.get(b'camera_id', b'').decode(),
-                "violence": threat_data.get(b'violence', b'false').decode().lower() == 'true',
-                "confidence": float(threat_data.get(b'confidence', b'0.0').decode()),
-                "timestamp": float(threat_data.get(b'timestamp', b'0').decode()),
-            }
-        
-        except Exception as e:
-            logger.error(f"Failed to get latest threat for {camera_id}: {e}")
-            return None
-    
-    async def get_all_threats(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get latest threat status for all cameras.
-        
-        Returns:
-            Dictionary mapping camera_id to threat status
-        """
-        try:
-            # Scan for all threat: keys
-            cursor = 0
-            threats = {}
-            
-            while True:
-                cursor, keys = await self.redis_client.scan(
-                    cursor,
-                    match="threat:*",
-                    count=100
-                )
-                
-                for key in keys:
-                    camera_id = key.decode().split(":", 1)[1]
-                    threat = await self.get_latest_threat(camera_id)
-                    if threat:
-                        threats[camera_id] = threat
-                
-                if cursor == 0:
-                    break
-            
-            return threats
-        
-        except Exception as e:
-            logger.error(f"Failed to get all threats: {e}")
-            return {}
+
 
 
 # Singleton instance
