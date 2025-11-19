@@ -21,7 +21,7 @@ from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
-from src.presentation.routes import threat_router
+from src.presentation.routes.websocket_routes import router as websocket_router
 
 # Setup logging
 setup_logging()
@@ -41,6 +41,11 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up application...")
     await startup()
+    
+    # Set redis_producer in app state
+    app.state.redis_producer = redis_producer
+    logger.info("App state initialized with redis_producer")
+    
     yield
 
     # Shutdown
@@ -81,6 +86,12 @@ async def startup() -> None:
         # Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
 
+        # Set app state for WebSocket routes
+        from fastapi import FastAPI as FastAPIType
+        app_instance = None  # Will be set after app creation
+        
+        logger.info("Redis producer initialized")
+
         # Start RTSP camera workers if enabled
         if settings.rtsp_enabled:
             logger.info(f"Starting {len(settings.rtsp_cameras)} RTSP camera workers...")
@@ -97,7 +108,6 @@ async def startup() -> None:
                     sample_rate=settings.rtsp_sample_rate,
                     frame_width=settings.rtsp_frame_width,
                     frame_height=settings.rtsp_frame_height,
-                    jpeg_quality=settings.rtsp_jpeg_quality,
                 )
 
                 workers_to_start.append(worker)
@@ -152,6 +162,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Set redis_producer in app state after app creation (for WebSocket routes)
+app.state.redis_producer = None  # Will be set in startup
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -161,8 +174,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register threat API routes
-app.include_router(threat_router)
+# Register WebSocket routes
+app.include_router(websocket_router)
 
 # Mount static files for frontend (React build output)
 # This serves the React app from /
