@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; 
@@ -17,17 +18,53 @@ import 'package:security_app/screens/settings_screen.dart';
 import 'package:security_app/screens/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:security_app/theme/app_theme.dart'; 
+import 'package:media_kit/media_kit.dart';
 
 void main() async {
-  // Initialize Flutter bindings before async operations in main()
+  // Ensure Flutter bindings are initialized before any asynchronous operations.
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase before using any Firebase services
+  MediaKit.ensureInitialized();
+
+  print("--- BOOTSTRAP: STARTING INITIALIZATION ---");
+
+  // Attempt to load environment variables.
+  try {
+    await dotenv.load(fileName: ".env");
+    print("[INFO] Environment file (.env) loaded successfully.");
+
+    // Debugging: List all keys found to ensure the file is parsed correctly.
+    print("[DEBUG] Available Environment Keys: ${dotenv.env.keys.toList()}");
+
+    // specific check for the critical BACKEND_URL variable.
+    final backendUrl = dotenv.env['BACKEND_URL'];
+    print("[DEBUG] Resolved BACKEND_URL: '$backendUrl'");
+
+    // Validate the network configuration.
+    if (backendUrl == null || backendUrl.isEmpty) {
+      print("[ERROR] BACKEND_URL is null or empty. The application will fallback to default settings (likely localhost), which causes connection errors.");
+    } else if (backendUrl.contains("localhost") || backendUrl.contains("127.0.0.1")) {
+      print("[WARNING] BACKEND_URL is set to localhost ($backendUrl). This configuration will fail on Android Emulators and physical devices. A 'flutter clean' may be required.");
+    } else {
+      print("[SUCCESS] BACKEND_URL is configured to a valid network IP: $backendUrl");
+    }
+
+  } catch (e) {
+    print("[FATAL] Failed to load .env file. Ensure the file exists in the root directory and is listed in pubspec.yaml assets.");
+    print("[FATAL] Error details: $e");
+  }
+
+  print("--- BOOTSTRAP: INITIALIZING FIREBASE ---");
+
+  // Initialize Firebase using the generated configuration options.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
+  // Initialize local storage.
   final prefs = await SharedPreferences.getInstance();
+
+  print("--- BOOTSTRAP: INITIALIZATION COMPLETE - RUNNING APP ---");
+
   runApp(MyApp(prefs: prefs));
 }
 

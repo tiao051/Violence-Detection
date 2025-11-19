@@ -18,26 +18,6 @@ class Settings(BaseSettings):
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))
     
-    # PostgreSQL 
-    postgres_user: str = os.getenv("POSTGRES_USER", "postgres")
-    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "")
-    postgres_db: str = os.getenv("POSTGRES_DB", "violence_detection")
-    postgres_host: str = os.getenv("POSTGRES_HOST", "postgres")
-    postgres_port: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    
-    # Database URL 
-    @property
-    def database_url(self) -> str:
-        """Get database URL from environment variables."""
-        db_url = os.getenv("DATABASE_URL")
-        if db_url:
-            return db_url
-        # Fallback: construct from components (for Docker Compose)
-        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-    
-    database_pool_size: int = int(os.getenv("DATABASE_POOL_SIZE", "10"))
-    database_max_overflow: int = int(os.getenv("DATABASE_MAX_OVERFLOW", "20"))
-    
     # Redis 
     redis_host: str = os.getenv("REDIS_HOST", "redis")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))

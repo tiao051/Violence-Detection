@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
 import 'package:security_app/widgets/empty_state_widget.dart';
@@ -22,9 +23,16 @@ class _CameraTabState extends State<CameraTab> {
     super.initState();
     _searchController = TextEditingController();
     // Defer fetch until after first frame to avoid calling provider during build.
-    // Use read() instead of watch() because we don't need to rebuild on changes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CameraProvider>().fetchCameras();
+      final authProvider = context.read<AuthProvider>();
+      final accessToken = authProvider.accessToken;
+      
+      if (accessToken == null || accessToken.isEmpty) {
+        context.read<CameraProvider>().setErrorMessage('Not authenticated');
+        return;
+      }
+      
+      context.read<CameraProvider>().fetchCameras(accessToken: accessToken);
     });
   }
 
@@ -51,8 +59,15 @@ class _CameraTabState extends State<CameraTab> {
           return error_widget.ErrorWidget(
             errorMessage: cameraProvider.errorMessage ?? "Unknown error",
             onRetry: () {
-              cameraProvider.clearCache();
-              cameraProvider.fetchCameras();
+              final authProvider = context.read<AuthProvider>();
+              final accessToken = authProvider.accessToken;
+              
+              if (accessToken == null || accessToken.isEmpty) {
+                return;
+              }
+              
+              context.read<CameraProvider>().clearCache();
+              context.read<CameraProvider>().fetchCameras(accessToken: accessToken);
             },
             iconData: Icons.videocam_off,
             title: "Failed to Load Cameras",
@@ -106,7 +121,16 @@ class _CameraTabState extends State<CameraTab> {
             // Camera list
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () => cameraProvider.refreshCameras(),
+                onRefresh: () {
+                  final authProvider = context.read<AuthProvider>();
+                  final accessToken = authProvider.accessToken;
+                  
+                  if (accessToken == null || accessToken.isEmpty) {
+                    return Future.error('Not authenticated');
+                  }
+                  
+                  return context.read<CameraProvider>().refreshCameras(accessToken: accessToken);
+                },
                 color: Theme.of(context).colorScheme.primary,
                 strokeWidth: 3.0,
                 backgroundColor: Colors.transparent,

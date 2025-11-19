@@ -28,6 +28,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RTSP_BASE_URL: rtsp://rtsp-server:8554
       APP_ENV: ${APP_ENV:-development}
+      # JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your_jwt_secret_key}
       DEBUG: ${DEBUG:-true}
       API_V1_PREFIX: /api/v1
       HOST: 0.0.0.0
@@ -36,11 +37,13 @@ services:
       MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
       - ./ai_service:/app/ai_service
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json
       - /app/__pycache__
     depends_on:
       redis:
@@ -75,7 +78,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -89,7 +91,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -103,7 +104,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network
@@ -117,7 +117,6 @@ services:
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
-    depends_on: [rtsp-server]
     restart: on-failure
     networks:
       - app-network

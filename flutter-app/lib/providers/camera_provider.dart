@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:security_app/models/camera_model.dart';
 import 'package:security_app/services/camera_service.dart';
+import 'package:security_app/providers/auth_provider.dart';
 
 /// Provider for managing camera-related state.
 class CameraProvider with ChangeNotifier {
@@ -30,11 +32,11 @@ class CameraProvider with ChangeNotifier {
         .toList();
   }
 
-  /// Fetches the list of cameras from the service.
+  /// Fetches the list of cameras from the backend service.
   ///
-  /// Skips refetching if cameras are already loaded. Remove this check
-  /// if you want to implement pull-to-refresh functionality.
-  Future<void> fetchCameras() async {
+  /// Requires access_token from AuthProvider. Skips refetching if cameras
+  /// are already loaded. Remove this check if you want pull-to-refresh.
+  Future<void> fetchCameras({required String accessToken}) async {
     if (_cameras.isNotEmpty) return;
 
     _isLoading = true;
@@ -42,7 +44,7 @@ class CameraProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _cameras = await _cameraService.getCameras();
+      _cameras = await _cameraService.getCameras(accessToken: accessToken);
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -65,7 +67,7 @@ class CameraProvider with ChangeNotifier {
   ///
   /// Called by pull-to-refresh gesture. Returns a Future that completes
   /// when the fetch operation is done (success or failure).
-  Future<void> refreshCameras() async {
+  Future<void> refreshCameras({required String accessToken}) async {
     // Clear cache to force fresh fetch
     _cameras = [];
     _errorMessage = null;
@@ -73,7 +75,7 @@ class CameraProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _cameras = await _cameraService.getCameras();
+      _cameras = await _cameraService.getCameras(accessToken: accessToken);
       _errorMessage = null;
     } catch (e) {
       _errorMessage = e.toString();
@@ -94,6 +96,11 @@ class CameraProvider with ChangeNotifier {
   /// Clears the current search query, showing all cameras.
   void clearSearch() {
     _searchQuery = '';
+    notifyListeners();
+  }
+
+  void setErrorMessage(String message) {
+    _errorMessage = message;
     notifyListeners();
   }
 }

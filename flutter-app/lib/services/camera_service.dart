@@ -1,65 +1,123 @@
 import 'package:security_app/models/camera_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:security_app/config/app_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 /// Service layer for camera-related API calls.
 class CameraService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Fetches the list of cameras from Firestore that the current user
-  /// is assigned to.
-  Future<List<CameraModel>> getCameras() async {
-    print("CameraService: Fetching cameras from Firestore...");
+  /// Fetches the list of cameras from backend API
+  ///
+  /// Calls GET /api/v1/cameras with JWT token from SharedPreferences.
+  /// The backend returns cameras owned by the authenticated user.
+  ///
+  /// Requires:
+  /// - JWT access token to be available via AuthProvider
+  /// - Backend to be running and accessible
+  ///
+  /// Returns: List of cameras owned by user
+  /// Throws: Exception if API call fails or token is missing
+  Future<List<CameraModel>> getCameras({required String accessToken}) async {
+    print("CameraService: Fetching cameras from backend API...");
 
-    final User? user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not logged in. Cannot fetch cameras.');
+    if (accessToken.isEmpty) {
+      throw Exception('Access token is missing. User not authenticated.');
     }
-    
+
     try {
-      // This query tests the Security Rule:
-      // allow read: if request.auth.uid in resource.data.assignedUsers;
-      final querySnapshot = await _firestore
-          .collection('cameras')
-          .where('assignedUsers', arrayContains: user.uid)
-          .get();
+      final uri = Uri.parse(AppConfig.camerasListUrl);
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
 
-      final cameras = querySnapshot.docs.map((doc) {
-        return CameraModel.fromJson(doc.data(), doc.id);
-      }).toList();
+      print('CameraService: Backend response status: ${response.statusCode}');
 
-      print("CameraService: Found ${cameras.length} assigned cameras.");
-      return cameras;
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        
+        final cameras = data.map((cam) {
+          return CameraModel(
+            id: cam['id'] ?? '',
+            name: cam['name'] ?? 'Unknown',
+            location: cam['location'] ?? '',
+            streamUrl: cam['stream_url'] ?? '',
+          );
+        }).toList();
 
+        print("List of cameras fetched: $cameras");
+
+        print("CameraService: Found ${cameras.length} cameras.");
+        return cameras;
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized: Invalid or expired token');
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMsg = errorData['detail'] ?? 'Failed to load cameras';
+        throw Exception(errorMsg);
+      }
     } catch (e) {
       print("CameraService: Error fetching cameras: $e");
-      // This error will trigger if the Security Rules fail
       throw Exception("Failed to load camera list: $e");
     }
   }
 
-  /// đéo xài được
-  /// Fetches the stream URL for a specific camera from its document.
-  Future<String> getStreamUrl(String cameraId) async {
+  /// Fetches the stream URL for a specific camera from backend
+  ///
+  /// Calls GET /api/v1/streams/{camera_id}/url with JWT token.
+  /// Returns authorized WebRTC stream URL.
+  ///
+  /// Returns: Stream URL string
+  /// Throws: Exception if camera not found or user not authorized
+  Future<String> getStreamUrl(
+    String cameraId, {
+    required String accessToken,
+  }) async {
     print("CameraService: Getting stream URL for camera $cameraId");
 
+    if (accessToken.isEmpty) {
+      throw Exception('Access token is missing. User not authenticated.');
+    }
+
     try {
-      // This tests the 'get' part of the read rule
-      final doc = await _firestore.collection('cameras').doc(cameraId).get();
+      final uri = Uri.parse(AppConfig.cameraStreamUrl(cameraId));
       
-      if (!doc.exists) {
-        throw Exception("Camera not found");
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      print('CameraService: Backend response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['stream_url'] == null) {
+          throw Exception('Invalid response: missing stream_url');
+        }
+
+        print("CameraService: Stream URL received for camera $cameraId");
+        return data['stream_url'];
+      } else if (response.statusCode == 403) {
+        throw Exception('Not authorized to access this camera');
+      } else if (response.statusCode == 404) {
+        throw Exception('Camera not found');
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized: Invalid or expired token');
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMsg = errorData['detail'] ?? 'Failed to get stream URL';
+        throw Exception(errorMsg);
       }
-      
-      final camera = CameraModel.fromJson(doc.data()!, doc.id);
-      
-      if (camera.streamUrl.isEmpty) {
-        throw Exception("Stream URL is empty for this camera");
-      }
-      
-      return camera.streamUrl;
-      
     } catch (e) {
       print("CameraService: Error getting stream URL: $e");
       throw Exception("Failed to get stream: $e");

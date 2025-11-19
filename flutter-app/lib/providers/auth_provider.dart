@@ -8,7 +8,8 @@ class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
   final SharedPreferences _prefs;
 
-  String? _token;
+  String? _accessToken;      // JWT access token for API calls
+  String? _refreshToken;     // JWT refresh token for renewal
   bool _isLoading = false;
   bool _isLoadingGoogle = false;
   bool _isLoadingSignUp = false;
@@ -18,70 +19,41 @@ class AuthProvider with ChangeNotifier {
 
   /// Constructor that restores authentication state from previous session.
   ///
-  /// Checks SharedPreferences for saved token to maintain login state
+  /// Checks SharedPreferences for saved tokens to maintain login state
   /// across app restarts.
   AuthProvider(this._prefs) {
-    _token = _prefs.getString('token');
-    if (_token != null) {
-      print("AuthProvider: Token found, user is logged in.");
+    _accessToken = _prefs.getString('access_token');
+    _refreshToken = _prefs.getString('refresh_token');
+    if (_accessToken != null) {
+      print("AuthProvider: Access token found, user is logged in.");
     }
   }
 
-  bool get isLoggedIn => _token != null;
+  bool get isLoggedIn => _accessToken != null;
   bool get isLoading => _isLoading;
   bool get isLoadingGoogle => _isLoadingGoogle;
   bool get isLoadingSignUp => _isLoadingSignUp;
   bool get isChangingPassword => _isChangingPassword;
   String? get errorMessage => _errorMessage;
   AuthModel? get user => _user;
-
-  /// Logs in the user with email and password.
-  ///
-  /// Persists the auth token to SharedPreferences so users remain logged in
-  /// after closing the app. UI listeners are notified at each state change.
-  Future<void> login(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final token = await _authService.login(email, password);
-      _token = token;
-      await _prefs.setString('token', token);
-
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _token = null;
-      _errorMessage = e.toString();
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  String? get accessToken => _accessToken;  // Expose token for API calls
+  String? get refreshToken => _refreshToken;
 
   /// Initiates Google Sign-In via Firebase Authentication.
   ///
-  /// Real Firebase Sign-In flow:
+  /// Flow:
   /// 1. User taps "Sign in with Google" button
   /// 2. GoogleSignIn SDK shows Google account picker
   /// 3. User selects their Google account (@gmail.com, @company.com, etc)
   /// 4. AuthService exchanges Google credential for Firebase credential
   /// 5. Firebase verifies credential and creates/updates user
   /// 6. AuthService retrieves Firebase ID token (JWT)
-  /// 7. ID token is saved locally to SharedPreferences
-  /// 8. TODO: When backend is ready, send ID token to POST /auth/firebase-verify
-  /// 9. Backend verifies token with Firebase and returns app JWT
-  /// 10. App saves app JWT instead of Firebase ID token
+  /// 7. Send Firebase ID token to backend POST /api/v1/auth/verify-firebase
+  /// 8. Backend verifies token with Firebase and returns JWT (access + refresh)
+  /// 9. App saves both access_token and refresh_token to SharedPreferences
   ///
   /// Sets _isLoadingGoogle flag to show spinner on Google button only.
-  /// Persists token to SharedPreferences on success.
-  /// 
-  /// Future integration:
-  /// - Replace Firebase ID token with real JWT from backend
-  /// - Handle JWT with short expiration (backend decides)
-  /// - Refresh JWT when expired
-  /// - Catch 401 errors from backend token validation
-  /// - Handle new user creation (isNewUser flag from backend)
+  /// Persists tokens to SharedPreferences on success.
   Future<void> signInWithGoogleProvider() async {
     _isLoadingGoogle = true;
     _errorMessage = null;
@@ -93,24 +65,17 @@ class AuthProvider with ChangeNotifier {
       
       print('AuthProvider: Firebase ID token received (length: ${firebaseIdToken.length})');
       
-      // TODO: Send Firebase ID token to backend POST /auth/firebase-verify
-      // final response = await http.post(
-      //   Uri.parse('https://your-api.com/api/v1/auth/firebase-verify'),
-      //   headers: {'Content-Type': 'application/json'},
-      //   body: jsonEncode({'firebaseToken': firebaseIdToken}),
-      // );
-      // if (response.statusCode == 200) {
-      //   final jwtToken = jsonDecode(response.body)['token'];
-      //   _token = jwtToken;
-      // } else {
-      //   throw Exception('Backend verification failed: ${response.statusCode}');
-      // }
+      // Send Firebase ID token to backend for JWT exchange
+      final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
       
-      // For now, use Firebase ID token directly (when backend ready, replace with JWT)
-      _token = firebaseIdToken;
-      await _prefs.setString('token', firebaseIdToken);
+      _accessToken = tokens['access_token'];
+      _refreshToken = tokens['refresh_token'];
+      
+      // Save tokens to SharedPreferences
+      await _prefs.setString('access_token', _accessToken!);
+      await _prefs.setString('refresh_token', _refreshToken!);
 
-      print('AuthProvider: Token saved to SharedPreferences');
+      print('AuthProvider: JWT tokens saved to SharedPreferences');
       
       _isLoadingGoogle = false;
       notifyListeners();
@@ -118,7 +83,8 @@ class AuthProvider with ChangeNotifier {
       print('AuthProvider: Firebase Sign-In complete, isLoggedIn: $isLoggedIn');
     } catch (e) {
       print('AuthProvider: Firebase Sign-In failed: $e');
-      _token = null;
+      _accessToken = null;
+      _refreshToken = null;
       _errorMessage = e.toString();
       _isLoadingGoogle = false;
       notifyListeners();
@@ -129,9 +95,11 @@ class AuthProvider with ChangeNotifier {
   ///
   /// Also signs out from Google to forget account selection.
   Future<void> logout() async {
-    _token = null;
+    _accessToken = null;
+    _refreshToken = null;
     _user = null;
-    await _prefs.remove('token');
+    await _prefs.remove('access_token');
+    await _prefs.remove('refresh_token');
     await _authService.signOutGoogle();
     notifyListeners();
   }
@@ -140,8 +108,9 @@ class AuthProvider with ChangeNotifier {
   ///
   /// Flow:
   /// 1. Call AuthService.signUpWithEmail()
-  /// 2. Save token to SharedPreferences
-  /// 3. Fetch user profile
+  /// 2. Get Firebase ID token
+  /// 3. Exchange for JWT tokens via backend /api/v1/auth/verify-firebase
+  /// 4. Save tokens to SharedPreferences
   ///
   /// Throws error if email already exists or validation fails
   Future<void> signUp({
@@ -156,41 +125,43 @@ class AuthProvider with ChangeNotifier {
     try {
       print('AuthProvider: Starting sign up for email: $email');
 
-      // Call auth service to create user
-      final uid = await _authService.signUpWithEmail(
+      // Call auth service to create user and get Firebase ID token
+      final firebaseIdToken = await _authService.signUpWithEmail(
         email: email,
         password: password,
         displayName: displayName,
       );
 
-      print('AuthProvider: Sign up successful, uid: $uid');
+      print('AuthProvider: Sign up successful, exchanging for JWT');
 
-      // Fetch user profile
-      final user = await _authService.getUserProfile();
-      _user = user;
+      // Exchange Firebase ID token for JWT
+      final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
+      
+      _accessToken = tokens['access_token'];
+      _refreshToken = tokens['refresh_token'];
 
-      // Save token (use uid as token for now)
-      _token = uid;
-      await _prefs.setString('token', uid);
+      // Save tokens
+      await _prefs.setString('access_token', _accessToken!);
+      await _prefs.setString('refresh_token', _refreshToken!);
 
-      print('AuthProvider: Token saved and profile loaded');
+      print('AuthProvider: JWT tokens saved');
 
       _isLoadingSignUp = false;
       notifyListeners();
     } catch (e) {
       print('AuthProvider: Sign up error: $e');
-      _token = null;
-      _user = null;
+      _accessToken = null;
+      _refreshToken = null;
       _errorMessage = e.toString();
       _isLoadingSignUp = false;
       notifyListeners();
     }
   }
 
-  /// Logs in user with email and password (updated to use AuthService)
+  /// Logs in user with email and password
   ///
-  /// Updated to use real Firebase Auth instead of mock login
-  /// Persists the auth token to SharedPreferences so users remain logged in
+  /// Exchanges Firebase ID token for JWT (access + refresh)
+  /// Persists tokens to SharedPreferences so users remain logged in
   /// after closing the app.
   Future<void> loginWithEmail({
     required String email,
@@ -204,29 +175,31 @@ class AuthProvider with ChangeNotifier {
       print('AuthProvider: Starting login with email: $email');
 
       // Call auth service for Firebase login
-      final uid = await _authService.loginWithEmail(
+      final firebaseIdToken = await _authService.loginWithEmail(
         email: email,
         password: password,
       );
 
-      print('AuthProvider: Login successful, uid: $uid');
+      print('AuthProvider: Firebase login successful, exchanging for JWT');
 
-      // Fetch user profile
-      final user = await _authService.getUserProfile();
-      _user = user;
+      // Exchange Firebase ID token for JWT
+      final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
+      
+      _accessToken = tokens['access_token'];
+      _refreshToken = tokens['refresh_token'];
 
-      // Save token
-      _token = uid;
-      await _prefs.setString('token', uid);
+      // Save tokens
+      await _prefs.setString('access_token', _accessToken!);
+      await _prefs.setString('refresh_token', _refreshToken!);
 
-      print('AuthProvider: Token saved and profile loaded');
+      print('AuthProvider: JWT tokens saved');
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
       print('AuthProvider: Login error: $e');
-      _token = null;
-      _user = null;
+      _accessToken = null;
+      _refreshToken = null;
       _errorMessage = e.toString();
       _isLoading = false;
       notifyListeners();

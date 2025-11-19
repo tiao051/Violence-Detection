@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
+import 'package:media_kit/media_kit.dart';       // Import mới
+import 'package:media_kit_video/media_kit_video.dart'; // Import mới
+import 'package:provider/provider.dart';
+import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/services/camera_service.dart';
-import 'package:security_app/widgets/error_widget.dart' as error_widget;
 
-/// Screen for viewing live video from a camera.
 class LiveViewScreen extends StatefulWidget {
-  /// The ID of the camera to view.
   final String cameraId;
 
   const LiveViewScreen({super.key, required this.cameraId});
@@ -17,8 +15,10 @@ class LiveViewScreen extends StatefulWidget {
 }
 
 class _LiveViewScreenState extends State<LiveViewScreen> {
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
+  // Media Kit Controllers
+  late final Player _player;
+  late final VideoController _controller;
+
   final CameraService _cameraService = CameraService();
 
   bool _isLoading = true;
@@ -27,52 +27,53 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
+    
+    // 1. Khởi tạo Player
+    _player = Player();
+    _controller = VideoController(_player);
+
+    _initializeServices();
   }
 
-  /// Initializes the player by fetching the stream URL and setting up the controller.
-  Future<void> _initializePlayer() async {
+  Future<void> _initializeServices() async {
     try {
-      // Fetch stream URL
-      final streamUrl = await _cameraService.getStreamUrl(widget.cameraId);
+      final authProvider = context.read<AuthProvider>();
+      final accessToken = authProvider.accessToken;
 
-      // Initialize video_player controller
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(streamUrl))
-        ..initialize().then((_) {
-          if (mounted) {
-            // Create Chewie controller
-            _chewieController = ChewieController(
-              videoPlayerController: _videoController!,
-              autoPlay: true,
-              looping: false,
-              allowFullScreen: true,
-              allowMuting: true,
-              showControlsOnInitialize: true,
-              materialProgressColors: ChewieProgressColors(
-                playedColor: Theme.of(context).colorScheme.primary,
-                handleColor: Colors.white,
-                backgroundColor: Colors.grey.shade800,
-                bufferedColor: Colors.grey.shade600,
-              ),
-            );
+      if (accessToken == null || accessToken.isEmpty) {
+        throw Exception('Authentication failed: Access token is missing.');
+      }
 
-            setState(() {
-              _isLoading = false;
-            });
-          }
-        }).catchError((error) {
-          if (mounted) {
-            setState(() {
-              _errorMessage = 'Failed to load video: $error';
-              _isLoading = false;
-            });
-          }
-        });
+      // 2. Lấy URL RTSP từ Backend
+      final streamUrl = await _cameraService.getStreamUrl(
+        widget.cameraId,
+        accessToken: accessToken,
+      );
+
+      debugPrint('[LiveViewScreen] RTSP Stream URL: $streamUrl');
+
+      // 3. Mở Video với cấu hình TCP (cho ADB)
+      await _player.open(
+        Media(
+          streamUrl,
+          // QUAN TRỌNG: Ép MPV chạy RTSP qua TCP
+          extras: {
+            'rtsp-transport': 'tcp', 
+          },
+        ),
+        play: true, // Tự động phát
+      );
+      
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      
     } catch (e) {
+      debugPrint('[LiveViewScreen] Error: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
           _isLoading = false;
+          _errorMessage = e.toString();
         });
       }
     }
@@ -80,56 +81,49 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
   @override
   void dispose() {
-    _chewieController?.dispose();
-    _videoController?.dispose();
+    // Giải phóng tài nguyên MediaKit
+    _player.dispose(); 
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Live View - ${widget.cameraId}'),
+      appBar: AppBar(title: Text('Live View - ${widget.cameraId}')),
+      body: Stack(
+        children: [
+          // 1. Video Layer
+          Center(
+            child: _isLoading
+                ? const CircularProgressIndicator()
+                : _errorMessage != null
+                    ? _buildErrorWidget()
+                    : Video(controller: _controller), // Widget của MediaKit
+          ),
+        ],
       ),
-      body: Center(
-        child: Builder(builder: (context) {
-          // STATE 1: LOADING
-          if (_isLoading) {
-            return SpinKitFadingCircle(
-              color: Theme.of(context).colorScheme.primary,
-              size: 50.0,
-            );
-          }
+    );
+  }
 
-          // STATE 2: ERROR
-          if (_errorMessage != null) {
-            return error_widget.ErrorWidget(
-              errorMessage: _errorMessage ?? "Unable to load live stream",
-              onRetry: () {
-                setState(() {
-                  _isLoading = true;
-                  _errorMessage = null;
-                });
-                _initializePlayer();
-              },
-              iconData: Icons.live_tv_rounded,
-              title: "Live Stream Unavailable",
-            );
-          }
-
-          // STATE 3: SUCCESS
-          if (_videoController != null && _videoController!.value.isInitialized && _chewieController != null) {
-            return AspectRatio(
-              aspectRatio: _videoController!.value.aspectRatio,
-              child: Chewie(
-                controller: _chewieController!,
-              ),
-            );
-          }
-
-          // STATE 4: Unknown error
-          return const Text('Unable to load video');
-        }),
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error, color: Colors.red, size: 50),
+          const SizedBox(height: 10),
+          Text(_errorMessage ?? 'Unknown Error', textAlign: TextAlign.center),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _isLoading = true;
+                _errorMessage = null;
+              });
+              _initializeServices();
+            },
+            child: const Text('Retry'),
+          )
+        ],
       ),
     );
   }

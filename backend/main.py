@@ -12,15 +12,12 @@ from contextlib import asynccontextmanager
 import redis.asyncio as redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import Response
-
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
+from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
 
 # Setup logging
@@ -174,6 +171,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register authentication routes
+app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
 

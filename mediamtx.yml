@@ -1,4 +1,4 @@
-# MediaMTX configuration for low-latency streaming
+﻿# MediaMTX configuration for low-latency streaming
 
 # WebRTC for real-time streaming (< 1s latency)
 webrtc: true
@@ -9,6 +9,3 @@ paths:
   cam2: {}
   cam3: {}
   cam4: {}
-
-
-

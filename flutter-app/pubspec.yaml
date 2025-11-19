@@ -11,8 +11,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # For loading environment variables from .env file
+  flutter_dotenv: ^5.1.0
+
   # For playing video streams from network (RTSP/HTTP)
-  flutter_vlc_player: ^7.4.1
+  media_kit: ^1.2.2
+  media_kit_video: ^1.2.4
+  media_kit_libs_android_video: ^1.2.4
 
   # For state management
   provider: ^6.1.2
@@ -44,6 +49,9 @@ dependencies:
   # For professional video player controls
   chewie: ^1.8.0
 
+  # For WebRTC peer-to-peer video streaming
+  flutter_webrtc: ^1.1.0
+
   # For internationalization and localization
   intl: ^0.19.0
 
@@ -54,7 +62,9 @@ dependencies:
   font_awesome_flutter: ^10.7.0
 
   # For retrieving app package information (version, build number, etc.)
-  package_info_plus: ^7.0.0
+  package_info_plus: ^9.0.0
+
+  web_socket_channel: ^2.4.0
 
 # Development dependencies
 dev_dependencies:
@@ -65,3 +75,5 @@ dev_dependencies:
 # Flutter configuration
 flutter:
   uses-material-design: true
+  assets:
+    - .env

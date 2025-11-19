@@ -53,10 +53,11 @@ android {
 
     defaultConfig {
         applicationId = "com.example.security_app"
-        minSdk = flutter.minSdkVersion // Keep at 21 for broad compatibility
+        minSdk = 24 // Keep at 21 for broad compatibility
         targetSdk = 34
         versionCode = flutterVersionCode.toInt()
         versionName = flutterVersionName
+        multiDexEnabled = true
     }
 
     buildTypes {
