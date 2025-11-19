@@ -6,7 +6,6 @@ from typing import Dict, Optional
 import logging
 import numpy as np
 import asyncio
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 # Add ai_service to path

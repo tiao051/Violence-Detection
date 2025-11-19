@@ -19,7 +19,7 @@ AI_SERVICE_DIR = PROJECT_ROOT / "ai_service"
 if str(AI_SERVICE_DIR) not in sys.path:
     sys.path.insert(0, str(AI_SERVICE_DIR))
 
-from ai_service.remonet.sme import SMEExtractor, SMEPreprocessor
+from ai_service.remonet.sme import SMEExtractor
 
 
 @pytest.fixture
