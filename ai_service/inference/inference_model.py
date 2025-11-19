@@ -101,14 +101,14 @@ class ViolenceDetectionModel:
         Add frame to buffer.
         
         Args:
-            frame: Input frame (BGR, uint8, any size)
+            frame: Input frame (BGR, uint8, 224×224)
+                   Should already be resized by camera_worker
         """
-        # Resize to expected size
-        if frame.shape[:2] != self.config.frame_size:
-            import cv2
-            frame = cv2.resize(frame, self.config.frame_size)
+        # Ensure frame is uint8 (preprocessing step)
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
         
-        # Convert BGR to RGB
+        # Convert BGR to RGB (frame should already be 224×224)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         self.frame_buffer.append(frame_rgb)

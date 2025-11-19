@@ -61,8 +61,10 @@ class CameraWorker:
         self.frame_buffer.register_camera(camera_id)
         
         # Store target dimensions for resizing
-        self.target_width = frame_width
-        self.target_height = frame_height
+        # Note: resize to 224×224 directly for inference
+        # No need for intermediate 640×480 since SME will resize anyway
+        self.target_width = 224
+        self.target_height = 224
         
         # Create RTSP client
         self.client = RTSPClient(
