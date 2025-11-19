@@ -37,7 +37,6 @@ class CameraWorker:
         sample_rate: int = 6,
         frame_width: int = 640,
         frame_height: int = 480,
-        jpeg_quality: int = 80,
     ):
         """
         Initialize camera worker.
@@ -49,7 +48,6 @@ class CameraWorker:
             sample_rate: Target FPS for frame sampling (default: 6)
             frame_width: Resized frame width
             frame_height: Resized frame height
-            jpeg_quality: JPEG encoding quality (1-100)
         """
         self.camera_id = camera_id
         self.stream_url = stream_url
