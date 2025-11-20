@@ -19,6 +19,12 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // In development React StrictMode can mount/unmount components twice,
+  // which may cause duplicate WebSocket connections. Use a simple
+  // module-level singleton to avoid creating multiple underlying sockets.
+  const createdByThisHookRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globalAny: any = window as any;
   // In browser env setTimeout returns a number, avoid NodeJS namespace
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -42,15 +48,34 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
     }
 
     try {
-      // Close existing connection if any
+      // Reuse an existing global socket if available to avoid duplicates
+      if (!wsRef.current && globalAny.__global_ws && (globalAny.__global_ws.readyState === WebSocket.OPEN || globalAny.__global_ws.readyState === WebSocket.CONNECTING)) {
+        wsRef.current = globalAny.__global_ws as WebSocket;
+        createdByThisHookRef.current = false;
+      }
+
+      // Close existing socket only if this hook created it
       if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+        if (createdByThisHookRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+          createdByThisHookRef.current = false;
+        } else {
+          // reuse the socket instance; we'll rebind handlers below
+        }
       }
 
       setError(null);
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
+
+      if (!wsRef.current) {
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
+        // expose globally so other hook instances don't create duplicates
+        globalAny.__global_ws = ws;
+        createdByThisHookRef.current = true;
+      }
+
+      const ws = wsRef.current as WebSocket;
 
       // Set a connection timeout
       const connectionTimeout = setTimeout(() => {
@@ -84,7 +109,12 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
         clearTimeout(connectionTimeout);
         console.log('WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
-        wsRef.current = null;
+        // If this hook created the socket, clear globals when closing
+        if (createdByThisHookRef.current) {
+          wsRef.current = null;
+          delete (globalAny as any).__global_ws;
+          createdByThisHookRef.current = false;
+        }
 
         // Only reconnect if it wasn't a clean close
         if (event.code !== 1000) {
@@ -104,7 +134,6 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
         setError('WebSocket connection failed');
         setIsConnected(false);
       };
-
     } catch (err) {
       console.error('Failed to create WebSocket connection:', err);
       setError('Failed to connect to WebSocket');
