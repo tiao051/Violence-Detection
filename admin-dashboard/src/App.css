@@ -1,7 +1,7 @@
 /* App Layout */
 .app {
   min-height: 100vh;
-  background: #0f0f0f;
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
 }

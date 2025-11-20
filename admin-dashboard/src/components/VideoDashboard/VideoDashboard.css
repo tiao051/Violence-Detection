@@ -13,12 +13,12 @@
 
 .camera-video-container {
   position: relative;
-  background: #1a1a1a;
+  background: var(--bg-secondary);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #333;
+  border: 1px solid var(--border-color);
   min-height: 300px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px var(--shadow-color);
 }
 
 .camera-video-element {
@@ -35,8 +35,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
+  background: rgba(0, 0, 0, 0.8); /* overlay thường vẫn semi-dark */
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -52,8 +52,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(220, 53, 69, 0.9);
-  color: white;
+  background: var(--error-color);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -71,35 +71,35 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
   z-index: 5;
-  border: 1px solid #444;
+  border: 1px solid var(--border-color);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #666;
+  background: var(--border-color);
 }
 
 .connection-status.connecting .status-dot {
-  background: #ffc107;
+  background: var(--warning-color);
   animation: pulse 1s infinite;
 }
 
 .connection-status.connected .status-dot {
-  background: #28a745;
+  background: var(--accent-color);
 }
 
 .connection-status.failed .status-dot,
 .connection-status.disconnected .status-dot {
-  background: #dc3545;
+  background: var(--error-color);
 }
 
 .status-text {
@@ -116,14 +116,14 @@
   position: absolute;
   top: 10px;
   left: 10px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   padding: 4px 12px;
   border-radius: 4px;
   font-size: 14px;
   font-weight: 600;
   z-index: 5;
-  border: 1px solid #444;
+  border: 1px solid var(--border-color);
 }
 
 .camera-name {
