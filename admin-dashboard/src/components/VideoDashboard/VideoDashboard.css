@@ -13,11 +13,12 @@
 
 .camera-video-container {
   position: relative;
-  background: #000;
+  background: #1a1a1a;
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid #333;
+  border: 1px solid #333;
   min-height: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .camera-video-element {
@@ -70,13 +71,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
   z-index: 5;
+  border: 1px solid #444;
 }
 
 .status-dot {
@@ -109,23 +111,21 @@
   50% { opacity: 0.5; }
 }
 
-/* Responsive design */
-@media (max-width: 1200px) {
-  .video-dashboard-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(4, 1fr);
-    height: auto;
-    min-height: 100vh;
-  }
+/* Camera label */
+.camera-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 5;
+  border: 1px solid #444;
 }
 
-@media (max-width: 768px) {
-  .video-dashboard-grid {
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .camera-video-container {
-    min-height: 200px;
-  }
+.camera-name {
+  letter-spacing: 0.5px;
 }

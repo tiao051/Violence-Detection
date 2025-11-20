@@ -115,6 +115,11 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
 
   return (
     <div className="camera-video-container">
+      {/* Camera label */}
+      <div className="camera-label">
+        <span className="camera-name">{cameraId.toUpperCase()}</span>
+      </div>
+
       {loading && <div className="loading-overlay">Loading {cameraId}...</div>}
       {error && <div className="error-overlay">{error}</div>}
 
