@@ -35,8 +35,6 @@ class CameraWorker:
         stream_url: str,
         redis_producer,
         sample_rate: int = 6,
-        frame_width: int = 640,
-        frame_height: int = 480,
     ):
         """
         Initialize camera worker.
@@ -46,8 +44,6 @@ class CameraWorker:
             stream_url: RTSP stream URL
             redis_producer: Redis streams producer instance
             sample_rate: Target FPS for frame sampling (default: 6)
-            frame_width: Resized frame width
-            frame_height: Resized frame height
         """
         self.camera_id = camera_id
         self.stream_url = stream_url
@@ -192,14 +188,30 @@ class CameraWorker:
                 
                 # Perform violence detection inference (async, non-blocking)
                 detection_result = await self.inference_service.detect_frame_async(resized_frame)
-                
-                # Skip metadata push if inference not ready (buffer not full yet)
+
+                # Log when inference returns None (buffer not full)
                 if detection_result is None:
+                    logger.debug(f"[{self.camera_id}] Inference buffer not full yet (sampled={self.frames_sampled})")
                     continue
+
+                # Log the inference result (helps debug why no violence alerts are emitted)
+                logger.debug(f"[{self.camera_id}] Inference result: {detection_result}")
                 
-                # Log inference latency if available
-                if 'latency_ms' in detection_result and detection_result['latency_ms'] > 0:
-                    logger.debug(f"[{self.camera_id}] Inference latency: {detection_result['latency_ms']:.2f}ms")
+                # Publish threat alert immediately if violence detected
+                if detection_result.get('violence', False):
+                    try:
+                        logger.info(f"[{self.camera_id}] Violence detected - confidence={detection_result.get('confidence')}")
+                        await self.redis_producer.publish_threat_alert(
+                            camera_id=self.camera_id,
+                            detection=detection_result,
+                            timestamp=current_time,
+                        )
+                        logger.debug(f"[{self.camera_id}] Published threat alert to Redis pub/sub: {detection_result}")
+                    except Exception as e:
+                        logger.error(f"[{self.camera_id}] Failed publishing threat alert: {e}")
+                else:
+                    # No violence: log at debug level for visibility when needed
+                    logger.debug(f"[{self.camera_id}] No violence detected (confidence={detection_result.get('confidence')})")
                 
                 # Push metadata and detection result to Redis
                 try:
@@ -211,12 +223,6 @@ class CameraWorker:
                         detection=detection_result,
                     )
                     self.frames_sent_to_redis += 1
-                    
-                    # Log end-to-end latency (skip first frame after warmup)
-                    if not first_processed_frame and self.frames_sampled > 1:
-                        first_processed_frame = True
-                        e2e_latency = (time.time() - processing_start) * 1000
-                        logger.info(f"[{self.camera_id}] End-to-end latency: {e2e_latency:.2f}ms (read → resize → buffer → Redis)")
 
                 except Exception as e:
                     logger.error(f"[{self.camera_id}] Redis error: {str(e)}")

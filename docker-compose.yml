@@ -24,16 +24,17 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: violence-detection-backend
+    env_file:
+      - ./backend/.env
     environment:
-      REDIS_URL: redis://redis:6379/0
       RTSP_BASE_URL: rtsp://rtsp-server:8554
+      REDIS_URL: redis://redis:6379/0
       APP_ENV: ${APP_ENV:-development}
-      # JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your_jwt_secret_key}
       DEBUG: ${DEBUG:-true}
-      API_V1_PREFIX: /api/v1
+      # Enable file logging inside container (writes to /app/logs)
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
       HOST: 0.0.0.0
       PORT: 8000
-      # Violence Detection Model
       MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
@@ -42,6 +43,8 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      # Persist logs on host
+      - ./backend/logs:/app/logs
       - ./ai_service:/app/ai_service
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json
       - /app/__pycache__

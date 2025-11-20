@@ -117,14 +117,42 @@ class RedisStreamProducer:
             # Store with TTL
             await self.redis_client.hset(threat_key, mapping=threat_data)
             await self.redis_client.expire(threat_key, self.detection_ttl_seconds)
-        
+
         except Exception as e:
             logger.error(f"Failed to store threat detection for {camera_id}: {e}")
-    
 
+    async def publish_threat_alert(
+        self,
+        camera_id: str,
+        detection: Dict[str, Any],
+        timestamp: float
+    ) -> None:
+        """
+        Publish threat alert to Redis pub/sub channel for real-time notifications.
+        
+        Args:
+            camera_id: Camera identifier
+            detection: Detection result dictionary
+            timestamp: Detection timestamp
+        """
+        try:
+            alert_data = {
+                "type": "alert",
+                "camera_id": camera_id,
+                "timestamp": str(timestamp),
+                "confidence": detection.get("confidence", 0.0),
+                "violence": detection.get("violence", False),
+            }
+            
+            # Publish to pub/sub channel
+            payload = json.dumps(alert_data)
+            await self.redis_client.publish("threat_alerts", payload)
+            logger.info(f"Published threat alert for {camera_id}: {payload}")
+        
+        except Exception as e:
+            logger.error(f"Failed to publish threat alert for {camera_id}: {e}")
+        
 
-
-# Singleton instance
 _redis_stream_producer: Optional[RedisStreamProducer] = None
 
 
