@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import os
 from logging.handlers import RotatingFileHandler
 
 from src.core.config import settings
@@ -26,16 +27,23 @@ def setup_logging() -> None:
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
-    # File handler (optional)
-    if settings.app_env == "production":
-        file_handler = RotatingFileHandler(
-            "logs/app.log",
-            maxBytes=10_000_000,  # 10MB
-            backupCount=5
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    # File handler (optional) — enable when explicitly requested or in production
+    if settings.log_to_file or settings.app_env == "production":
+        try:
+            # Ensure logs directory exists
+            os.makedirs("logs", exist_ok=True)
+
+            file_handler = RotatingFileHandler(
+                "logs/app.log",
+                maxBytes=10_000_000,  # 10MB
+                backupCount=5
+            )
+            file_handler.setLevel(logging.DEBUG if settings.debug else logging.INFO)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+        except Exception as e:
+            # If file handler can't be created, fall back to console only
+            root_logger.warning(f"Failed to create file log handler: {e}")
     
     # Reduce noise from third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)

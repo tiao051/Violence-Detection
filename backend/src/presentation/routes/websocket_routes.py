@@ -55,12 +55,22 @@ async def websocket_threat_alerts(websocket: WebSocket):
     """
     await manager.connect(websocket)
     try:
+        # Wait briefly for app startup to initialize redis_producer (lifespan may still be running)
         redis_producer = websocket.app.state.redis_producer
+        wait_ms = 0
+        while not redis_producer and wait_ms < 5000:
+            await asyncio.sleep(0.25)
+            wait_ms += 250
+            redis_producer = websocket.app.state.redis_producer
+
         if not redis_producer:
-            logger.error("Redis producer not available")
-            await manager.send_personal(
-                websocket, {"type": "error", "message": "Redis producer not initialized"}
-            )
+            logger.error("Redis producer not available after wait")
+            try:
+                await manager.send_personal(
+                    websocket, {"type": "error", "message": "Redis producer not initialized"}
+                )
+            except Exception:
+                logger.debug("Failed sending init error to client")
             return
 
         redis_client = getattr(redis_producer, 'redis_client', None)

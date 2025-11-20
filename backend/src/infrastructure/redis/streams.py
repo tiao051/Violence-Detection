@@ -117,7 +117,10 @@ class RedisStreamProducer:
             # Store with TTL
             await self.redis_client.hset(threat_key, mapping=threat_data)
             await self.redis_client.expire(threat_key, self.detection_ttl_seconds)
-        
+
+        except Exception as e:
+            logger.error(f"Failed to store threat detection for {camera_id}: {e}")
+
     async def publish_threat_alert(
         self,
         camera_id: str,
@@ -147,6 +150,8 @@ class RedisStreamProducer:
         
         except Exception as e:
             logger.error(f"Failed to publish threat alert for {camera_id}: {e}")
+        
+
 _redis_stream_producer: Optional[RedisStreamProducer] = None
 
 

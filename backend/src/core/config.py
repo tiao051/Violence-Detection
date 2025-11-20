@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     frame_buffer_size: int = int(os.getenv("FRAME_BUFFER_SIZE", "100"))
     stream_reconnect_attempts: int = int(os.getenv("STREAM_RECONNECT_ATTEMPTS", "3"))
     stream_read_timeout: int = int(os.getenv("STREAM_READ_TIMEOUT", "30"))
+    # Logging
+    log_to_file: bool = os.getenv("LOG_TO_FILE", "False").lower() == "true"
     
     class Config:
         """Pydantic config."""
