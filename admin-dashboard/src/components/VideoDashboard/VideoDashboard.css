@@ -35,7 +35,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8); /* overlay thường vẫn semi-dark */
+  background: rgba(0, 0, 0, 0.8);
   color: var(--text-primary);
   display: flex;
   align-items: center;
