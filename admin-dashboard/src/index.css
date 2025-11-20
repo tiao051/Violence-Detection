@@ -3,31 +3,70 @@ html, body, #root {
   padding: 0;
   width: 100%;
   height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root {
+  /* Theme Variables */
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #2a2a2a;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --border-color: #333333;
+  --border-hover: #444444;
+  --accent-color: #4ade80;
+  --error-color: #dc3545;
+  --warning-color: #ffc107;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+
+  /* Header Variables */
+  --header-bg: #1a1a1a;
+  --status-bg: rgba(255, 255, 255, 0.1);
+  --status-border: rgba(255, 255, 255, 0.2);
+  --status-active: #4ade80;
+  --status-glow: rgba(74, 222, 128, 0.5);
+
+  /* Button Variables */
+  --button-bg: var(--bg-tertiary);
+  --button-border: var(--border-color);
+  --button-text: var(--text-primary);
+  --button-hover-bg: var(--border-hover);
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  padding: 0;
-}
+/* Light theme */
+:root[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --border-color: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --accent-color: #10b981;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+  --shadow-color: rgba(0, 0, 0, 0.1);
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
+  /* Header Variables */
+  --header-bg: #ffffff;
+  --status-bg: rgba(0, 0, 0, 0.05);
+  --status-border: rgba(0, 0, 0, 0.1);
+  --status-active: #10b981;
+  --status-glow: rgba(16, 185, 129, 0.5);
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-/* Focus visible for accessibility */
-button:focus-visible {
-  outline: 2px solid var(--color-text-primary);
-  outline-offset: 2px;
+  /* Button Variables */
+  --button-bg: var(--bg-tertiary);
+  --button-border: var(--border-color);
+  --button-text: var(--text-primary);
+  --button-hover-bg: var(--border-hover);
 }
 

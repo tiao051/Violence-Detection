@@ -1,23 +1,22 @@
-/* App - Ultra Minimalist Layout */
-
+/* App Layout */
 .app {
+  min-height: 100vh;
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
 }
 
 .app-main {
   flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  padding: 1rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
+/* Responsive */
 @media (max-width: 768px) {
-  .app {
-    height: 100dvh; /* Mobile viewport height */
+  .app-main {
+    padding: 0.5rem;
   }
 }
-

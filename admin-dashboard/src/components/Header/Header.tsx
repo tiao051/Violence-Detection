@@ -1,39 +1,31 @@
-import React, { FC } from 'react'
-import { HeaderProps } from '../../types/detection'
-import './Header.css'
+import React from 'react';
+import { useTheme } from '../../contexts';
+import './Header.css';
 
-const Header: FC<HeaderProps> = ({ onSettingsClick, onHelpClick }) => {
-  return React.createElement(
-    'header',
-    { className: 'header' },
-    React.createElement(
-      'div',
-      { className: 'header-left' },
-      React.createElement('h1', { className: 'header-title' }, 'Dashboard')
-    ),
-    React.createElement(
-      'div',
-      { className: 'header-right' },
-      React.createElement(
-        'button',
-        {
-          className: 'header-icon-button',
-          onClick: onSettingsClick,
-          title: 'Settings',
-        },
-        React.createElement('span', null, '⚙')
-      ),
-      React.createElement(
-        'button',
-        {
-          className: 'header-icon-button',
-          onClick: onHelpClick,
-          title: 'Help',
-        },
-        React.createElement('span', null, '?')
-      )
-    )
-  )
-}
+const Header: React.FC = () => {
+  const { theme, toggleTheme } = useTheme();
 
-export default Header
+  return (
+    <header className="app-header">
+      <div className="header-content">
+        <h1 className="header-title">Violence Detection System</h1>
+        <p className="header-subtitle">Real-time violence detection monitoring</p>
+      </div>
+      <div className="header-actions">
+        <div className="status-indicator">
+          <div className="status-dot active"></div>
+          <span className="status-text">System Active</span>
+        </div>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+      </div>
+    </header>
+  );
+};
+
+export default Header;

@@ -1,0 +1,131 @@
+/* VideoDashboard Styles */
+
+.video-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 16px;
+  width: 100%;
+  height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.camera-video-container {
+  position: relative;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  min-height: 300px;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.camera-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8); /* overlay thường vẫn semi-dark */
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  z-index: 10;
+}
+
+/* Error overlay */
+.error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--error-color);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
+  z-index: 10;
+}
+
+/* Connection status indicator */
+.connection-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 5;
+  border: 1px solid var(--border-color);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-color);
+}
+
+.connection-status.connecting .status-dot {
+  background: var(--warning-color);
+  animation: pulse 1s infinite;
+}
+
+.connection-status.connected .status-dot {
+  background: var(--accent-color);
+}
+
+.connection-status.failed .status-dot,
+.connection-status.disconnected .status-dot {
+  background: var(--error-color);
+}
+
+.status-text {
+  text-transform: capitalize;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Camera label */
+.camera-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 5;
+  border: 1px solid var(--border-color);
+}
+
+.camera-name {
+  letter-spacing: 0.5px;
+}

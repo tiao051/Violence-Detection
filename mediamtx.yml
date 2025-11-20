@@ -4,8 +4,12 @@
 webrtc: true
 webrtcAddress: :8889
 
+# Enable WebRTC publishing for all paths
 paths:
-  cam1: {}
-  cam2: {}
-  cam3: {}
-  cam4: {}
+  cam1:
+  cam2:
+  cam3:
+  cam4:
+
+
+

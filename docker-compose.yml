@@ -129,6 +129,9 @@ services:
     container_name: violence-detection-frontend
     ports:
       - "5173:5173"
+    volumes:
+      - ./admin-dashboard:/app
+      - /app/node_modules
     depends_on:
       - backend
       - rtsp-server
