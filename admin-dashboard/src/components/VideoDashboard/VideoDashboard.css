@@ -125,7 +125,3 @@
   z-index: 5;
   border: 1px solid var(--border-color);
 }
-
-.camera-name {
-  letter-spacing: 0.5px;
-}

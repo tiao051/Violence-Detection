@@ -15,6 +15,7 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<string>("connecting");
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const cleanup = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -28,9 +29,16 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setIsConnecting(false);
   }, []);
 
   const startWebRTC = useCallback(async () => {
+    // Prevent multiple simultaneous connections
+    if (isConnecting || pcRef.current) {
+      return;
+    }
+
+    setIsConnecting(true);
     try {
       setError(null);
       setConnectionState("connecting");
@@ -54,6 +62,7 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         setConnectionState(peer.connectionState);
         if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
           setError("Connection lost, reconnecting...");
+          setIsConnecting(false);
           // Auto reconnect after 2 seconds
           reconnectTimeoutRef.current = setTimeout(() => {
             cleanup();
@@ -61,6 +70,7 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
           }, 2000);
         } else if (peer.connectionState === "connected") {
           setError(null);
+          setIsConnecting(false);
         }
       };
 
@@ -97,13 +107,14 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
       console.error(`WebRTC error for ${cameraId}:`, err);
       setError(`Failed to connect: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setLoading(false);
+      setIsConnecting(false);
 
       // Retry connection after 5 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
         startWebRTC();
       }, 5000);
     }
-  }, [cameraId, signalingServer, cleanup]);
+  }, [cameraId, signalingServer, isConnecting]);
 
   useEffect(() => {
     startWebRTC();
@@ -111,7 +122,7 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
     return () => {
       cleanup();
     };
-  }, [startWebRTC, cleanup]);
+  }, []); // Empty dependency array - only run once on mount
 
   return (
     <div className="camera-video-container">
