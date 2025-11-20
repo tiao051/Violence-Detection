@@ -51,7 +51,7 @@ manager = ConnectionManager()
 async def websocket_threat_alerts(websocket: WebSocket):
     """
     WebSocket endpoint for real-time threat alerts.
-    Only sends metadata when violence is detected.
+    Subscribes to Redis pub/sub channel for immediate alerts.
     """
     await manager.connect(websocket)
     try:
@@ -68,36 +68,33 @@ async def websocket_threat_alerts(websocket: WebSocket):
             logger.error("Redis client not available")
             return
 
-        while True:
-            try:
-                # Check each camera
-                for camera_id in ['cam1', 'cam2', 'cam3', 'cam4']:
-                    stream_key = f"frames:{camera_id}"
-                    messages = await redis_client.xrevrange(stream_key, count=1)
+        # Subscribe to threat alerts channel
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe("threat_alerts")
+        
+        try:
+            while True:
+                # Wait for messages from pub/sub channel
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                
+                if message and message["type"] == "message":
+                    try:
+                        alert_data = json.loads(message["data"])
+                        # Send alert to WebSocket client
+                        await manager.send_personal(websocket, alert_data)
+                        logger.debug(f"Sent threat alert to client: {alert_data}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse alert message: {e}")
+                
+                # Check if WebSocket is still connected
+                if websocket.client_state != 1:  # 1 = CONNECTED
+                    break
 
-                    if messages:
-                        msg_id, msg_data = messages[0]
-
-                        detection_str = msg_data.get(b'detection', b'{}').decode()
-                        detection = json.loads(detection_str) if detection_str else {}
-
-                        # Only send if violence detected
-                        if detection.get("violence", False):
-                            metadata = {
-                                "type": "alert",
-                                "camera_id": camera_id,
-                                "timestamp": msg_data.get(b'ts', b'').decode(),
-                                "confidence": detection.get("confidence", 0.0),
-                            }
-                            await manager.send_personal(websocket, metadata)
-
-                await asyncio.sleep(0.5)
-
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                logger.error(f"Error streaming threat alerts: {e}")
-                break
+        except Exception as e:
+            logger.error(f"Error in pub/sub loop: {e}")
+        finally:
+            await pubsub.unsubscribe("threat_alerts")
+            await pubsub.close()
 
     except Exception as e:
         logger.error(f"WebSocket error: {e}")

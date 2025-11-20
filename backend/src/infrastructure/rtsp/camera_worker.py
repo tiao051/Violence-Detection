@@ -201,6 +201,14 @@ class CameraWorker:
                 if 'latency_ms' in detection_result and detection_result['latency_ms'] > 0:
                     logger.debug(f"[{self.camera_id}] Inference latency: {detection_result['latency_ms']:.2f}ms")
                 
+                # Publish threat alert immediately if violence detected
+                if detection_result.get('violence', False):
+                    await self.redis_producer.publish_threat_alert(
+                        camera_id=self.camera_id,
+                        detection=detection_result,
+                        timestamp=current_time,
+                    )
+                
                 # Push metadata and detection result to Redis
                 try:
                     await self.redis_producer.add_frame_metadata(
