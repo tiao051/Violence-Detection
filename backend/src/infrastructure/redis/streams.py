@@ -145,8 +145,9 @@ class RedisStreamProducer:
             }
             
             # Publish to pub/sub channel
-            await self.redis_client.publish("threat_alerts", json.dumps(alert_data))
-            logger.info(f"Published threat alert for {camera_id}: confidence={alert_data['confidence']}")
+            payload = json.dumps(alert_data)
+            await self.redis_client.publish("threat_alerts", payload)
+            logger.info(f"Published threat alert for {camera_id}: {payload}")
         
         except Exception as e:
             logger.error(f"Failed to publish threat alert for {camera_id}: {e}")
