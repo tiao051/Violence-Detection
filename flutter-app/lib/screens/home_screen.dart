@@ -170,17 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
               context.push('/profile');
             },
           ),
-          // Logout action uses AuthProvider to clear session; routing is
-          // handled by GoRouter via the global auth listener.
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              // Clear all cached data to prevent stale data leaks between users
-              context.read<CameraProvider>().clearCache();
-              context.read<EventProvider>().clearCache();
-              context.read<AuthProvider>().logout();
-            },
-          ),
         ],
       ),
       body: Center(
