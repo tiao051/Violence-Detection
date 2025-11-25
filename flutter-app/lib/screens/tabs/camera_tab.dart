@@ -6,6 +6,7 @@ import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
 import 'package:security_app/widgets/empty_state_widget.dart';
+import 'package:security_app/widgets/camera_grid_item.dart';
 
 /// Tab that displays the list of available cameras.
 class CameraTab extends StatefulWidget {
@@ -141,24 +142,22 @@ class _CameraTabState extends State<CameraTab> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       )
-                    : ListView.builder(
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(8.0),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 16 / 9,
+                          crossAxisSpacing: 8.0,
+                          mainAxisSpacing: 8.0,
+                        ),
                         itemCount: filteredCameras.length,
                         itemBuilder: (context, index) {
                           final camera = filteredCameras[index];
-
-                          return Card(
-                            margin: const EdgeInsets.all(8.0),
-                            child: ListTile(
-                              leading: const CircleAvatar(
-                                child: Icon(Icons.videocam_outlined),
-                              ),
-                              title: Text(camera.name),
-                              subtitle: Text('ID: ${camera.id}'),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                context.push('/live_view/${camera.id}');
-                              },
-                            ),
+                          return CameraGridItem(
+                            camera: camera,
+                            onTap: () {
+                              context.push('/live_view/${camera.id}');
+                            },
                           );
                         },
                       ),
