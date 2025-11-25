@@ -85,10 +85,10 @@ def _get_user_owned_cameras(user_id: str) -> list[str]:
     # For now, mock data
     
     mock_camera_owners = {
-        "user_123": ["cam1", "cam2", "cam3"],
-        "user_456": ["cam4", "cam5"],
+        "user_123": ["cam1", "cam2", "cam3", "cam4"],
+        "user_456": ["cam1", "cam2", "cam3", "cam4"],
         
-        "H2399Gybu8TeslP8zyEyP4uhn0l2": ["cam1", "cam2"],
+        "H2399Gybu8TeslP8zyEyP4uhn0l2": ["cam1", "cam2", "cam3", "cam4"],
     }
     
     return mock_camera_owners.get(user_id, [])
@@ -128,21 +128,21 @@ def _get_camera_by_id(camera_id: str) -> Optional[Dict[str, Any]]:
             "id": "cam3",
             "name": "Front Door",
             "location": "Main Door",
-            "stream_url": "http://mediamtx:8889/cam3",
+            "stream_url": "rtsp://localhost:8554/cam3",
             "owner_uid": "user_123",
         },
         "cam4": {
             "id": "cam4",
             "name": "Living Room",
             "location": "Living Room",
-            "stream_url": "http://mediamtx:8889/cam4",
+            "stream_url": "rtsp://localhost:8554/cam4",
             "owner_uid": "user_456",
         },
         "cam5": {
             "id": "cam5",
             "name": "Garage",
             "location": "Garage",
-            "stream_url": "http://mediamtx:8889/cam5",
+            "stream_url": "rtsp://localhost:8554/cam5",
             "owner_uid": "user_456",
         },
     }
