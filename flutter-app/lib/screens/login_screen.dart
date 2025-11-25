@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// ignore: unused_import
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart'; // Import Provider
-import 'package:security_app/providers/auth_provider.dart'; // Import AuthProvider
+import 'package:provider/provider.dart';
+import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/theme/app_theme.dart';
 
 /// Screen for user login.

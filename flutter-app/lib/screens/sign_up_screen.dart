@@ -1,15 +1,9 @@
 import 'package:flutter/material.dart';
-// ignore: unused_import
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-// ignore: unused_import
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// ignore: unused_import
 import 'package:go_router/go_router.dart';
-// ignore: unused_import
 import 'package:provider/provider.dart';
-// ignore: unused_import
 import 'package:security_app/providers/auth_provider.dart';
-// ignore: unused_import
 import 'package:security_app/theme/app_theme.dart';
 
 /// Screen for user registration with email and password.
