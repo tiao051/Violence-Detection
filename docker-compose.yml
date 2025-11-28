@@ -60,10 +60,10 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: rtsp-server
     ports:
-      - "8554:8554"        # RTSP
-      - "8888:8888"        # HLS
-      - "8889:8889"        # WebRTC HTTP
-      - "8189:8189/udp"    # WebRTC ICE/UDP
+      - "8554:8554" # RTSP
+      - "8888:8888" # HLS
+      - "8889:8889" # WebRTC HTTP
+      - "8189:8189/udp" # WebRTC ICE/UDP
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     environment:

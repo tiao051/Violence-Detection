@@ -84,39 +84,6 @@ async def startup() -> None:
         redis_producer = RedisStreamProducer(redis_client)
 
         # Set app state for WebSocket routes
-        from fastapi import FastAPI as FastAPIType
-        app_instance = None  # Will be set after app creation
-        
-        logger.info("Redis producer initialized")
-
-        # Start RTSP camera workers if enabled
-        if settings.rtsp_enabled:
-            logger.info(f"Starting {len(settings.rtsp_cameras)} RTSP camera workers...")
-
-            # Create all workers
-            workers_to_start = []
-            for camera_id in settings.rtsp_cameras:
-                rtsp_url = f"{settings.rtsp_base_url}/{camera_id}"
-
-                worker = CameraWorker(
-                    camera_id=camera_id,
-                    stream_url=rtsp_url,
-                    redis_producer=redis_producer,
-                    sample_rate=settings.rtsp_sample_rate,
-                    frame_width=settings.rtsp_frame_width,
-                    frame_height=settings.rtsp_frame_height,
-                )
-
-                workers_to_start.append(worker)
-                camera_workers.append(worker)
-                
-            # Start all workers in parallel
-            start_tasks = [worker.start() for worker in workers_to_start]
-            await asyncio.gather(*start_tasks)
-            
-            logger.info(f"All {len(camera_workers)} RTSP camera workers started")
-        else:
-            logger.warning("RTSP is disabled")
 
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)

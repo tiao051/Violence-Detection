@@ -457,10 +457,8 @@ class AuthService {
         throw Exception('Backend error: $errorMsg');
       }
     } catch (e) {
-      print('AuthService: Token verification error: $e');
-      throw Exception('Failed to verify Firebase token: $e');
+        throw Exception('Failed to verify Firebase token: $e');
     }
   }
 
-  // TODO: Add getCameras methods here later
 }
