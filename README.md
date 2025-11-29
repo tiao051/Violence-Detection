@@ -117,7 +117,8 @@ The system implements a 3-stage spatiotemporal feature extraction pipeline:
 - **Backend Framework**: FastAPI (async, high-performance)
 - **Deep Learning**: PyTorch with torch-vision pretrained weights
 - **Computer Vision**: OpenCV for preprocessing
-- **Database**: PostgreSQL (structured data), Redis (caching)
+- **Database**: Redis
+- **Queue**: Redis Pub/Sub
 - **Containerization**: Docker + Docker Compose
 - **Streaming**: RTSP protocol via MediaMTX
 - **Security**: JWT authentication, encrypted communications
@@ -179,7 +180,6 @@ violence-detection/
 ### Infrastructure & DevOps
 - **Docker**: Containerization
 - **Docker Compose**: Multi-container orchestration
-- **PostgreSQL**: Relational database
 - **Redis**: In-memory caching & queuing
 - **MediaMTX**: RTSP streaming server
 
