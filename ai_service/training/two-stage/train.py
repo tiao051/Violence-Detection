@@ -261,7 +261,8 @@ class Trainer:
             extracted_frames_dir=self.config.extracted_frames_dir,
             split=split,
             augmentation_config=self.config.augmentation_config,
-            dataset=self.config.dataset
+            dataset=self.config.dataset,
+            backbone=self.config.backbone
         )
         
         return DataLoader(

@@ -393,6 +393,7 @@ class VideoDataLoader(Dataset):
         target_frames: int = 30,
         augmentation_config: AugmentationConfig = None,
         dataset: str = 'rwf-2000',
+        backbone: str = 'mobilenet_v2'
     ):
         """
         Initialize VideoDataLoader.
@@ -409,7 +410,8 @@ class VideoDataLoader(Dataset):
         self.split = split
         self.target_frames = target_frames
         self.dataset = dataset
-        
+        self.backbone = backbone
+
         # Initialize augmentor (only apply to training split, not validation)
         aug_config = augmentation_config or AugmentationConfig()
         self.augmentor = FrameAugmentor(aug_config, is_training=(split == 'train'))
@@ -418,6 +420,7 @@ class VideoDataLoader(Dataset):
         # This avoids pickling issues with multiprocessing
         self.sme_extractor = None
         self.ste_extractor = None
+        
         # Detect GPU availability for feature extraction
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -552,7 +555,11 @@ class VideoDataLoader(Dataset):
             self.sme_extractor = SMEExtractor()
             # CRITICAL: Keep STE in eval mode to freeze pretrained backbone (prevents overfitting)
             # Only GTE parameters should be trained on small datasets
-            self.ste_extractor = STEExtractor(device=self.device, training_mode=False)
+            self.ste_extractor = STEExtractor(
+                device=self.device,
+                training_mode=False,
+                backbone=self.backbone
+            )
 
         item = self.video_items[idx]
         
@@ -563,6 +570,7 @@ class VideoDataLoader(Dataset):
             logger.error(f"Failed to load frames for item {idx} ({item['frames_dir']}): {e}")
             # Return zeros with expected GTE input shape on error
             # This allows batch processing to continue without crashes
+            channels = self.ste_extractor.backbone_config['out_channels']
             return torch.zeros((10, 1280, 7, 7)), item['label']
         
         # Wrap feature extraction in no_grad context (no gradients needed for pretrained models)
