@@ -120,13 +120,23 @@ class Trainer:
         )
         
         # Meansure total system peroformance (FLOPS, params)
+        backbone_constructors = {
+            'mobilenet_v2': models.mobilenet_v2,
+            'mobilenet_v3_small': models.mobilenet_v3_small,
+            'mobilenet_v3_large': models.mobilenet_v3_large,
+            'efficientnet_b0': models.efficientnet_b0,
+            'mnasnet': models.mnasnet1_0
+        }
+        
         self._measure_total_system(
             gte_model=self.model,
+            backbone_constructor=backbone_constructors[config.backbone], 
+            backbone_name=config.backbone,       
             temporal_dim=temporal_dim,
             channels=num_channels,
             device=config.device
         )
-        
+
         # Loss and optimizer
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = Adam(
@@ -158,12 +168,12 @@ class Trainer:
         self.train_accs = []
         self.val_accs = []
     
-    def _measure_total_system(self, gte_model, temporal_dim, channels, device):
+    def _measure_total_system(self, gte_model, backbone_constructor, backbone_name, temporal_dim, channels, device):
         """
         Measure parameters and FLOPs for the entire system (STE + GTE).
-        Since STE is pre-extracted, we instantiate a dummy MobileNetV2 to measure it.
+        Since STE is pre-extracted, we instantiate a dummy MobileNet to measure it.
         """
-        self.logger.info("SYSTEM EFFICIENCY BENCHMARK (STE + GTE)")
+        self.logger.info(f"SYSTEM EFFICIENCY BENCHMARK ({backbone_name} + GTE)")
 
         # 1. Measure GTE (Head)
         gte_params = sum(p.numel() for p in gte_model.parameters())
@@ -178,9 +188,15 @@ class Trainer:
         except Exception as e:
             self.logger.warning(f"Error measuring GTE FLOPs: {e}")
 
-        # 2. Measure STE Backbone (MobileNetV2 - Assuming this is what used for feature extraction)
+        try:
+            #Instantiate the model using the passed constructor instead of hardcoding
+            backbone = backbone_constructor()
+        except Exception as e:
+            self.logger.warning(f"Failed to load backbone for measurement: {e}")
+            backbone = models.mobilenet_v2() # Fallback only if dynamic load fails
+
+        # 2. Measure STE Backbone (MobileNet - Assuming this is what used for feature extraction)
         # We create a temporary model just for measurement
-        backbone = models.mobilenet_v2()
         backbone_params = sum(p.numel() for p in backbone.parameters())
         backbone_flops = 0
         
@@ -189,9 +205,9 @@ class Trainer:
             dummy_ste = torch.randn(1, 3, 224, 224)
             macs_ste, _ = profile(backbone, inputs=(dummy_ste,), verbose=False)
                 
-            # IMPORTANT: The paper processes 30 frames total.
-            # So backbone FLOPs = Single Frame FLOPs * 30
-            backbone_flops = (macs_ste * 2) * 30 
+            # IMPORTANT: The paper processes 10 frames total.
+            # So backbone FLOPs = Single Frame FLOPs * 10
+            backbone_flops = (macs_ste * 2) * 10 
         except Exception as e:
             self.logger.warning(f"Error measuring STE FLOPs: {e}")
 
@@ -200,7 +216,7 @@ class Trainer:
         total_flops_g = (gte_flops + backbone_flops) / 1e9  # Convert to Giga
         
         # 4. Log Results
-        self.logger.info(f"1. STE Backbone (MobileNetV2 - Simulated):")
+        self.logger.info(f"1. STE Backbone (MobileNet - Simulated):")
         self.logger.info(f"   - Params: {backbone_params/1e6:.2f} M")
         self.logger.info(f"   - FLOPs (30 frames): {backbone_flops/1e9:.2f} G")
         
