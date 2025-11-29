@@ -29,16 +29,8 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY must be set in environment variables")
 
-# Firebase Admin SDK initialization
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-service-account.json")
-if not firebase_admin._apps:  # Only initialize if not already initialized
-    try:
-        cred = credentials.Certificate(firebase_credentials_path)
-        firebase_admin.initialize_app(cred)
-        logger.info("Firebase Admin SDK initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
-        raise
+# Firebase Admin SDK initialization is handled in main.py -> src.infrastructure.firebase.setup
+# We expect the app to be initialized before any routes are called.
 
 
 class FirebaseTokenRequest(BaseModel):

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Logging
     log_to_file: bool = os.getenv("LOG_TO_FILE", "False").lower() == "true"
     
+    # Firebase
+    firebase_storage_bucket: str = os.getenv("FIREBASE_STORAGE_BUCKET", "")
+    
     class Config:
         """Pydantic config."""
         env_file = ".env"
