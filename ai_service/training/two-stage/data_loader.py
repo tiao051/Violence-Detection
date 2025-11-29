@@ -571,7 +571,8 @@ class VideoDataLoader(Dataset):
             # Return zeros with expected GTE input shape on error
             # This allows batch processing to continue without crashes
             channels = self.ste_extractor.backbone_config['out_channels']
-            return torch.zeros((10, 1280, 7, 7)), item['label']
+            spatial_size = self.ste_extractor.backbone_config['spatial_size']
+            return torch.zeros((10, channels, spatial_size, spatial_size)), item['label']
         
         # Wrap feature extraction in no_grad context (no gradients needed for pretrained models)
         with torch.no_grad():
