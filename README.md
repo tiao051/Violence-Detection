@@ -104,11 +104,11 @@ The system implements a 3-stage spatiotemporal feature extraction pipeline:
 
 | Backbone | Accuracy (RWF-2000) | Accuracy (Hockey Fight) | Params | FLOPs |
 |----------|---------------------|------------------------|--------|-------|
-| MobileNetV2 (original) | **82%** | **98%** | 3.51M | 3.15G |
+| MobileNetV2 (original) | 82% | 98% | 3.51M | 3.15G |
 | **MobileNetV3 Small** | - | - | **2.54M** | **1.25G** |
-| MobileNetV3 Large | - | - | 5.42M | 3.83G |
-| EfficientNet B0 | - | - | 5.29M | 0.72G |
-| MNasNet | - | - | 4.38M | 2.13G |
+| MobileNetV3 Large | - | - | 5.49M | 4.70 G |
+| EfficientNet B0 | - | - | 5.29M | 8.30 G |
+| MNasNet | - | - | 4.39M | 6.72G |
 
 **Key Achievement**: MobileNetV3 Small achieves better accuracy than original paper while reducing parameters by 28% and FLOPs by 60%
 
