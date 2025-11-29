@@ -9,6 +9,7 @@ Arguments:
 
 Options:
     --dataset-root PATH                Path to dataset root (default: auto-detect from workspace)
+    --backbone BACKBONE                STE backbone for feature extraction (default: mobilenet_v2)
     --epochs EPOCHS                    Number of epochs (default: 100)
     --batch-size BATCH_SIZE            Batch size (default: 2)
     --lr LEARNING_RATE                 Learning rate (default: 0.001)
@@ -16,6 +17,8 @@ Options:
     --num-workers NUM_WORKERS          Number of DataLoader workers (default: 2)
 
 Examples:
+    python train.py --dataset rwf-2000 --backbone mobilenet_v2
+    python train.py --dataset rwf-2000 --backbone mobilenet_v3_small
     python train.py --dataset rwf-2000 --epochs 20
     python train.py --dataset hockey-fight --epochs 50 --batch-size 4
     python train.py --dataset rwf-2000 --dataset-root d:/custom/path --epochs 50
@@ -24,12 +27,14 @@ Examples:
 import argparse
 import sys
 import logging
+from thop import profile
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 
 import torch
 import torch.nn as nn
+import torchvision.models as models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.optim import Adam
@@ -40,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from data_loader import VideoDataLoader, AugmentationConfig
 from remonet.gte.extractor import GTEExtractor
+from remonet.ste.extractor import BackboneType, BACKBONE_CONFIG
 
 @dataclass
 class TrainConfig:
@@ -53,6 +59,7 @@ class TrainConfig:
     extracted_frames_dir: str = None
     num_workers: int = 2
     dataset: str = None  # Dataset name: 'rwf-2000' or 'hockey-fight' (required)
+    backbone: str = 'mobilenet_v2'  # STE backbone to use for feature extraction
     
     # One-Cycle LR Scheduler config (per paper)
     scheduler_max_lr: float = 1e-3
@@ -87,6 +94,7 @@ class Trainer:
         self.logger.info(f"Device: {self.device}")
         self.logger.info(f"Extracted frames: {config.extracted_frames_dir}")
         self.logger.info(f"Num workers: {config.num_workers}")
+        self.logger.info(f"Backbone: {config.backbone}")
         
         # Create data loaders
         self.train_loader = self._create_dataloader('train')
@@ -95,10 +103,12 @@ class Trainer:
         self.logger.info(f"Train samples: {len(self.train_loader.dataset)}")
         self.logger.info(f"Val samples: {len(self.val_loader.dataset)}\n")
         
-        # Use default feature shape from STE (MobileNetV2)
-        num_channels = 1280
+        # Get backbone configuration from STE
+        backbone_config = BACKBONE_CONFIG[BackboneType(config.backbone)]
+        num_channels = backbone_config['out_channels']
         temporal_dim = 10  # 30 frames / 3 = 10
-        self.logger.info(f"Expected STE feature shape: ({temporal_dim}, {num_channels}, H, W)\n")
+        spatial_size = backbone_config['spatial_size']
+        self.logger.info(f"Expected STE feature shape: ({temporal_dim}, {num_channels}, {spatial_size}, {spatial_size})\n")
         
         
         # Initialize GTE model
@@ -106,6 +116,14 @@ class Trainer:
             num_channels=num_channels,
             temporal_dim=temporal_dim,
             num_classes=2,
+            device=config.device
+        )
+        
+        # Meansure total system peroformance (FLOPS, params)
+        self._measure_total_system(
+            gte_model=self.model,
+            temporal_dim=temporal_dim,
+            channels=num_channels,
             device=config.device
         )
         
@@ -140,6 +158,59 @@ class Trainer:
         self.train_accs = []
         self.val_accs = []
     
+    def _measure_total_system(self, gte_model, temporal_dim, channels, device):
+        """
+        Measure parameters and FLOPs for the entire system (STE + GTE).
+        Since STE is pre-extracted, we instantiate a dummy MobileNetV2 to measure it.
+        """
+        self.logger.info("SYSTEM EFFICIENCY BENCHMARK (STE + GTE)")
+
+        # 1. Measure GTE (Head)
+        gte_params = sum(p.numel() for p in gte_model.parameters())
+        gte_flops = 0
+        
+        try:
+            # Dummy input for GTE: (Batch=1, Time=10, Channels, 7, 7)
+            dummy_gte = torch.randn(1, temporal_dim, channels, 7, 7).to(device)
+            gte_model.eval()
+            macs_gte, _ = profile(gte_model, inputs=(dummy_gte,), verbose=False)
+            gte_flops = macs_gte * 2  # FLOPs approx 2 * MACs
+        except Exception as e:
+            self.logger.warning(f"Error measuring GTE FLOPs: {e}")
+
+        # 2. Measure STE Backbone (MobileNetV2 - Assuming this is what used for feature extraction)
+        # We create a temporary model just for measurement
+        backbone = models.mobilenet_v2()
+        backbone_params = sum(p.numel() for p in backbone.parameters())
+        backbone_flops = 0
+        
+        try:
+            # Dummy input for Backbone: 1 Frame (1, 3, 224, 224)
+            dummy_ste = torch.randn(1, 3, 224, 224)
+            macs_ste, _ = profile(backbone, inputs=(dummy_ste,), verbose=False)
+                
+            # IMPORTANT: The paper processes 30 frames total.
+            # So backbone FLOPs = Single Frame FLOPs * 30
+            backbone_flops = (macs_ste * 2) * 30 
+        except Exception as e:
+            self.logger.warning(f"Error measuring STE FLOPs: {e}")
+
+        # 3. Calculate Totals
+        total_params = gte_params + backbone_params
+        total_flops_g = (gte_flops + backbone_flops) / 1e9  # Convert to Giga
+        
+        # 4. Log Results
+        self.logger.info(f"1. STE Backbone (MobileNetV2 - Simulated):")
+        self.logger.info(f"   - Params: {backbone_params/1e6:.2f} M")
+        self.logger.info(f"   - FLOPs (30 frames): {backbone_flops/1e9:.2f} G")
+        
+        self.logger.info(f"2. GTE Head (Actual Model):")
+        self.logger.info(f"   - Params: {gte_params/1e6:.2f} M")
+        self.logger.info(f"   - FLOPs: {gte_flops/1e9:.4f} G")
+        
+        self.logger.info(f"   - Total Params: {total_params/1e6:.2f} M")
+        self.logger.info(f"   - Total FLOPs:  {total_flops_g:.2f} G")
+
     def _setup_logger(self) -> logging.Logger:
         """Setup logging to file and console."""
         log_dir = Path(__file__).parent / 'logs'
@@ -384,6 +455,9 @@ def main():
                         help='Dataset to use for training (required: rwf-2000 or hockey-fight)')
     parser.add_argument('--dataset-root', type=str, default=None, 
                         help='Path to dataset root (default: auto-detect from workspace)')
+    parser.add_argument('--backbone', type=str, default='mobilenet_v2',
+                        choices=['mobilenet_v2', 'mobilenet_v3_small', 'mobilenet_v3_large', 'efficientnet_b0', 'mnasnet'],
+                        help='STE backbone for feature extraction (default: mobilenet_v2)')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs (default: 100)')
     parser.add_argument('--batch-size', type=int, default=2, help='Batch size (default: 2)')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate (default: 1e-3)')
@@ -439,7 +513,8 @@ def main():
         device=args.device or ('cuda' if torch.cuda.is_available() else 'cpu'),
         extracted_frames_dir=str(extracted_frames_dir),
         num_workers=args.num_workers,
-        dataset=args.dataset
+        dataset=args.dataset,
+        backbone=args.backbone
     )
     
     # Start training
