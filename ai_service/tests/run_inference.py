@@ -92,7 +92,7 @@ def save_buffer_frames(frames_rgb: List[np.ndarray], out_dir: Path, window_idx: 
     return paths
 
 
-def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: str = 'mobilenet_v2', confidence_threshold: float = 0.5):
+def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: str = 'mobilenet_v2', confidence_threshold: float = 0.5, save_frames: bool = True):
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
@@ -126,6 +126,7 @@ def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: s
     logger.info(f"  Backbone: {backbone}")
     logger.info(f"  Confidence threshold: {confidence_threshold}")
     logger.info(f"  Buffer size: {config.num_frames} frames")
+    logger.info(f"  Save frames: {save_frames}")
     logger.info("")
     
     model = ViolenceDetectionModel(config)
@@ -166,7 +167,11 @@ def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: s
             
             # Save current buffer frames and metadata
             buffered_frames = list(model.frame_buffer)
-            saved_paths = save_buffer_frames(buffered_frames, out_dir, window_idx)
+            
+            saved_paths = []
+            if save_frames:
+                saved_paths = save_buffer_frames(buffered_frames, out_dir, window_idx)
+            
             meta = {
                 "window_idx": window_idx,
                 "video": str(video_path.name),
@@ -206,7 +211,11 @@ def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: s
             latencies.append(latency)
             
             buffered_frames = list(model.frame_buffer)
-            saved_paths = save_buffer_frames(buffered_frames, out_dir, window_idx)
+            
+            saved_paths = []
+            if save_frames:
+                saved_paths = save_buffer_frames(buffered_frames, out_dir, window_idx)
+                
             meta = {
                 "window_idx": window_idx,
                 "video": str(video_path.name),
@@ -248,7 +257,8 @@ def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: s
     logger.info(f"\n{'='*70}")
     logger.info(f"OUTPUT")
     logger.info(f"{'='*70}")
-    logger.info(f"  Frames saved: {len(manifest) * config.num_frames}")
+    total_frames_saved = sum(len(m.get("saved_frames", [])) for m in manifest)
+    logger.info(f"  Frames saved: {total_frames_saved}")
     logger.info(f"  Manifest: {manifest_path}")
     logger.info(f"  Detection frames: {out_dir}")
     logger.info(f"{'='*70}\n")
@@ -263,6 +273,8 @@ def main():
                         help="STE backbone used during training (optional, auto-detect from model name if not provided)")
     parser.add_argument("--confidence-threshold", type=float, default=0.5,
                         help="Confidence threshold for violence detection (default: 0.5)")
+    parser.add_argument("--no-save-frames", action="store_false", dest="save_frames", help="Do not save frames of detected events (default: Save frames)")
+    parser.set_defaults(save_frames=True)
 
     args = parser.parse_args()
 
@@ -319,7 +331,7 @@ def main():
     out_base = outputs_dir
     ensure_dirs(out_base)
 
-    run_on_video(video_path, model_path, out_base, backbone, args.confidence_threshold)
+    run_on_video(video_path, model_path, out_base, backbone, args.confidence_threshold, args.save_frames)
 
 
 if __name__ == "__main__":
