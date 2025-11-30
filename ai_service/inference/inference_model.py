@@ -146,7 +146,7 @@ class ViolenceDetectionModel:
         
         # Load weights
         try:
-            gte_model.load_state_dict(checkpoint['model_state_dict'])
+            gte_model.load_state_dict(checkpoint['model_state_dict'], strict=False)
             gte_model.eval()
             best_val_acc = checkpoint.get('best_val_acc', 'N/A')
             logger.info(
