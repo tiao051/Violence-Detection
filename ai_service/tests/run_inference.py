@@ -52,7 +52,7 @@ def save_buffer_frames(frames_rgb: List[np.ndarray], out_dir: Path, window_idx: 
     return paths
 
 
-def run_on_video(video_path: Path, model_path: Path, out_base: Path):
+def run_on_video(video_path: Path, model_path: Path, out_base: Path, backbone: str = 'mobilenet_v2', confidence_threshold: float = 0.5):
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
@@ -60,8 +60,12 @@ def run_on_video(video_path: Path, model_path: Path, out_base: Path):
     out_dir = out_base / "detection"
     ensure_dirs(out_dir)
 
-    # Initialize model (use default num_frames from InferenceConfig)
-    config = InferenceConfig(model_path=str(model_path))
+    # Initialize model with backbone and confidence threshold
+    config = InferenceConfig(
+        model_path=str(model_path),
+        backbone=backbone,
+        confidence_threshold=confidence_threshold
+    )
     model = ViolenceDetectionModel(config)
 
     frame_count = 0
@@ -133,6 +137,11 @@ def main():
     parser = argparse.ArgumentParser(description="Run end-to-end inference on a test video")
     parser.add_argument("--input", required=True, help="Input video filename from ai_service/utils/test_data/inputs/videos/")
     parser.add_argument("--model", required=False, help="Path to model checkpoint (optional)")
+    parser.add_argument("--backbone", default='mobilenet_v2', 
+                        choices=['mobilenet_v2', 'mobilenet_v3_small', 'mobilenet_v3_large', 'efficientnet_b0', 'mnasnet'],
+                        help="STE backbone used during training (default: mobilenet_v2). If checkpoint has backbone info, it will be auto-corrected.")
+    parser.add_argument("--confidence-threshold", type=float, default=0.5,
+                        help="Confidence threshold for violence detection (default: 0.5)")
 
     args = parser.parse_args()
 
@@ -151,7 +160,7 @@ def main():
     out_base = outputs_dir
     ensure_dirs(out_base)
 
-    run_on_video(video_path, model_path, out_base)
+    run_on_video(video_path, model_path, out_base, args.backbone, args.confidence_threshold)
 
 
 if __name__ == "__main__":
