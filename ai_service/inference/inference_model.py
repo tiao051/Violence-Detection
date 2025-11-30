@@ -11,11 +11,10 @@ from pathlib import Path
 from typing import Dict, Optional
 import logging
 from dataclasses import dataclass
-import asyncio
 import time
 
 from ai_service.remonet.sme.extractor import SMEExtractor
-from ai_service.remonet.ste.extractor import STEExtractor
+from ai_service.remonet.ste.extractor import STEExtractor, BackboneType, BACKBONE_CONFIG
 from ai_service.remonet.gte.extractor import GTEExtractor
 
 logger = logging.getLogger(__name__)
@@ -25,6 +24,7 @@ logger = logging.getLogger(__name__)
 class InferenceConfig:
     """Configuration for violence detection inference."""
     model_path: str
+    backbone: str = 'mobilenet_v2'  # STE backbone used during training
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     confidence_threshold: float = 0.5
     num_frames: int = 30
@@ -54,7 +54,10 @@ class ViolenceDetectionModel:
         
         # Initialize extractors
         self.sme_extractor = SMEExtractor()
-        self.ste_extractor = STEExtractor(device=config.device, training_mode=False)
+        self.ste_extractor = STEExtractor(device=config.device, training_mode=False, backbone=config.backbone)
+        
+        # Get backbone config for GTE initialization
+        self.backbone_config = BACKBONE_CONFIG[BackboneType(config.backbone)]
         
         # Load trained GTE model
         self.gte_model = self._load_gte_model()
@@ -76,22 +79,85 @@ class ViolenceDetectionModel:
         if not model_path.exists():
             raise FileNotFoundError(f"Model not found: {model_path}")
         
-        # Create model instance (matches training setup)
-        gte_model = GTEExtractor(
-            num_channels=1280,  # MobileNetV2 output channels
-            temporal_dim=10,     # 30 frames / 3 = 10
-            num_classes=2,       # Violence / NonViolence
-            device=self.config.device
-        )
-        
         # Load checkpoint
         try:
             checkpoint = torch.load(model_path, map_location=self.device)
+        except Exception as e:
+            logger.error(f"Failed to load checkpoint: {e}")
+            raise
+        
+        # Check if checkpoint has backbone and num_channels info
+        checkpoint_backbone = checkpoint.get('backbone', None)
+        checkpoint_num_channels = checkpoint.get('num_channels', None)
+        
+        if checkpoint_backbone is None or checkpoint_num_channels is None:
+            logger.warning(
+                f"Model checkpoint config incomplete:"
+            )
+            if checkpoint_backbone is None:
+                logger.warning(f"   - 'backbone' field missing (using config default: {self.config.backbone})")
+            if checkpoint_num_channels is None:
+                logger.warning(f"   - 'num_channels' field missing (using config backbone's channels: {self.backbone_config['out_channels']})")
+            logger.warning(f"   → Skipping backbone validation. Using inference config values.")
+            logger.warning(f"   → Model was likely trained with old code. Next training will include this info.\n")
+        else:
+            # Checkpoint has both fields - validate them
+            logger.info(
+                f"Model checkpoint config complete:"
+            )
+            logger.info(f"   - Backbone: {checkpoint_backbone}")
+            logger.info(f"   - Num channels: {checkpoint_num_channels}")
+            
+            # Validate backbone matches
+            if checkpoint_backbone != self.config.backbone:
+                logger.warning(
+                    f"Backbone mismatch: checkpoint trained with '{checkpoint_backbone}' "
+                    f"but config specifies '{self.config.backbone}'. "
+                    f"Auto-correcting to use checkpoint backbone.\n"
+                )
+                # Auto-correct to use checkpoint backbone
+                self.config.backbone = checkpoint_backbone
+                self.backbone_config = BACKBONE_CONFIG[BackboneType(checkpoint_backbone)]
+                # Reinitialize STE with correct backbone
+                self.ste_extractor = STEExtractor(
+                    device=self.config.device,
+                    training_mode=False,
+                    backbone=checkpoint_backbone
+                )
+            
+            # Verify num_channels matches expected value
+            expected_channels = self.backbone_config['out_channels']
+            if checkpoint_num_channels != expected_channels:
+                raise ValueError(
+                    f"Channel mismatch: checkpoint has {checkpoint_num_channels} channels "
+                    f"but backbone {self.config.backbone} should have {expected_channels}"
+                )
+        
+        # Get num_channels (from checkpoint if available, else from config)
+        num_channels = checkpoint_num_channels or self.backbone_config['out_channels']
+        
+        # Create model instance
+        gte_model = GTEExtractor(
+            num_channels=num_channels,
+            temporal_dim=10,
+            num_classes=2,
+            device=self.config.device
+        )
+        
+        # Load weights
+        try:
             gte_model.load_state_dict(checkpoint['model_state_dict'])
             gte_model.eval()
-            logger.info(f"Loaded model from {model_path}")
+            best_val_acc = checkpoint.get('best_val_acc', 'N/A')
+            logger.info(
+                f"\nModel loaded successfully:"
+            )
+            logger.info(f"   - Path: {model_path}")
+            logger.info(f"   - Backbone: {self.config.backbone}")
+            logger.info(f"   - Channels: {num_channels}")
+            logger.info(f"   - Best val accuracy: {best_val_acc}\n")
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to load model weights: {e}")
             raise
         
         return gte_model
@@ -140,28 +206,28 @@ class ViolenceDetectionModel:
                 
                 # Step 2: Apply STE (Spatial Temporal Feature Extraction)
                 ste_output = self.ste_extractor.process(motion_frames)
-                features = ste_output.features  # (10, 1280, 7, 7)
+                features = ste_output.features  # (10, C, 7, 7) where C depends on backbone
                 
                 # Step 3: Apply GTE (Global Temporal Extraction)
                 gte_output = self.gte_model.process(features, timestamp=time.time())
-                logits_violence_prob = gte_output.violence_prob
-                logits_confidence = gte_output.violence_prob  # Use violence_prob as confidence
             
-            # Get predictions
-            class_id = 0 if logits_confidence > 0.5 else 1  # 0=Violence, 1=NonViolence
-            confidence = logits_confidence
+            # Extract probabilities from GTE output
+            # violence_prob = P(class=1=Violence)
+            # no_violence_prob = P(class=0=NonViolence)
+            violence_prob = gte_output.violence_prob
+            no_violence_prob = gte_output.no_violence_prob
+            
+            # Determine if violence detected
+            is_violence = violence_prob >= self.config.confidence_threshold
+            confidence = violence_prob
             
             # Calculate latency
             self.last_inference_latency = (time.time() - inference_start) * 1000  # ms
             self.last_inference_time = time.time()
             
-            # Determine if violence detected (class_id=0 is Violence)
-            is_violence = (class_id == 0) and (confidence >= self.config.confidence_threshold)
-            
             return {
                 'violence': is_violence,
                 'confidence': confidence,
-                'class_id': class_id,
                 'buffer_size': len(self.frame_buffer),
                 'latency_ms': self.last_inference_latency
             }
@@ -171,7 +237,6 @@ class ViolenceDetectionModel:
             return {
                 'violence': False,
                 'confidence': 0.0,
-                'class_id': 1,
                 'error': str(e),
                 'latency_ms': 0.0
             }

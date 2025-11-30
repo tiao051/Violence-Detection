@@ -458,6 +458,8 @@ class Trainer:
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'best_val_acc': self.best_val_acc,
+            'backbone': self.config.backbone,  # Store backbone used during training
+            'num_channels': BACKBONE_CONFIG[BackboneType(self.config.backbone)]['out_channels'],
         }, save_dir / filename)
 
 

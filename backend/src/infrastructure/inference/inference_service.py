@@ -102,7 +102,7 @@ class InferenceService:
             logger.error(f"Detection error: {e}")
             raise
     
-    async def detect_frame_async(self, frame: np.ndarray) -> Dict:
+    async def detect_frame_async(self, frame: np.ndarray) -> Optional[Dict]:
         """
         Add frame and perform inference asynchronously.
         
@@ -110,7 +110,7 @@ class InferenceService:
             frame: Input frame (BGR, uint8)
         
         Returns:
-            Dict with detection results
+            Dict with detection results if buffer is full, else None
         """
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.executor, self.detect_frame, frame)
