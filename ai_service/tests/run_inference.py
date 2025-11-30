@@ -1,20 +1,60 @@
 """CLI script to run end-to-end inference on a local test video.
 
 Usage:
-    python ai_service/tests/run_inference.py --input violence_1.mp4
+    python ai_service/tests/run_inference.py --input <video_file> [OPTIONS]
+
+Arguments:
+    --input <video_file>             Input video filename (required)
+                                     Available: violence_1.mp4, violence_2.mp4, violence_3.mp4,
+                                               violence_4.mp4, violence_5.mp4, non_violence_1.mp4
+
+Options:
+    --model <path>                   Path to model checkpoint (optional)
+                                     Auto-detects best available if not provided
+                                     Priority: best_model_hf_v3.pt → best_model_rwf_v3.pt → others
+    
+    --backbone <backbone>            STE backbone used during training (optional)
+                                     Options: mobilenet_v2, mobilenet_v3_small, mobilenet_v3_large,
+                                             efficientnet_b0, mnasnet
+                                     Auto-detects from model name if not provided
+    
+    --confidence-threshold <value>   Confidence threshold for violence detection (default: 0.5)
+                                     Range: 0.0-1.0
 
 Defaults:
     - Input folder: `ai_service/utils/test_data/inputs/videos/`
     - Output folder: `ai_service/utils/test_data/outputs/detection/`
+    - Model: auto-detected from checkpoints folder
+    - Backbone: auto-detected from model filename
+    - Confidence threshold: 0.5
+
+Examples:
+    # Auto-detect everything (recommended)
+    python ai_service/tests/run_inference.py --input violence_2.mp4
+    
+    # Specify backbone explicitly
+    python ai_service/tests/run_inference.py --input violence_2.mp4 --backbone mobilenet_v3_small
+    
+    # Lower confidence threshold for more sensitivity
+    python ai_service/tests/run_inference.py --input violence_2.mp4 --confidence-threshold 0.3
+    
+    # Use custom model
+    python ai_service/tests/run_inference.py --input violence_2.mp4 --model /path/to/custom_model.pt
+
+Output:
+    - Detected frames: ai_service/utils/test_data/outputs/detection/detection_window_*.jpg
+    - Metadata: ai_service/utils/test_data/outputs/detection/manifest.json
+    - Inference results with confidence scores and latency metrics
 
 The script will:
     - Read the input video, resize frames to 224x224 (model expectation)
-    - Feed frames into the ViolenceDetectionModel (no logic changed)
-    - When the model returns a detection result (buffer full), save the
-      buffered frames and a JSON metadata file containing confidence/violence/etc.
+    - Feed frames into the ViolenceDetectionModel
+    - When buffer reaches 30 frames, perform inference and save results
+    - Repeat for entire video with sliding window
+    - Generate comprehensive statistics (accuracy, latency, FPS, etc.)
 
 If the video has fewer frames than the model buffer size, the script will
-repeat the last frame to fill the buffer and perform one inference.
+repeat the last frame to fill the buffer and perform one final inference.
 """
 
 import argparse
