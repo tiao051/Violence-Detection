@@ -141,14 +141,6 @@ app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
 
-# Mount static files for frontend (React build output)
-# This serves the React app from /
-# import os
-# static_dir = os.path.join(os.path.dirname(__file__), "src/presentation/static")
-# if os.path.exists(static_dir):
-#     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-
-
 @app.get("/")
 async def root():
     """Root endpoint"""
