@@ -64,6 +64,7 @@ class ViolenceDetectionModel:
         
         # Frame buffer for temporal aggregation
         self.frame_buffer = []
+        self.motion_buffer = []  # Cache for motion frames
         self.MAX_BUFFER_SIZE = config.num_frames
         
         # Latency tracking
@@ -164,7 +165,7 @@ class ViolenceDetectionModel:
     
     def add_frame(self, frame: np.ndarray) -> None:
         """
-        Add frame to buffer.
+        Add frame to buffer and incrementally compute motion.
         
         Args:
             frame: Input frame (BGR, uint8, 224×224)
@@ -176,6 +177,18 @@ class ViolenceDetectionModel:
         
         # Convert BGR to RGB (frame should already be 224×224)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # If we have a previous frame, compute motion immediately
+        if self.frame_buffer:
+            last_frame = self.frame_buffer[-1]
+            # Compute motion: last_frame -> current_frame
+            roi, _, _, _ = self.sme_extractor.process(last_frame, frame_rgb)
+            self.motion_buffer.append(roi)
+            
+            # Maintain motion buffer size (MAX_BUFFER_SIZE - 1)
+            # We need N-1 motion frames for N frames
+            if len(self.motion_buffer) > self.MAX_BUFFER_SIZE - 1:
+                self.motion_buffer.pop(0)
         
         self.frame_buffer.append(frame_rgb)
         
@@ -197,12 +210,21 @@ class ViolenceDetectionModel:
         try:
             inference_start = time.time()
             
-            # Convert buffer to numpy array
-            frames = np.array(self.frame_buffer, dtype=np.uint8)  # (30, 224, 224, 3)
+            # Prepare motion frames from cache
+            # We have 29 motion frames, need 30 for STE (duplicate last one)
+            if not self.motion_buffer:
+                # Should not happen if add_frame logic is correct and buffer is full
+                logger.warning("Motion buffer empty despite full frame buffer")
+                return None
+                
+            motion_frames_list = list(self.motion_buffer)
+            # Duplicate last motion frame to match input count (29 -> 30)
+            motion_frames_list.append(motion_frames_list[-1])
+            
+            motion_frames = np.array(motion_frames_list, dtype=np.float32) # (30, 224, 224, 3)
             
             with torch.no_grad():
-                # Step 1: Apply SME (Spatial Motion Extraction)
-                motion_frames = self.sme_extractor.process_batch(frames)
+                # Step 1: SME is already done incrementally!
                 
                 # Step 2: Apply STE (Spatial Temporal Feature Extraction)
                 ste_output = self.ste_extractor.process(motion_frames)
@@ -244,6 +266,7 @@ class ViolenceDetectionModel:
     def reset_buffer(self) -> None:
         """Clear frame buffer."""
         self.frame_buffer.clear()
+        self.motion_buffer.clear()
 
 
 # Lazy-loaded singleton instance
