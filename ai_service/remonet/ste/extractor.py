@@ -14,7 +14,7 @@ from torchvision.models import (
     MobileNet_V2_Weights, MobileNet_V3_Small_Weights, MobileNet_V3_Large_Weights,
     EfficientNet_B0_Weights, MNASNet1_0_Weights
 )
-from typing import List, Dict, Tuple, Optional, Literal
+from typing import List, Dict, Tuple, Optional, Literal, Union
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -170,49 +170,7 @@ class STEExtractor:
         
         return feature_extractor
 
-    def create_temporal_composite(self, frames: List[np.ndarray]) -> np.ndarray:
-        """
-        Create temporal composite from 3 consecutive frames.
-        
-        Process (per paper):
-        1. Average RGB channels for each frame independently (grayscale)
-        2. Stack 3 grayscale frames as pseudo-RGB image P_t,t+1,t+2
-        3. Normalize using ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        
-        Args:
-            frames: List of 3 RGB motion frames (each: 224×224×3)
-                   Can be uint8 [0-255] or float32 [0-1]
-            
-        Returns:
-            composite_normalized: Shape (224, 224, 3), float32, ImageNet normalized
-        """
-        if len(frames) != self.num_frames:
-            raise ValueError(f"Expected {self.num_frames} frames, got {len(frames)}")
-        
-        # Average RGB channels for each frame to get grayscale
-        # M_t (H×W×3) → p_t = mean(RGB channels) → (H×W)
-        p_t = np.mean(frames[0].astype(np.float32), axis=2)    # (224, 224)
-        p_t1 = np.mean(frames[1].astype(np.float32), axis=2)   # (224, 224)
-        p_t2 = np.mean(frames[2].astype(np.float32), axis=2)   # (224, 224)
-        
-        # Stack 3 temporal frames as channels to create composite P_t,t+1,t+2
-        # Temporal information is encoded in the 3 channels
-        composite = np.stack([p_t, p_t1, p_t2], axis=2)  # (224, 224, 3)
-        
-        # Handle both uint8 [0-255] and float32 [0-1] inputs
-        if composite.max() > 1.0:
-            # Input is uint8 [0-255], normalize to [0, 1]
-            composite = composite / 255.0
-        # else: already in [0, 1] range (float from SME)
-        
-        # Apply ImageNet normalization (mean and std per channel)
-        imagenet_mean = np.array([0.485, 0.456, 0.406])
-        imagenet_std = np.array([0.229, 0.224, 0.225])
-        composite_normalized = (composite - imagenet_mean) / imagenet_std
-        
-        return composite_normalized.astype(np.float32)
-
-    def process_batch(self, frames: np.ndarray) -> torch.Tensor:
+    def process_batch(self, frames: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         """
         Process batch of 30 frames to extract spatiotemporal features.
         
@@ -220,7 +178,7 @@ class STEExtractor:
         Extracts feature maps for all 10 composites in batch using selected backbone.
         
         Args:
-            frames: numpy array (30, 224, 224, 3), RGB
+            frames: numpy array or tensor (30, 224, 224, 3), RGB
                    Can be uint8 [0-255] or float32 [0-1]
             
         Returns:
@@ -232,26 +190,41 @@ class STEExtractor:
         if len(frames) != 30:
             raise ValueError(f"Expected 30 frames, got {len(frames)}")
         
-        # Create 10 temporal composites from 30 frames (T/3)
-        composites = []
-        for i in range(0, 30, 3):
-            if i + 2 < len(frames):
-                composite = self.create_temporal_composite([frames[i], frames[i+1], frames[i+2]])
-                composites.append(composite)
+        # Optimize: Perform all preprocessing on GPU using PyTorch
         
-        # Stack composites: (10, 224, 224, 3)
-        composites_batch = np.array(composites)
+        # 1. Convert to Tensor and move to device immediately
+        if isinstance(frames, np.ndarray):
+            frames_tensor = torch.from_numpy(frames).to(self.device)
+        else:
+            frames_tensor = frames.to(self.device)
+            
+        # frames_tensor shape: (30, 224, 224, 3)
         
-        # Convert to tensor: (10, 224, 224, 3) -> (10, 3, 224, 224)
-        composites_tensor = torch.from_numpy(composites_batch).permute(0, 3, 1, 2)
-        composites_tensor = composites_tensor.to(self.device)
+        # 2. Average RGB channels -> Grayscale
+        # (30, 224, 224, 3) -> (30, 224, 224)
+        frames_gray = torch.mean(frames_tensor.float(), dim=3)
         
-        # Extract feature maps in batch
+        # 3. Group into 10 temporal composites (stack of 3 frames)
+        # Reshape (30, 224, 224) -> (10, 3, 224, 224)
+        # This effectively stacks [t, t+1, t+2] as channels 0, 1, 2
+        composites_tensor = frames_gray.view(10, 3, 224, 224)
+        
+        # 4. Normalize
+        # Check if input was [0-255] and scale to [0-1] if needed
+        if frames_tensor.max() > 1.0:
+            composites_tensor = composites_tensor / 255.0
+            
+        # Apply ImageNet normalization
+        # mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
+        
+        composites_tensor = (composites_tensor - mean) / std
+        
+        # 5. Extract feature maps in batch
         if self.training_mode:
-            # Training: enable gradient computation
             features = self.backbone(composites_tensor)
         else:
-            # Inference: no gradient computation
             with torch.no_grad():
                 features = self.backbone(composites_tensor)
         
@@ -259,7 +232,7 @@ class STEExtractor:
 
     def process(
         self,
-        frames: np.ndarray,
+        frames: Union[np.ndarray, torch.Tensor],
         camera_id: str = "unknown",
         timestamp: Optional[float] = None
     ) -> STEOutput:
@@ -276,7 +249,7 @@ class STEExtractor:
         - MNasNet: (10, 1280, 7, 7)
         
         Args:
-            frames: numpy array (30, 224, 224, 3), RGB
+            frames: numpy array or tensor (30, 224, 224, 3), RGB
                    Can be uint8 [0-255] or float32 [0-1]
             camera_id: Camera identifier
             timestamp: Timestamp for this batch (auto-generated if None)
