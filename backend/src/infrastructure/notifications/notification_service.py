@@ -54,35 +54,30 @@ class NotificationService:
         """
         if not tokens:
             return 0
-            
-        try:
-            message = messaging.MulticastMessage(
-                notification=messaging.Notification(
-                    title=title,
-                    body=body,
-                ),
-                data=data or {},
-                tokens=tokens,
-            )
-            
-            response = messaging.send_multicast(message)
-            
-            if response.failure_count > 0:
-                responses = response.responses
-                failed_tokens = []
-                for idx, resp in enumerate(responses):
-                    if not resp.success:
-                        # The order of responses corresponds to the order of the registration tokens.
-                        failed_tokens.append(tokens[idx])
+        
+        success_count = 0
+        
+        # Send to each token individually (workaround for batch endpoint 404)
+        for token in tokens:
+            try:
+                message = messaging.Message(
+                    notification=messaging.Notification(
+                        title=title,
+                        body=body,
+                    ),
+                    data=data or {},
+                    token=token,
+                )
                 
-                logger.warning(f"{response.failure_count} messages failed to send. Failed tokens: {failed_tokens}")
-            
-            logger.info(f"Successfully sent {response.success_count} messages")
-            return response.success_count
-            
-        except Exception as e:
-            logger.error(f"Error sending multicast message: {e}")
-            return 0
+                response = messaging.send(message)
+                logger.info(f"Successfully sent message to token: {token[:20]}...")
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error sending message to token {token[:20]}...: {e}")
+        
+        logger.info(f"Successfully sent {success_count}/{len(tokens)} messages")
+        return success_count
 
 
 # Singleton instance

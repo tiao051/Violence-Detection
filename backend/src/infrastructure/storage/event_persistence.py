@@ -12,6 +12,8 @@ from typing import Optional, List, Dict, Any
 import firebase_admin
 from firebase_admin import storage, firestore
 from src.infrastructure.memory import get_frame_buffer
+from src.infrastructure.notifications.notification_service import get_notification_service
+from src.infrastructure.storage.token_repository import get_token_repository
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,10 @@ class EventPersistenceService:
             event_id = self._save_to_firestore(camera_id, video_url, detection)
             
             logger.info(f"Event saved successfully: {event_id}")
+            
+            # 5. Send push notification to user
+            await self._send_push_notification(camera_id, event_id, detection)
+            
             return event_id
 
         except Exception as e:
@@ -190,6 +196,47 @@ class EventPersistenceService:
             "cam5": "Garage"
         }
         return names.get(camera_id, f"Camera {camera_id}")
+
+    async def _send_push_notification(self, camera_id: str, event_id: str, detection: Dict[str, Any]) -> None:
+        """
+        Send push notification to user about violence detection.
+        
+        Args:
+            camera_id: ID of the camera that detected violence
+            event_id: ID of the saved event (for deep linking)
+            detection: Detection data with confidence score
+        """
+        try:
+            # Get camera owner
+            owner_uid = self._get_camera_owner(camera_id)
+            
+            # Get user's FCM tokens
+            token_repo = get_token_repository()
+            tokens = await token_repo.get_tokens(owner_uid)
+            
+            if not tokens:
+                logger.warning(f"No FCM tokens found for user {owner_uid}, skipping notification")
+                return
+            
+            # Get camera name and format timestamp
+            camera_name = self._get_camera_name(camera_id)
+            timestamp = datetime.now().strftime("%H:%M")
+            confidence = detection.get("confidence", 0.0)
+            
+            # Send notification
+            notification_service = get_notification_service()
+            success_count = notification_service.send_multicast(
+                tokens=tokens,
+                title="⚠️ Phát Hiện Bạo Lực",
+                body=f"Camera {camera_name} phát hiện hoạt động đáng ngờ lúc {timestamp}. Bấm để xem!",
+                data={"event_id": event_id}  # For deep linking
+            )
+            
+            logger.info(f"Sent notification to {success_count}/{len(tokens)} devices for event {event_id}")
+            
+        except Exception as e:
+            # Don't fail event save if notification fails
+            logger.error(f"Failed to send push notification: {e}", exc_info=True)
 
 
 # Singleton instance
