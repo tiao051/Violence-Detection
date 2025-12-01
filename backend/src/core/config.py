@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     redis_pool_size: int = int(os.getenv("REDIS_POOL_SIZE", "10"))
     
     # RTSP
-    rtsp_enabled: bool = os.getenv("RTSP_ENABLED", "True").lower() == "true"
+    rtsp_enabled: bool = os.getenv("RTSP_ENABLED", "False").lower() == "true"
     rtsp_base_url: str = os.getenv("RTSP_BASE_URL", "rtsp://rtsp-server:8554")
     rtsp_cameras: List[str] = ["cam1", "cam2", "cam3", "cam4" ]  # Main simulated cameras (USB camera disabled for now)
     rtsp_sample_rate: int = int(os.getenv("RTSP_SAMPLE_RATE", "6"))  # FPS
