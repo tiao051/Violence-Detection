@@ -241,7 +241,11 @@ class ViolenceDetectionModel:
             
             # Determine if violence detected
             is_violence = violence_prob >= self.config.confidence_threshold
-            confidence = violence_prob
+            
+            # Return confidence of the predicted class
+            # If violence detected: return violence_prob (how confident it's violence)
+            # If no violence: return no_violence_prob (how confident it's NOT violence)
+            confidence = violence_prob if is_violence else no_violence_prob
             
             # Calculate latency
             self.last_inference_latency = (time.time() - inference_start) * 1000  # ms
