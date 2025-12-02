@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:security_app/services/auth_service.dart';
 import 'package:security_app/models/auth_model.dart';
+import 'package:security_app/services/notification_service.dart';
 
 /// Provider for managing authentication state.
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
   final SharedPreferences _prefs;
 
-  String? _accessToken;      // JWT access token for API calls
-  String? _refreshToken;     // JWT refresh token for renewal
+  String? _accessToken; // JWT access token for API calls
+  String? _refreshToken; // JWT refresh token for renewal
   bool _isLoading = false;
   bool _isLoadingGoogle = false;
   bool _isLoadingSignUp = false;
@@ -36,7 +37,7 @@ class AuthProvider with ChangeNotifier {
   bool get isChangingPassword => _isChangingPassword;
   String? get errorMessage => _errorMessage;
   AuthModel? get user => _user;
-  String? get accessToken => _accessToken;  // Expose token for API calls
+  String? get accessToken => _accessToken; // Expose token for API calls
   String? get refreshToken => _refreshToken;
 
   /// Initiates Google Sign-In via Firebase Authentication.
@@ -62,24 +63,29 @@ class AuthProvider with ChangeNotifier {
     try {
       // Get Firebase ID token from AuthService
       final firebaseIdToken = await _authService.signInWithGoogle();
-      
-      print('AuthProvider: Firebase ID token received (length: ${firebaseIdToken.length})');
-      
+
+      print(
+          'AuthProvider: Firebase ID token received (length: ${firebaseIdToken.length})');
+
       // Send Firebase ID token to backend for JWT exchange
       final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
-      
+
       _accessToken = tokens['access_token'];
       _refreshToken = tokens['refresh_token'];
-      
+
       // Save tokens to SharedPreferences
       await _prefs.setString('access_token', _accessToken!);
       await _prefs.setString('refresh_token', _refreshToken!);
 
       print('AuthProvider: JWT tokens saved to SharedPreferences');
-      
+
+      // Register FCM token with backend
+      final notificationService = NotificationService();
+      await notificationService.updateAccessToken(_accessToken!);
+
       _isLoadingGoogle = false;
       notifyListeners();
-      
+
       print('AuthProvider: Firebase Sign-In complete, isLoggedIn: $isLoggedIn');
     } catch (e) {
       print('AuthProvider: Firebase Sign-In failed: $e');
@@ -136,7 +142,7 @@ class AuthProvider with ChangeNotifier {
 
       // Exchange Firebase ID token for JWT
       final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
-      
+
       _accessToken = tokens['access_token'];
       _refreshToken = tokens['refresh_token'];
 
@@ -145,6 +151,10 @@ class AuthProvider with ChangeNotifier {
       await _prefs.setString('refresh_token', _refreshToken!);
 
       print('AuthProvider: JWT tokens saved');
+
+      // Register FCM token with backend
+      final notificationService = NotificationService();
+      await notificationService.updateAccessToken(_accessToken!);
 
       _isLoadingSignUp = false;
       notifyListeners();
@@ -184,7 +194,7 @@ class AuthProvider with ChangeNotifier {
 
       // Exchange Firebase ID token for JWT
       final tokens = await _authService.verifyFirebaseToken(firebaseIdToken);
-      
+
       _accessToken = tokens['access_token'];
       _refreshToken = tokens['refresh_token'];
 
@@ -193,6 +203,10 @@ class AuthProvider with ChangeNotifier {
       await _prefs.setString('refresh_token', _refreshToken!);
 
       print('AuthProvider: JWT tokens saved');
+
+      // Register FCM token with backend
+      final notificationService = NotificationService();
+      await notificationService.updateAccessToken(_accessToken!);
 
       _isLoading = false;
       notifyListeners();

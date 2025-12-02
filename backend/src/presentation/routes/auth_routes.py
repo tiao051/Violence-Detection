@@ -15,6 +15,7 @@ import firebase_admin
 from firebase_admin import credentials, auth
 
 from fastapi import APIRouter, HTTPException, Depends, Header
+from src.infrastructure.storage.token_repository import get_token_repository
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +30,8 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY must be set in environment variables")
 
-# Firebase Admin SDK initialization
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-service-account.json")
-if not firebase_admin._apps:  # Only initialize if not already initialized
-    try:
-        cred = credentials.Certificate(firebase_credentials_path)
-        firebase_admin.initialize_app(cred)
-        logger.info("Firebase Admin SDK initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
-        raise
+# Firebase Admin SDK initialization is handled in main.py -> src.infrastructure.firebase.setup
+# We expect the app to be initialized before any routes are called.
 
 
 class FirebaseTokenRequest(BaseModel):
@@ -49,6 +42,12 @@ class FirebaseTokenRequest(BaseModel):
 class RefreshTokenRequest(BaseModel):
     """Request to refresh access token."""
     refresh_token: str
+
+
+class FCMTokenRequest(BaseModel):
+    """Request to register FCM token for push notifications."""
+    token: str
+    device_type: str = "android"
 
 
 class TokenResponse(BaseModel):
@@ -498,3 +497,55 @@ async def get_stream_url(
     except Exception as e:
         logger.error(f"Error getting stream URL: {e}")
         raise HTTPException(status_code=500, detail="Failed to get stream URL")
+
+
+@router.post("/register-fcm-token")
+async def register_fcm_token(
+    request: FCMTokenRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, str]:
+    """
+    Register FCM token for push notifications.
+    
+    Associates the device's FCM token with the logged-in user so the backend
+    can send push notifications when violence is detected.
+    
+    Args:
+        request: FCM token registration request
+        current_user: Current user (from JWT token)
+        
+    Returns:
+        Success message
+        
+    Raises:
+        HTTPException: If token registration fails
+    """
+    try:
+        user_id = current_user.get("uid")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid user")
+        
+        # Save token to Firestore
+        token_repo = get_token_repository()
+        success = await token_repo.save_token(
+            user_id=user_id,
+            token=request.token,
+            device_type=request.device_type
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to register FCM token")
+        
+        logger.info(f"FCM token registered for user {user_id} (device: {request.device_type})")
+        
+        return {
+            "message": "FCM token registered successfully",
+            "status": "success"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error registering FCM token: {e}")
+        raise HTTPException(status_code=500, detail="Failed to register FCM token")

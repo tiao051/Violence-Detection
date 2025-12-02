@@ -19,6 +19,8 @@ from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.inference import get_inference_service
 from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
+from src.infrastructure.firebase.setup import initialize_firebase
+from src.application.event_processor import get_event_processor
 
 # Setup logging
 setup_logging()
@@ -57,7 +59,10 @@ async def startup() -> None:
     startup_time = time.time()
 
     try:
-        # Load violence detection model
+        # 1. Initialize Firebase
+        initialize_firebase()
+
+        # 2. Load violence detection model
         logger.info("Loading violence detection model...")
         inference_service = get_inference_service()
         model_path = os.getenv('MODEL_PATH')
@@ -72,16 +77,37 @@ async def startup() -> None:
             logger.error(f"Failed to load violence detection model: {e}", exc_info=True)
             # Continue anyway, inference will fail gracefully
         
-        # Connect to Redis
+        # 3. Connect to Redis
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
         logger.info("Redis connected")
 
-        # Create Redis producer
+        # 4. Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
 
-        # Set app state for WebSocket routes
+        # 5. Start Event Processor (Background Worker)
+        event_processor = get_event_processor(redis_client)
+        await event_processor.start()
+
+        # 6. Start Camera Workers
+        if settings.rtsp_enabled:
+            logger.info(f"Starting camera workers for: {settings.rtsp_cameras}")
+            for cam_id in settings.rtsp_cameras:
+                # Construct stream URL
+                # If using a simulator, it might be rtsp://localhost:8554/cam1
+                stream_url = f"{settings.rtsp_base_url}/{cam_id}"
+                
+                worker = CameraWorker(
+                    camera_id=cam_id,
+                    stream_url=stream_url,
+                    redis_producer=redis_producer,
+                    sample_rate=settings.rtsp_sample_rate
+                )
+                await worker.start()
+                camera_workers.append(worker)
+        else:
+            logger.info("RTSP disabled in settings")
 
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)
@@ -93,6 +119,11 @@ async def shutdown() -> None:
     global redis_client, camera_workers
 
     try:
+        # Stop Event Processor
+        event_processor = get_event_processor()
+        if event_processor:
+            await event_processor.stop()
+
         # Stop camera workers
         if camera_workers:
             logger.info(f"Stopping {len(camera_workers)} camera workers...")
@@ -140,6 +171,7 @@ app.add_middleware(
 app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
+
 
 @app.get("/")
 async def root():
@@ -215,12 +247,6 @@ async def get_stats():
         "workers": workers_data,
         "redis_frames": redis_frames
     }
-
-
-# TODO: Register API routers for camera and stream endpoints
-# from src.presentation.api import camera_router, stream_router
-# app.include_router(camera_router, prefix="/api/v1")
-# app.include_router(stream_router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

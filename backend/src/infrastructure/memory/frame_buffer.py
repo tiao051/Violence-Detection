@@ -1,8 +1,9 @@
 """In-memory frame buffer for zero-copy frame sharing."""
 
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Deque
 import threading
+from collections import deque
 
 import numpy as np
 
@@ -13,20 +14,25 @@ class FrameBuffer:
     """
     Thread-safe in-memory frame buffer.
     
-    Stores latest frame per camera in RAM (keep-last-only strategy).
-    Designed for zero-copy frame passing between components.
+    Stores a HISTORY of frames per camera (Ring Buffer).
+    Designed for zero-copy frame passing and video generation.
     
     Features:
     - Thread-safe (using locks)
-    - Keep last frame only per camera (memory efficient)
-    - Fast access (O(1))
-    - No serialization/deserialization
+    - Ring buffer (keep last N frames)
+    - Fast access
     """
 
-    def __init__(self):
-        """Initialize frame buffer."""
-        self.buffers: Dict[str, Optional[np.ndarray]] = {}
-        self.metadata: Dict[str, Dict] = {}  # Store frame metadata
+    def __init__(self, max_buffer_size: int = 60):
+        """
+        Initialize frame buffer.
+        
+        Args:
+            max_buffer_size: Max frames to keep per camera (default 60 = 10s @ 6fps)
+        """
+        self.max_buffer_size = max_buffer_size
+        self.buffers: Dict[str, Deque[np.ndarray]] = {}
+        self.metadata: Dict[str, Deque[Dict]] = {}  # Store frame metadata history
         self.locks: Dict[str, threading.RLock] = {}
 
     def register_camera(self, camera_id: str) -> None:
@@ -37,10 +43,10 @@ class FrameBuffer:
             camera_id: Camera identifier
         """
         if camera_id not in self.buffers:
-            self.buffers[camera_id] = None
-            self.metadata[camera_id] = {}
+            self.buffers[camera_id] = deque(maxlen=self.max_buffer_size)
+            self.metadata[camera_id] = deque(maxlen=self.max_buffer_size)
             self.locks[camera_id] = threading.RLock()
-            logger.debug(f"Registered camera {camera_id} in frame buffer")
+            logger.debug(f"Registered camera {camera_id} in frame buffer (size={self.max_buffer_size})")
 
     def put(
         self,
@@ -51,9 +57,8 @@ class FrameBuffer:
         frame_seq: int,
     ) -> None:
         """
-        Store frame in buffer (keep-last-only).
+        Store frame in buffer (append to history).
         
-        Previous frame is automatically discarded.
         Thread-safe operation.
         
         Args:
@@ -66,21 +71,22 @@ class FrameBuffer:
         self.register_camera(camera_id)
 
         with self.locks[camera_id]:
-            # Store frame (latest only, previous is discarded)
-            self.buffers[camera_id] = frame
+            # Append to deque (automatically removes oldest if full)
+            self.buffers[camera_id].append(frame)
 
             # Store metadata
-            self.metadata[camera_id] = {
+            meta = {
                 "frame_id": frame_id,
                 "timestamp": timestamp,
                 "frame_seq": frame_seq,
                 "shape": frame.shape,
                 "dtype": str(frame.dtype),
             }
+            self.metadata[camera_id].append(meta)
 
     def get(self, camera_id: str) -> Optional[np.ndarray]:
         """
-        Retrieve latest frame for camera.
+        Retrieve LATEST frame for camera.
         
         Thread-safe operation.
         
@@ -93,9 +99,25 @@ class FrameBuffer:
         self.register_camera(camera_id)
 
         with self.locks[camera_id]:
-            frame = self.buffers[camera_id]
+            if not self.buffers[camera_id]:
+                return None
+            return self.buffers[camera_id][-1]
 
-        return frame
+    def get_video_frames(self, camera_id: str) -> List[np.ndarray]:
+        """
+        Retrieve ALL frames currently in buffer for a camera.
+        Useful for generating video clips.
+        
+        Args:
+            camera_id: Camera identifier
+            
+        Returns:
+            List of numpy arrays (frames)
+        """
+        self.register_camera(camera_id)
+        
+        with self.locks[camera_id]:
+            return list(self.buffers[camera_id])
 
     def get_with_metadata(self, camera_id: str) -> tuple:
         """
@@ -112,41 +134,9 @@ class FrameBuffer:
         self.register_camera(camera_id)
 
         with self.locks[camera_id]:
-            frame = self.buffers[camera_id]
-            metadata = self.metadata[camera_id].copy()
-
-        return frame, metadata
-
-    def get_metadata(self, camera_id: str) -> Dict:
-        """
-        Retrieve metadata for latest frame.
-        
-        Thread-safe operation.
-        
-        Args:
-            camera_id: Camera identifier
-        
-        Returns:
-            Metadata dictionary
-        """
-        self.register_camera(camera_id)
-
-        with self.locks[camera_id]:
-            metadata = self.metadata[camera_id].copy()
-
-        return metadata
-
-    def get_all_latest(self) -> Dict[str, Optional[np.ndarray]]:
-        """
-        Get all latest frames across cameras.
-        
-        Returns:
-            Dictionary {camera_id: frame}
-        """
-        result = {}
-        for camera_id in self.buffers:
-            result[camera_id] = self.get(camera_id)
-        return result
+            if not self.buffers[camera_id]:
+                return None, {}
+            return self.buffers[camera_id][-1], self.metadata[camera_id][-1]
 
     def has_frame(self, camera_id: str) -> bool:
         """
@@ -159,7 +149,7 @@ class FrameBuffer:
             True if frame available, False otherwise
         """
         self.register_camera(camera_id)
-        return self.buffers[camera_id] is not None
+        return len(self.buffers[camera_id]) > 0
 
     def memory_usage_mb(self) -> float:
         """
@@ -169,8 +159,8 @@ class FrameBuffer:
             Memory usage in MB
         """
         total_bytes = 0
-        for frame in self.buffers.values():
-            if frame is not None:
+        for buffer in self.buffers.values():
+            for frame in buffer:
                 total_bytes += frame.nbytes
 
         return total_bytes / (1024 * 1024)
@@ -182,16 +172,12 @@ class FrameBuffer:
         Returns:
             Statistics dictionary
         """
-        frame_count = sum(1 for f in self.buffers.values() if f is not None)
+        frame_count = sum(len(b) for b in self.buffers.values())
 
         return {
             "total_cameras": len(self.buffers),
-            "cameras_with_frames": frame_count,
+            "total_frames_buffered": frame_count,
             "memory_usage_mb": self.memory_usage_mb(),
-            "metadata": {
-                camera_id: self.metadata.get(camera_id, {})
-                for camera_id in self.buffers
-            }
         }
 
 
@@ -208,5 +194,6 @@ def get_frame_buffer() -> FrameBuffer:
     """
     global _frame_buffer
     if _frame_buffer is None:
-        _frame_buffer = FrameBuffer()
+        # Default to 100 frames (approx 16s @ 6fps)
+        _frame_buffer = FrameBuffer(max_buffer_size=100)
     return _frame_buffer

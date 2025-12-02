@@ -1,38 +1,42 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:security_app/config/app_config.dart';
 
 /// Callback type for handling notification tap events.
-/// 
+///
 /// Called when user taps a notification while app is in foreground or background.
 /// The [eventId] parameter is extracted from the notification data.
 typedef OnNotificationTapCallback = void Function(String eventId);
 
-/// Simple helper for Firebase Cloud Messaging (FCM) setup used in development.
+/// Simple helper for Firebase Cloud Messaging (FCM) setup.
 ///
 /// Responsibilities:
 ///  - Request runtime notification permissions (iOS & Android 13+).
 ///  - Retrieve the device FCM token so the backend can target this device.
+///  - Send FCM token to backend for user association.
 ///  - Setup handlers for foreground and background notification taps.
-///
-/// Notes:
-///  - This class intentionally keeps logic minimal and side-effect free beyond
-///    requesting permissions and printing the token in debug mode. Sending the
-///    token to a backend or persisting it should be implemented by the
-///    application (see the TODO below).
 class NotificationService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static OnNotificationTapCallback? _onNotificationTap;
+  String? _accessToken; // Store access token for API calls
 
   /// Initialize notification capabilities with optional deep link handler.
   ///
-  /// [onNotificationTap] is called when user taps a notification. 
+  /// [onNotificationTap] is called when user taps a notification.
   /// This enables routing to event details via deep linking.
+  /// [accessToken] is the JWT access token for backend authentication.
   ///
   /// This requests permissions when appropriate and retrieves the device's
   /// FCM token. Call this early (e.g., app startup) but after necessary
-  /// platform bindings are ready.
-  Future<void> initialize({OnNotificationTapCallback? onNotificationTap}) async {
+  /// platform bindings are ready and user is authenticated.
+  Future<void> initialize({
+    OnNotificationTapCallback? onNotificationTap,
+    String? accessToken,
+  }) async {
     _onNotificationTap = onNotificationTap;
+    _accessToken = accessToken;
     await _requestPermission();
     await _getToken();
     await _setupMessageHandlers();
@@ -67,7 +71,8 @@ class NotificationService {
     final initialMessage = await _firebaseMessaging.getInitialMessage();
     if (initialMessage != null) {
       if (kDebugMode) {
-        print('NotificationService: App opened from terminated state via notification');
+        print(
+            'NotificationService: App opened from terminated state via notification');
       }
       _handleNotificationTap(initialMessage);
     }
@@ -77,7 +82,7 @@ class NotificationService {
   static void _handleNotificationTap(RemoteMessage message) {
     // Extract event_id from notification data
     final eventId = message.data['event_id'];
-    
+
     if (eventId != null && _onNotificationTap != null) {
       if (kDebugMode) {
         print('NotificationService: Deep linking to event: $eventId');
@@ -85,7 +90,8 @@ class NotificationService {
       _onNotificationTap!(eventId);
     } else {
       if (kDebugMode) {
-        print('NotificationService: No event_id in notification data or callback not set');
+        print(
+            'NotificationService: No event_id in notification data or callback not set');
       }
     }
   }
@@ -118,7 +124,8 @@ class NotificationService {
             break;
           case AuthorizationStatus.denied:
           case AuthorizationStatus.notDetermined:
-            print('NotificationService: Permission declined or not determined.');
+            print(
+                'NotificationService: Permission declined or not determined.');
             break;
         }
       }
@@ -154,14 +161,90 @@ class NotificationService {
         print('--- FCM TOKEN END ------------------------------------');
       }
 
-      // TODO: Send this token to your backend and associate it with the
-      // authenticated user/device. Example:
-      //   await backendApi.registerDeviceToken(token);
-      // Keep this class focused on FCM interactions; let the app decide how
-      // to persist or transmit the token.
+      // Send token to backend
+      if (_accessToken != null) {
+        await _sendTokenToBackend(token);
+      } else {
+        if (kDebugMode) {
+          print(
+              'NotificationService: No access token available, skipping backend registration');
+          print('NotificationService: Token will be registered after login');
+        }
+      }
     } catch (e) {
       if (kDebugMode) {
         print('NotificationService: Failed to get FCM token: $e');
+      }
+    }
+  }
+
+  /// Send FCM token to backend for user association.
+  ///
+  /// Registers the device token with the backend so it can send push notifications
+  /// when violence is detected.
+  Future<void> _sendTokenToBackend(String token) async {
+    try {
+      if (_accessToken == null) {
+        if (kDebugMode) {
+          print('NotificationService: Cannot send token - no access token');
+        }
+        return;
+      }
+
+      if (kDebugMode) {
+        print('NotificationService: Sending FCM token to backend...');
+      }
+
+      final uri = Uri.parse(AppConfig.registerFcmTokenUrl);
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_accessToken',
+            },
+            body: jsonEncode({
+              'token': token,
+              'device_type': 'android',
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        if (kDebugMode) {
+          print('NotificationService: ✅ FCM token registered successfully');
+        }
+      } else {
+        if (kDebugMode) {
+          print(
+              'NotificationService: ❌ Failed to register token - Status: ${response.statusCode}');
+          print('NotificationService: Response: ${response.body}');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('NotificationService: ❌ Error sending token to backend: $e');
+      }
+    }
+  }
+
+  /// Update access token (call this after login or token refresh).
+  ///
+  /// This allows the service to register the FCM token with the backend.
+  /// Call this method after successful login.
+  Future<void> updateAccessToken(String accessToken) async {
+    _accessToken = accessToken;
+
+    // If we have a token, try to register it now
+    try {
+      final fcmToken = await _firebaseMessaging.getToken();
+      if (fcmToken != null) {
+        await _sendTokenToBackend(fcmToken);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print(
+            'NotificationService: Error re-registering tokenafter access token update: $e');
       }
     }
   }
