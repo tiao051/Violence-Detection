@@ -10,7 +10,7 @@ from typing import Optional, List
 from ..entities import StreamSession
 
 
-"""
+
 class IStreamRepository(ABC):
     """
     Stream Repository Interface
@@ -42,4 +42,4 @@ class IStreamRepository(ABC):
     async def get_sessions_by_camera(self, camera_id: str) -> List[StreamSession]:
         """Get all sessions for a camera"""
         pass
-"""
+

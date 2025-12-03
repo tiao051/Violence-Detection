@@ -10,7 +10,7 @@ from typing import List, Optional
 from ..entities import Camera
 
 
-"""
+
 class ICameraRepository(ABC):
     """
     Camera Repository Interface
@@ -48,4 +48,4 @@ class ICameraRepository(ABC):
     async def exists(self, camera_id: str) -> bool:
         """Check if camera exists"""
         pass
-"""
+
