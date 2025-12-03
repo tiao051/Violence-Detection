@@ -65,7 +65,13 @@ class ViolenceDetectionModel:
         # Frame buffer for temporal aggregation
         self.frame_buffer = []
         self.motion_buffer = []  # Cache for motion frames
+        self.roi_extracted_buffer = []  # Cache extracted ROI from SME (224x224, 3, float32 [0,1])
+        self.optical_flow_buffer = []  # Optional: optical flow for ROI visualization
+        self.motion_magnitude_buffer = []  # Optional: motion magnitude for ROI visualization
         self.MAX_BUFFER_SIZE = config.num_frames
+        
+        # ROI tracking (optional)
+        self.track_roi = False  # Enable via set_roi_tracking()
         
         # Latency tracking
         self.last_inference_time = 0.0
@@ -182,13 +188,26 @@ class ViolenceDetectionModel:
         if self.frame_buffer:
             last_frame = self.frame_buffer[-1]
             # Compute motion: last_frame -> current_frame
-            roi, _, _, _ = self.sme_extractor.process(last_frame, frame_rgb)
+            roi, u_flow, v_flow, mag = self.sme_extractor.process(last_frame, frame_rgb)
             self.motion_buffer.append(roi)
+            
+            # Track ROI if enabled
+            if self.track_roi:
+                self.optical_flow_buffer.append(np.stack([u_flow, v_flow], axis=-1))
+                self.motion_magnitude_buffer.append(mag)
+                # Note: roi (extracted ROI from SME) is the float32 [0,1] mask
+                # We'll capture it with optical flow for visualization
+                self.roi_extracted_buffer.append(roi.copy())
             
             # Maintain motion buffer size (MAX_BUFFER_SIZE - 1)
             # We need N-1 motion frames for N frames
             if len(self.motion_buffer) > self.MAX_BUFFER_SIZE - 1:
                 self.motion_buffer.pop(0)
+                if self.track_roi and len(self.optical_flow_buffer) > 0:
+                    self.optical_flow_buffer.pop(0)
+                    self.motion_magnitude_buffer.pop(0)
+                    if len(self.roi_extracted_buffer) > 0:
+                        self.roi_extracted_buffer.pop(0)
         
         self.frame_buffer.append(frame_rgb)
         
@@ -267,10 +286,47 @@ class ViolenceDetectionModel:
                 'latency_ms': 0.0
             }
     
+    def get_last_roi_extracted(self) -> Optional[np.ndarray]:
+        """
+        Get the last extracted ROI from SME.
+        
+        Returns:
+            Last extracted ROI frame, or None if no motion buffer
+        """
+        if not self.roi_extracted_buffer:
+            return None
+        return self.roi_extracted_buffer[-1]
+    
     def reset_buffer(self) -> None:
         """Clear frame buffer."""
         self.frame_buffer.clear()
         self.motion_buffer.clear()
+        self.roi_extracted_buffer.clear()
+        self.motion_magnitude_buffer.clear()
+        self.optical_flow_buffer.clear()
+    
+    def set_roi_tracking(self, enabled: bool) -> None:
+        """
+        Enable or disable ROI tracking for visualization.
+        
+        Args:
+            enabled: True to track ROI data during inference
+        """
+        self.track_roi = enabled
+    
+    def save_roi_video(self, output_path: str, fps: float = 30.0) -> None:
+        """
+        Save ROI visualization video.
+        
+        Args:
+            output_path: Path to save video
+            fps: Video frame rate
+        """
+        if not self.track_roi:
+            logger.warning("ROI tracking not enabled")
+            return
+        
+        logger.warning("ROI video saving not implemented")
 
 
 # Lazy-loaded singleton instance
