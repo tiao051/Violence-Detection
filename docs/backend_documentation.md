@@ -108,15 +108,6 @@ RTSP_CAMERAS=["cam1", "cam2", "cam3", "cam4"]
 - Per-camera partitions maintain temporal ordering
 - Ready for inference
 
-**Configuration** (from `.env`):
-```
-KAFKA_ENABLED=true
-KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-KAFKA_FRAME_TOPIC=processed-frames
-KAFKA_JPEG_QUALITY=80
-KAFKA_CONSUMER_GROUP=inference-group
-```
-
 ---
 
 ### 3. Inference Consumer (AI Processing)
@@ -183,14 +174,6 @@ KAFKA_CONSUMER_GROUP=inference-group
 - Event log → Redis Streams
 - Metrics → Internal counters
 
-**Configuration** (from `.env`):
-```
-INFERENCE_BATCH_SIZE=4
-INFERENCE_BATCH_TIMEOUT_MS=100
-ALERT_COOLDOWN_SECONDS=60
-KAFKA_CONSUMER_GROUP=inference-group
-```
-
 ---
 
 ### 4. Alert Deduplication (Smart Throttling)
@@ -219,10 +202,10 @@ KAFKA_CONSUMER_GROUP=inference-group
    - Enables simultaneous alerts on different cameras
    - Example flow:
      ```
-     t=0: cam1 violence → ALERT ✓, start 60s cooldown
-     t=10: cam2 violence → ALERT ✓ (cam1 still cooling, but cam2 is fresh)
+     t=0: cam1 violence → ALERT, start 60s cooldown
+     t=10: cam2 violence → ALERT (cam1 still cooling, but cam2 is fresh)
      t=30: cam1 violence again → SUPPRESS (still in cooldown)
-     t=60: cam1 violence again → ALERT ✓ (cooldown expired)
+     t=60: cam1 violence again → ALERT (cooldown expired)
      ```
 
 4. **Reset Functionality**: Manual cooldown clear
@@ -241,11 +224,6 @@ KAFKA_CONSUMER_GROUP=inference-group
 - **TTL-Based**: Automatic cleanup (no stale state)
 
 **Output**: Boolean decision (should send alert?)
-
-**Configuration** (from `.env`):
-```
-ALERT_COOLDOWN_SECONDS=60  # TTL for Redis key
-```
 
 ---
 
@@ -305,11 +283,6 @@ ALERT_COOLDOWN_SECONDS=60  # TTL for Redis key
 - Video file → Firebase Storage
 - Event record → Firestore
 - Push notification → User's devices
-
-**Configuration** (from `.env`):
-```
-FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account.json
-```
 
 ---
 
@@ -539,45 +512,6 @@ Each stage exposes metrics for observability:
     "alerts_suppressed": 1186,     # Blocked by cooldown
     "suppression_ratio": 0.99      # 99% reduction
 }
-```
-
----
-
-## Configuration Reference
-
-All pipeline stages are configured via `.env`:
-
-```bash
-# RTSP Streaming
-RTSP_ENABLED=true
-RTSP_BASE_URL=rtsp://rtsp-server:8554
-RTSP_CAMERAS=["cam1", "cam2", "cam3", "cam4"]
-RTSP_SAMPLE_RATE=6          # Interpreted as 5 FPS after conversion
-MAX_CONCURRENT_STREAMS=10
-
-# Kafka Configuration
-KAFKA_ENABLED=true
-KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-KAFKA_FRAME_TOPIC=processed-frames
-KAFKA_JPEG_QUALITY=80       # 1-100 (80 recommended)
-KAFKA_CONSUMER_GROUP=inference-group
-
-# Inference
-INFERENCE_BATCH_SIZE=4      # Frames per batch per camera
-INFERENCE_BATCH_TIMEOUT_MS=100   # Max wait time for batch
-INFERENCE_DEVICE=cuda       # cuda or cpu
-MODEL_PATH=../ai_service/training/two-stage/checkpoints/best_model.pt
-
-# Alert Management
-ALERT_COOLDOWN_SECONDS=60   # TTL for Redis cooldown
-ALERT_CONFIDENCE_THRESHOLD=0.7  # Min confidence to alert
-
-# Redis (for dedup & pubsub)
-REDIS_URL=redis://localhost:6379/0
-REDIS_POOL_SIZE=10
-
-# Firebase (for event storage & notifications)
-FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account.json
 ```
 
 ---
