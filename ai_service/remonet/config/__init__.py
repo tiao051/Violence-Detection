@@ -1,6 +1,6 @@
 """
 Configuration module.
 """
-from .model_config import DEFAULT_MODEL, MODELS
+from .model_config import STEBackbone, DEFAULT_STE_BACKBONE, STE_BACKBONE_CONFIG
 
-__all__ = ['DEFAULT_MODEL', 'MODELS']
+__all__ = ['STEBackbone', 'DEFAULT_STE_BACKBONE', 'STE_BACKBONE_CONFIG']

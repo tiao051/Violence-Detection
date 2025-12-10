@@ -38,11 +38,6 @@ services:
       - "9092:9092"
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # Redis
   redis:
@@ -97,7 +92,7 @@ services:
       redis:
         condition: service_healthy
       kafka:
-        condition: service_healthy
+        condition: service_started
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - app-network
@@ -130,10 +125,10 @@ services:
       redis:
         condition: service_healthy
       kafka:
-        condition: service_healthy
+        condition: service_started
       backend:
         condition: service_started
-    command: python -m inference.inference_consumer_service
+    command: python inference/inference_consumer_service.py
     networks:
       - app-network
     # Optional: Uncomment for GPU support

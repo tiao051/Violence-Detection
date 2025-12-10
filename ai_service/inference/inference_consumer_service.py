@@ -24,9 +24,14 @@ Or in Docker:
 import asyncio
 import logging
 import os
-from .inference_consumer import InferenceConsumer
-from .inference_model import ViolenceDetectionModel
-from ..remonet.config.model_config import ModelConfig
+import sys
+from pathlib import Path
+
+# Add parent directory to path so we can import remonet
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from inference.inference_consumer import InferenceConsumer
+from inference.inference_model import ViolenceDetectionModel, InferenceConfig
 
 # Setup logging
 logging.basicConfig(
@@ -43,22 +48,24 @@ async def main():
     logger.info("=" * 80)
     
     try:
-        # Load model config
+        # Get inference parameters from environment
         logger.info("Loading violence detection model...")
-        model_config = ModelConfig()
-        
-        # Get inference parameters
         model_path = os.getenv('MODEL_PATH')
-        inference_device = os.getenv('INFERENCE_DEVICE', 'cuda')
+        inference_device = os.getenv('INFERENCE_DEVICE', 'cpu')
         confidence_threshold = float(os.getenv('VIOLENCE_CONFIDENCE_THRESHOLD', '0.5'))
         
-        # Initialize model
-        model = ViolenceDetectionModel(
-            config=model_config,
+        if not model_path:
+            raise ValueError("MODEL_PATH environment variable is required")
+        
+        # Create config
+        config = InferenceConfig(
             model_path=model_path,
-            inference_device=inference_device,
+            device=inference_device,
             confidence_threshold=confidence_threshold
         )
+        
+        # Initialize model
+        model = ViolenceDetectionModel(config=config)
         logger.info(f"Model loaded successfully (device: {inference_device})")
         
         # Create and start inference consumer
