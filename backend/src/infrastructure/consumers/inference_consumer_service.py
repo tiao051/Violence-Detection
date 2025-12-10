@@ -42,7 +42,7 @@ async def main():
                 "MODEL_PATH",
                 "../ai_service/training/two-stage/checkpoints/best_model.pt"
             ),
-            backbone=os.getenv("MODEL_BACKBONE", "mobilenet_v2"),
+            backbone=os.getenv("MODEL_BACKBONE", "mobilenet_v3_small"),
             device=os.getenv("INFERENCE_DEVICE", "cuda"),
             confidence_threshold=float(os.getenv("VIOLENCE_CONFIDENCE_THRESHOLD", "0.5")),
             num_frames=int(os.getenv("INFERENCE_BUFFER_SIZE", "30")),
