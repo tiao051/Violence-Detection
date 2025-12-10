@@ -14,6 +14,7 @@ Data flow: Kafka → inference_consumer → [model] → Redis alerts → event_p
 import asyncio
 import logging
 import os
+import json
 import time
 from typing import Dict, List, Optional
 from dataclasses import dataclass
