@@ -14,6 +14,7 @@ Data flow: Kafka → inference_consumer → [model] → Redis alerts → event_p
 import asyncio
 import json
 import logging
+import os
 import time
 from typing import Dict, List, Optional
 from dataclasses import dataclass
@@ -51,35 +52,53 @@ class InferenceConsumer:
     def __init__(
         self,
         model,  # ViolenceDetectionModel instance
-        kafka_bootstrap_servers: str = "kafka:9092",
-        kafka_topic: str = "processed-frames",
-        kafka_group_id: str = "inference-group",
-        redis_url: str = "redis://redis:6379/0",
-        batch_size: int = 4,
-        batch_timeout_ms: int = 100,
-        alert_cooldown_seconds: int = 60,
+        kafka_bootstrap_servers: str = None,
+        kafka_topic: str = None,
+        kafka_group_id: str = None,
+        redis_url: str = None,
+        batch_size: int = None,
+        batch_timeout_ms: int = None,
+        alert_cooldown_seconds: int = None,
     ):
         """
         Initialize inference consumer.
         
         Args:
             model: ViolenceDetectionModel instance
-            kafka_bootstrap_servers: Kafka broker address
-            kafka_topic: Topic to consume frames from
-            kafka_group_id: Kafka consumer group (for managing offsets)
-            redis_url: Redis connection URL
-            batch_size: Number of frames to accumulate before inference
-            batch_timeout_ms: Max wait time for batch (trigger even if partial)
-            alert_cooldown_seconds: Alert deduplication cooldown
+            kafka_bootstrap_servers: Kafka broker address (from KAFKA_BOOTSTRAP_SERVERS env, required)
+            kafka_topic: Topic to consume frames from (from KAFKA_FRAME_TOPIC env, required)
+            kafka_group_id: Kafka consumer group (from KAFKA_CONSUMER_GROUP env, required)
+            redis_url: Redis connection URL (from REDIS_URL env, required)
+            batch_size: Frames to accumulate before inference (from INFERENCE_BATCH_SIZE env, required)
+            batch_timeout_ms: Max wait for batch (from INFERENCE_BATCH_TIMEOUT_MS env, required)
+            alert_cooldown_seconds: Alert deduplication cooldown (from ALERT_COOLDOWN_SECONDS env, required)
         """
+        # Load from environment - all required, fail if missing
+        self.kafka_bootstrap_servers = kafka_bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+        self.kafka_topic = kafka_topic or os.getenv("KAFKA_FRAME_TOPIC")
+        self.kafka_group_id = kafka_group_id or os.getenv("KAFKA_CONSUMER_GROUP")
+        self.redis_url = redis_url or os.getenv("REDIS_URL")
+        self.batch_size = batch_size or int(os.getenv("INFERENCE_BATCH_SIZE", "") or 0)
+        self.batch_timeout_ms = batch_timeout_ms or int(os.getenv("INFERENCE_BATCH_TIMEOUT_MS", "") or 0)
+        self.alert_cooldown_seconds = alert_cooldown_seconds or int(os.getenv("ALERT_COOLDOWN_SECONDS", "") or 0)
+        
+        # Validate all required config
+        if not self.kafka_bootstrap_servers:
+            raise ValueError("KAFKA_BOOTSTRAP_SERVERS env variable not set")
+        if not self.kafka_topic:
+            raise ValueError("KAFKA_FRAME_TOPIC env variable not set")
+        if not self.kafka_group_id:
+            raise ValueError("KAFKA_CONSUMER_GROUP env variable not set")
+        if not self.redis_url:
+            raise ValueError("REDIS_URL env variable not set")
+        if self.batch_size <= 0:
+            raise ValueError("INFERENCE_BATCH_SIZE env variable not set or invalid")
+        if self.batch_timeout_ms <= 0:
+            raise ValueError("INFERENCE_BATCH_TIMEOUT_MS env variable not set or invalid")
+        if self.alert_cooldown_seconds <= 0:
+            raise ValueError("ALERT_COOLDOWN_SECONDS env variable not set or invalid")
+        
         self.model = model
-        self.kafka_bootstrap_servers = kafka_bootstrap_servers
-        self.kafka_topic = kafka_topic
-        self.kafka_group_id = kafka_group_id
-        self.redis_url = redis_url
-        self.batch_size = batch_size
-        self.batch_timeout_ms = batch_timeout_ms
-        self.alert_cooldown_seconds = alert_cooldown_seconds
         
         # State
         self.is_running = False
@@ -328,7 +347,7 @@ class InferenceConsumer:
             # Store latest detection (with TTL)
             await self.redis_client.setex(
                 f"detection:latest:{camera_id}",
-                60,  # 60s TTL
+                self.alert_cooldown_seconds,
                 alert_json,
             )
             
@@ -336,7 +355,7 @@ class InferenceConsumer:
             await self.redis_client.xadd(
                 f"detection:stream:{camera_id}",
                 alert_message,
-                maxlen=1000,  # Keep last 1000 detections per camera
+                maxlen=100,  # Keep last 100 detections per camera
             )
             
             logger.info(
