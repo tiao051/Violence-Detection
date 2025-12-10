@@ -1,0 +1,196 @@
+name: violence-detection
+
+services:
+  # Zookeeper (for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: violence-detection-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_INIT_LIMIT: 5
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: violence-detection-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    ports:
+      - "9092:9092"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: violence-detection-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: violence-detection-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      RTSP_BASE_URL: rtsp://rtsp-server:8554
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_ENABLED: "true"
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-true}
+      # Enable file logging inside container (writes to /app/logs)
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      HOST: 0.0.0.0
+      PORT: 8000
+      MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
+      INFERENCE_DEVICE: cpu
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      # Persist logs on host
+      - ./backend/logs:/app/logs
+      - ./ai_service:/app/ai_service
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json
+      - /app/__pycache__
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
+
+  # RTSP Server (MediaMTX)
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-server
+    ports:
+      - "8554:8554" # RTSP
+      - "8888:8888" # HLS
+      - "8889:8889" # WebRTC HTTP
+      - "8189:8189/udp" # WebRTC ICE/UDP
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    environment:
+      MEDIAMTX_LOGLEVEL: info
+    networks:
+      - app-network
+
+  # Cameras (FFmpeg)
+  camera-1:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-1
+    command: >
+      -re -stream_loop -1 -i /videos/violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: on-failure
+    networks:
+      - app-network
+
+  camera-2:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-2
+    command: >
+      -re -stream_loop -1 -i /videos/violence_2.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: on-failure
+    networks:
+      - app-network
+
+  camera-3:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-3
+    command: >
+      -re -stream_loop -1 -i /videos/non_violence_1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: on-failure
+    networks:
+      - app-network
+
+  camera-4:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-4
+    command: >
+      -re -stream_loop -1 -i /videos/violence_3.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: on-failure
+    networks:
+      - app-network
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    container_name: violence-detection-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./admin-dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+      - rtsp-server
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis_data:

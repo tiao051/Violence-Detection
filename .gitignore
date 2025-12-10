@@ -1,0 +1,81 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# Logs
+*.log
+logs/
+*.out
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (for admin-dashboard)
+node_modules/
+.npm/
+package-lock.json
+yarn.lock
+.yarn/
+.next/
+dist/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/firebase-service-account.json
+
+# Test data outputs
+ai_service/utils/test_data/outputs/*
+!.gitkeep
+backend/firebase-service-account.json
+
+# Dataset
+dataset/
+
+# Docker volumes and data
+docker-data/
+*.volume/

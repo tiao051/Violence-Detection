@@ -1,0 +1,126 @@
+/* Header Styles */
+.app-header {
+  background: var(--header-bg);
+  color: var(--text-primary);
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 10px var(--shadow-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header-content {
+  flex: 1;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.header-subtitle {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--status-bg);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--status-border);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-active);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.active {
+  background: var(--status-active);
+  box-shadow: 0 0 10px var(--status-glow);
+}
+
+.status-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.theme-toggle {
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  color: var(--button-text);
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.theme-toggle:hover {
+  background: var(--button-hover-bg);
+  transform: scale(1.05);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .header-title {
+    font-size: 1.25rem;
+  }
+
+  .header-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .status-indicator {
+    padding: 0.4rem 0.8rem;
+  }
+
+  .header-actions {
+    gap: 0.75rem;
+  }
+}
