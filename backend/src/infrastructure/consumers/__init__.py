@@ -1,1 +1,0 @@
-"""Consumers infrastructure module."""

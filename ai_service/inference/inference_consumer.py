@@ -12,7 +12,6 @@ Data flow: Kafka → inference_consumer → [model] → Redis alerts → event_p
 """
 
 import asyncio
-import json
 import logging
 import os
 import time
@@ -21,6 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import cv2
+import msgpack
 from aiokafka import AIOKafkaConsumer
 import redis.asyncio as redis
 
@@ -129,7 +129,7 @@ class InferenceConsumer:
                 group_id=self.kafka_group_id,
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                value_deserializer=lambda m: m,  # Raw bytes for MessagePack binary format
                 key_deserializer=lambda k: k.decode('utf-8') if k else None,
             )
             await self.consumer.start()
@@ -195,33 +195,35 @@ class InferenceConsumer:
         except Exception as e:
             logger.error(f"Consumer error: {e}")
     
-    def _parse_message(self, key: str, value: Dict) -> Optional[FrameMessage]:
+    def _parse_message(self, key: str, value: bytes) -> Optional[FrameMessage]:
         """
         Parse Kafka message into FrameMessage.
         
-        Expected format:
+        Expected format (MessagePack binary):
         {
             'camera_id': str,
             'frame_id': str,
             'timestamp': float,
             'frame_seq': int,
-            'jpeg': str (hex encoded),
+            'jpeg': bytes (raw JPEG binary, no Base16 encoding),
             'frame_shape': [height, width, channels]
         }
         """
         try:
-            camera_id = key or value.get('camera_id')
-            frame_id = value.get('frame_id')
-            timestamp = value.get('timestamp')
-            frame_seq = value.get('frame_seq')
+            # Unpack MessagePack binary format
+            msg_dict = msgpack.unpackb(value, raw=False)
             
-            # Decode JPEG from hex
-            jpeg_hex = value.get('jpeg')
-            if not jpeg_hex:
+            camera_id = key or msg_dict.get('camera_id')
+            frame_id = msg_dict.get('frame_id')
+            timestamp = msg_dict.get('timestamp')
+            frame_seq = msg_dict.get('frame_seq')
+            
+            # Get JPEG bytes directly (no hex decoding needed)
+            jpeg_bytes = msg_dict.get('jpeg')
+            if not jpeg_bytes:
                 logger.error(f"[{camera_id}] Missing JPEG data")
                 return None
             
-            jpeg_bytes = bytes.fromhex(jpeg_hex)
             frame = cv2.imdecode(np.frombuffer(jpeg_bytes, np.uint8), cv2.IMREAD_COLOR)
             
             if frame is None:

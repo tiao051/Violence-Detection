@@ -1,0 +1,24 @@
+# AI Service Requirements
+
+# Core
+python-dotenv==1.0.0
+
+# Async/IO
+aiokafka==0.11.0
+aioredis==2.0.1
+redis==5.0.1
+
+# Data Processing
+numpy==1.26.2
+opencv-python-headless==4.8.1.78
+
+# ML/Deep Learning
+torch==2.1.2
+torchvision==0.16.2
+
+# Binary Protocol
+msgpack==1.0.7
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1

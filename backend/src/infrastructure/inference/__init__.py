@@ -1,11 +1,7 @@
-"""Inference infrastructure module."""
+"""Inference infrastructure module.
 
-from src.infrastructure.inference.inference_service import (
-    InferenceService,
-    get_inference_service,
-)
+Note: Model inference now runs as separate service in ai_service/inference_consumer_service.py
+This module is deprecated and no longer used.
+"""
 
-__all__ = [
-    'InferenceService',
-    'get_inference_service',
-]
+__all__ = []

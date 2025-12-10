@@ -16,7 +16,6 @@ from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
-from src.infrastructure.inference import get_inference_service
 from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
 from src.infrastructure.firebase.setup import initialize_firebase
@@ -62,35 +61,25 @@ async def startup() -> None:
         # 1. Initialize Firebase
         initialize_firebase()
 
-        # 2. Load violence detection model
-        logger.info("Loading violence detection model...")
-        inference_service = get_inference_service()
-        model_path = os.getenv('MODEL_PATH')
-        inference_device = os.getenv('INFERENCE_DEVICE', 'cuda')
-        confidence_threshold = float(os.getenv('VIOLENCE_CONFIDENCE_THRESHOLD', 0.5))
+        # NOTE: InferenceConsumer now runs as separate process/container
+        # Do NOT load model here - avoid GIL blocking FastAPI
+        # Backend focuses on: API + WebSocket + CameraWorker
+        # InferenceConsumer runs independently in ai_service/inference_consumer_service.py
         
-        try:
-            # If MODEL_PATH not set, inference_service will auto-detect best model
-            inference_service.initialize(model_path, inference_device, confidence_threshold)
-            logger.info(f"Violence detection model loaded successfully (device: {inference_device})")
-        except Exception as e:
-            logger.error(f"Failed to load violence detection model: {e}", exc_info=True)
-            # Continue anyway, inference will fail gracefully
-        
-        # 3. Connect to Redis
+        # 2. Connect to Redis
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
         logger.info("Redis connected")
 
-        # 4. Create Redis producer
+        # 3. Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
 
-        # 5. Start Event Processor (Background Worker)
+        # 4. Start Event Processor (Background Worker)
         event_processor = get_event_processor(redis_client)
         await event_processor.start()
 
-        # 6. Start Camera Workers
+        # 5. Start Camera Workers
         if settings.rtsp_enabled:
             logger.info(f"Starting camera workers for: {settings.rtsp_cameras}")
             for cam_id in settings.rtsp_cameras:

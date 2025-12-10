@@ -1,10 +1,10 @@
 """Kafka producer for frame publishing."""
 
-import json
 import logging
 from typing import Dict, Any, Optional
 import numpy as np
 import cv2
+import msgpack
 from aiokafka import AIOKafkaProducer
 
 from ...core.config import settings
@@ -159,29 +159,32 @@ class KafkaFrameProducer:
                 self.frames_failed += 1
                 return None
             
-            # Prepare JSON message with base16 encoded JPEG
+            # Prepare binary message with MessagePack (more efficient than JSON + Base16)
+            # Raw JPEG bytes in binary format - no encoding overhead
             message = {
                 'camera_id': camera_id,
                 'frame_id': frame_id,
                 'timestamp': timestamp,
                 'frame_seq': frame_seq,
-                'jpeg': jpeg_bytes.hex(),  # Base16 encode
+                'jpeg': jpeg_bytes,  # Raw binary bytes, no Base16 encoding
                 'frame_shape': [self.target_height, self.target_width, 3],
             }
             
-            message_json = json.dumps(message).encode('utf-8')
+            # Pack using MessagePack (binary format)
+            # ~50% smaller than JSON + Base16 encoding
+            packed_message = msgpack.packb(message)
             
             # Send to Kafka with camera_id as key
             # This ensures all frames from same camera go to same partition
             # and are processed in order by same consumer
             await self.producer.send_and_wait(
                 self.topic,
-                value=message_json,
+                value=packed_message,
                 key=camera_id.encode('utf-8'),
             )
             
             self.frames_sent += 1
-            self.total_bytes_sent += len(message_json)
+            self.total_bytes_sent += len(packed_message)
             
             return frame_id
         

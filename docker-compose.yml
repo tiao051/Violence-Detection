@@ -102,6 +102,49 @@ services:
     networks:
       - app-network
 
+  # Inference Consumer (AI Model Service - SEPARATE PROCESS)
+  # Runs independently to avoid GIL blocking the FastAPI backend
+  # Listens to Kafka, runs model inference, publishes to Redis
+  inference:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: violence-detection-inference
+    env_file:
+      - ./ai_service/.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_FRAME_TOPIC: frames
+      KAFKA_CONSUMER_GROUP: inference
+      REDIS_URL: redis://redis:6379/0
+      INFERENCE_BATCH_SIZE: 4
+      INFERENCE_BATCH_TIMEOUT_MS: 5000
+      ALERT_COOLDOWN_SECONDS: 60
+      MODEL_PATH: /app/training/two-stage/checkpoints/best_model.pt
+      INFERENCE_DEVICE: cpu
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+    volumes:
+      - ./ai_service:/app
+      - /app/__pycache__
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: python -m inference.inference_consumer_service
+    networks:
+      - app-network
+    # Optional: Uncomment for GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
   # RTSP Server (MediaMTX)
   rtsp-server:
     image: bluenviron/mediamtx:latest
