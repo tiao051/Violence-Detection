@@ -528,7 +528,7 @@ async def register_fcm_token(
         
         # Save token to Firestore
         token_repo = get_token_repository()
-        success = await token_repo.save_token(
+        success = token_repo.save_token(
             user_id=user_id,
             token=request.token,
             device_type=request.device_type

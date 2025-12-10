@@ -212,7 +212,7 @@ class EventPersistenceService:
             
             # Get user's FCM tokens
             token_repo = get_token_repository()
-            tokens = await token_repo.get_tokens(owner_uid)
+            tokens = token_repo.get_tokens(owner_uid)
             
             if not tokens:
                 logger.warning(f"No FCM tokens found for user {owner_uid}, skipping notification")

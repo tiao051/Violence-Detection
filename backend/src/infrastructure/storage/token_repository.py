@@ -21,7 +21,7 @@ class TokenRepository:
             logger.error(f"Failed to initialize Firestore client: {e}")
             self.db = None
 
-    async def save_token(self, user_id: str, token: str, device_type: str = "android") -> bool:
+    def save_token(self, user_id: str, token: str, device_type: str = "android") -> bool:
         """
         Save or update an FCM token for a user.
         """
@@ -33,14 +33,6 @@ class TokenRepository:
             tokens_ref = self.db.collection('users').document(user_id).collection('fcm_tokens')
             
             # Check if token already exists to avoid duplicates
-            # We use the token string itself as the document ID to ensure uniqueness easily
-            # or we can query. Using token as ID is simpler for deduplication.
-            # However, token strings can be long. Let's query first.
-            
-            # Strategy: Use the token as the document ID. 
-            # Firebase document IDs have a limit, but FCM tokens are usually within limits (though long).
-            # Safer approach: Query for the token.
-            
             query = tokens_ref.where(filter=FieldFilter("token", "==", token)).limit(1)
             docs = query.stream()
             
@@ -71,7 +63,7 @@ class TokenRepository:
             logger.error(f"Error saving FCM token: {e}")
             return False
 
-    async def get_tokens(self, user_id: str) -> List[str]:
+    def get_tokens(self, user_id: str) -> List[str]:
         """
         Get all active FCM tokens for a user.
         """
