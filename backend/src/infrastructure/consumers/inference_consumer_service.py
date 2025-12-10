@@ -40,7 +40,7 @@ async def main():
         model_config = InferenceConfig(
             model_path=os.getenv(
                 "MODEL_PATH",
-                "../ai_service/training/two-stage/checkpoints/best_model.pt"
+                "../ai_service/training/two-stage/checkpoints/last_model.pt"
             ),
             backbone=os.getenv("MODEL_BACKBONE", "mobilenet_v3_small"),
             device=os.getenv("INFERENCE_DEVICE", "cuda"),
