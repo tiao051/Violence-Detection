@@ -125,6 +125,6 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
-async def reset_test_state():
+def reset_test_state():
     """Reset test state before each test"""
     yield

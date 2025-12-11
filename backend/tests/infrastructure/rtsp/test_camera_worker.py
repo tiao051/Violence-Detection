@@ -60,11 +60,11 @@ def camera_worker(mock_rtsp_client, mock_kafka_producer):
     """Create camera worker with mocked dependencies"""
     worker = CameraWorker(
         camera_id="test-cam",
-        rtsp_url="rtsp://localhost/stream",
-        target_fps=5,
+        stream_url="rtsp://localhost/stream",
+        sample_rate=5,
+        kafka_producer=mock_kafka_producer,
     )
-    worker.rtsp_client = mock_rtsp_client
-    worker.kafka_producer = mock_kafka_producer
+    worker.client = mock_rtsp_client
     return worker
 
 
@@ -72,14 +72,14 @@ class TestCameraWorkerFrameSampling:
     """Test frame sampling logic (5 FPS)"""
     
     def test_worker_samples_at_target_fps(self, camera_worker, mock_rtsp_client):
-        """Test frame sampling rate matches target_fps"""
-        assert camera_worker.target_fps == 5
+        """Test frame sampling rate matches sample_rate"""
+        assert camera_worker.sample_rate == 5
     
     def test_worker_calculates_frame_interval(self, camera_worker):
         """Test frame interval calculation"""
-        # target_fps=5 means sample every other frame (assuming 30 FPS source)
-        # interval = 1.0 / target_fps = 0.2 seconds = 200ms
-        frame_interval = 1.0 / camera_worker.target_fps
+        # sample_rate=5 means sample every other frame (assuming 30 FPS source)
+        # interval = 1.0 / sample_rate = 0.2 seconds = 200ms
+        frame_interval = 1.0 / camera_worker.sample_rate
         assert abs(frame_interval - 0.2) < 0.001
     
     @pytest.mark.asyncio
@@ -87,11 +87,11 @@ class TestCameraWorkerFrameSampling:
         """Test worker doesn't send every frame from RTSP"""
         # Simulate 30 FPS source, 5 FPS target = send 1 in every 6 frames
         frame_count = 30
-        frame_interval = 1.0 / camera_worker.target_fps
+        frame_interval = 1.0 / camera_worker.sample_rate
         
         # In reality, this is time-based sampling, but the concept is
         # that not every frame is sent to Kafka
-        assert camera_worker.target_fps < 30  # Assumes source is higher FPS
+        assert camera_worker.sample_rate < 30  # Assumes source is higher FPS
 
 
 class TestCameraWorkerKafkaIntegration:
@@ -171,7 +171,8 @@ class TestCameraWorkerMetrics:
         assert 'camera_id' in stats
         assert 'frames_sent' in stats
         assert 'frames_failed' in stats
-        assert 'success_rate' in stats
+        assert 'input_fps' in stats
+        assert 'output_fps' in stats
 
 
 class TestCameraWorkerNoResize:
@@ -222,11 +223,8 @@ class TestCameraWorkerMultipleCameras:
         mock_producer_1 = AsyncMock()
         mock_producer_2 = AsyncMock()
         
-        worker1 = CameraWorker("cam1", "rtsp://cam1", target_fps=5)
-        worker2 = CameraWorker("cam2", "rtsp://cam2", target_fps=5)
-        
-        worker1.kafka_producer = mock_producer_1
-        worker2.kafka_producer = mock_producer_2
+        worker1 = CameraWorker("cam1", "rtsp://cam1", sample_rate=5, kafka_producer=mock_producer_1)
+        worker2 = CameraWorker("cam2", "rtsp://cam2", sample_rate=5, kafka_producer=mock_producer_2)
         
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         

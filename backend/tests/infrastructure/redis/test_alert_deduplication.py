@@ -34,7 +34,7 @@ from backend.src.infrastructure.redis.alert_deduplication import AlertDeduplicat
 
 
 @pytest.fixture
-async def redis_mock():
+def redis_mock():
     """Mock Redis client"""
     mock = AsyncMock()
     return mock
@@ -43,8 +43,7 @@ async def redis_mock():
 @pytest.fixture
 def alert_dedup(redis_mock):
     """Create AlertDeduplication with mocked Redis"""
-    dedup = AlertDeduplication(cooldown_seconds=60)
-    dedup.redis = redis_mock
+    dedup = AlertDeduplication(redis_client=redis_mock, ttl_seconds=60)
     return dedup
 
 
