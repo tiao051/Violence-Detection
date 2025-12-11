@@ -1,238 +1,213 @@
-  # Backend Service
+  # Violence Detection System - Backend Service
 
-Violence Detection System - Backend API with Clean Architecture
+FastAPI-based backend service with Clean Architecture for real-time violence detection across multiple camera feeds.
 
 ## Architecture
 
+### System Overview
+```
+RTSP Cameras (RTSP Server)
+    ↓
+Backend Service (FastAPI)
+    ├─ Reads frames from RTSP
+    ├─ Resizes & compresses frames
+    └─ Publishes to Kafka
+    
+Kafka (Message Broker)
+    ├─ Topic: "frames" (raw video frames)
+    └─ Topic: "detections" (inference results)
+    
+Inference Service (AI Model)
+    ├─ Consumes frames from Kafka
+    ├─ Runs violence detection model
+    └─ Publishes results to Redis
+    
+Redis (Cache & Results Storage)
+    └─ Stores detection alerts & metadata
+    
+Frontend Dashboard (React/TypeScript)
+    └─ Displays real-time alerts
+```
+
+### Code Structure
 ```
 src/
 ├── core/                    # Configuration & logging
 ├── domain/                  # Business entities
-├── application/             # Use cases
+├── application/             # Use cases & business logic
 ├── infrastructure/          # External interfaces
-│   ├── rtsp/               # RTSP streaming
-│   └── redis/              # Message queue
-└── presentation/           # API endpoints
+│   ├── rtsp/               # RTSP camera streaming
+│   ├── kafka/              # Kafka producer (frame publishing)
+│   └── redis/              # Redis client (alerts & metadata)
+└── presentation/           # API endpoints & HTTP handlers
 ```
 
 ## Quick Start
 
-### Using Docker Compose with USB Camera (Recommended)
+### Docker Compose (All Services)
 
-**Option 1: With USB Camera**
 ```bash
-# Terminal 1: Start USB Camera Manager (detects & streams USB camera)
-python scripts/usb_camera_manager.py
-
-# Terminal 2 (after 2-3 seconds): Start all services
+# Start all services (Backend, Inference, Kafka, Redis, RTSP, Cameras, Frontend)
 docker-compose up -d
 
-# View logs
+# View backend logs
 docker-compose logs -f backend
 
-# View specific service logs
-docker-compose logs -f camera-1
-```
+# View inference service logs
+docker-compose logs -f inference
 
-**Option 2: Without USB Camera (Simulated cameras only)**
-```bash
-# Just start docker-compose (no script needed)
-docker-compose up -d
+# View Kafka stream activity
+docker exec violence-detection-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic frames --from-beginning --max-messages 10
 
-# Backend will auto-skip usb-cam after 5 connection attempts
-```
-
-### Stop Services
-```bash
 # Stop all services
 docker-compose down
 
-# Stop and remove volumes (clean restart)
+# Clean restart (remove volumes)
 docker-compose down -v
-
-# Stop USB Camera Manager (in its terminal)
-# Press CTRL+C (gracefully kills FFmpeg)
 ```
 
-### Local Development
+### Monitor Kafka Streaming
+
+View real-time frame data being streamed:
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-.\venv\Scripts\activate   # Windows
+# View recent frames (last 10 messages)
+docker exec violence-detection-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic frames --from-beginning --max-messages 10 --timeout-ms 5000
 
-# Install dependencies
-pip install -r requirements.txt
+# View detection results
+docker exec violence-detection-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic detections --from-beginning --max-messages 10 --timeout-ms 5000
 
-# Start PostgreSQL, Redis, and RTSP services (via Docker)
-docker-compose up -d postgres redis rtsp-server camera-1 camera-2 camera-3 camera-4
-
-# Run backend locally
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Monitor with Python script
+python backend/tests/infrastructure/kafka/view_kafka.py
 ```
 
 ## Test Data
 
-Test videos are located in: `../utils/test_inputs/`
+Test videos available in: `../ai_service/utils/test_inputs/`
 
-The following test videos are available:
-- `violence_1.mp4` - Violence scene 1
-- `violence_2.mp4` - Violence scene 2
-- `violence_3.mp4` - Violence scene 3
-- `non_violence_1.mp4` - Normal activity
+Test datasets:
+- `violence_*.mp4` - Violence scene samples
+- `non_violence_*.mp4` - Normal activity samples
+
+These are streamed via FFmpeg containers as simulated RTSP cameras.
 
 ## API Endpoints
 
-### Health Check
+### Health & Status
 ```bash
-curl http://localhost:8000/
-
+# Health check
 curl http://localhost:8000/health
-```
 
-### Statistics
-```bash
+# System statistics (uptime, worker status, Kafka metrics)
 curl http://localhost:8000/stats
 ```
 
 Response includes:
-- Worker statistics (frames, FPS, connection status)
-- Redis stream statistics
-- Uptime information
+- Backend service status
+- Active camera workers (RTSP connections)
+- Frame throughput (FPS)
+- Kafka broker health
 
 ## Docker Services
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| Backend | 8000 | FastAPI application |
-| PostgreSQL | 5432 | Database |
-| Redis | 6379 | Message queue |
-| RTSP Server | 8554 | MediaMTX RTSP server |
-| Cameras 1-4 | - | FFmpeg RTSP streams (simulated) |
-| USB Camera | - | FFmpeg USB device capture (optional) |
+| Backend | 8000 | FastAPI application - RTSP reader & Kafka publisher |
+| Inference | - | AI model service - Kafka consumer, processes frames |
+| Kafka | 9092 | Message broker - distributes frames to inference |
+| Zookeeper | 2181 | Kafka coordination |
+| Redis | 6379 | Results cache & detection alerts |
+| RTSP Server | 8554 | MediaMTX - receives & serves RTSP streams |
+| Frontend | 3000 | React dashboard |
+| Camera 1-4 | - | FFmpeg containers - simulate IP cameras |
 
-## USB Camera Setup
+## Data Flow
 
-### Prerequisites
-- USB webcam connected to host
-- FFmpeg installed on host: `ffmpeg -version`
+### Frame Processing Pipeline
 
-### Auto-Detection
-- USB camera must be named `"Web Camera"` in FFmpeg
-- Script auto-detects on startup
-- If not found: backend skips usb-cam gracefully
-
-### How It Works
 ```
-Host (Windows):
-  python scripts/usb_camera_manager.py
-    └─ FFmpeg captures USB device
-       └─ Streams RTSP to localhost:8554/usb-cam
-
-Docker (Container):
-  rtsp-server (MediaMTX)
-    └─ Receives RTSP stream from host
-       └─ Backend reads as virtual IP camera
-
-Backend Flow:
-  rtsp://rtsp-server:8554/usb-cam  (like any IP camera)
-    ├─ CameraWorker reads frames
-    ├─ Samples 6 FPS
-    ├─ Resizes to 640x480
-    └─ Pushes to Redis Streams
-```
-
-### Troubleshooting USB Camera
-
-**Check if camera is detected:**
-```bash
-ffmpeg -list_devices true -f dshow -i dummy
-```
-Look for `"Web Camera" (video)` in output.
-
-**Check RTSP stream:**
-```bash
-ffplay rtsp://localhost:8554/usb-cam
+1. RTSP Cameras (MediaMTX)
+   ↓
+2. Backend CameraWorker
+   - Reads frame from RTSP stream
+   - Resizes to 640x480
+   - Encodes as JPEG (quality 80)
+   - Packs as msgpack
+   ↓
+3. Kafka Topic: "frames"
+   - Partitioned by camera_id
+   - Retention: 24 hours
+   ↓
+4. Inference Consumer
+   - Consumes frames from Kafka
+   - Batch processing (default 4 frames)
+   - Runs PyTorch model inference
+   ↓
+5. Detection Results
+   - Publishes to Redis
+   - Stores alerts in cache
+   - Sends to frontend via WebSocket
 ```
 
-**If camera not detected:**
-- Ensure USB camera is plugged in
-- Close any other app using the camera
-- Rename camera to "Web Camera" in Device Manager (Windows)
+### Key Configurations
 
-### Stats Endpoint
-```bash
-curl http://localhost:8000/stats
+**Backend Environment Variables:**
 ```
-Will show:
-- `usb-cam` worker status (if available)
-- Frame counts & FPS for all cameras
-- Redis stream statistics
+RTSP_BASE_URL=rtsp://rtsp-server:8554
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_FRAME_TOPIC=frames
+REDIS_URL=redis://redis:6379/0
+VIOLENCE_CONFIDENCE_THRESHOLD=0.5
+```
+
+**Inference Environment Variables:**
+```
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_FRAME_TOPIC=frames
+KAFKA_CONSUMER_GROUP=inference
+INFERENCE_BATCH_SIZE=4
+INFERENCE_BATCH_TIMEOUT_MS=5000
+ALERT_COOLDOWN_SECONDS=60
+```
 
 ## RTSP Streaming Details
 
-### Cameras
-- **cam1-4**: FFmpeg streams from MP4 files (simulated)
-- **usb-cam**: FFmpeg captures USB device (if available, auto-detected)
+### Camera Configuration
 
-### Stream Configuration
-- **Codec**: H.264
-- **Sampling**: Time-based 6 FPS output
-- **Resolution**: 640x480
-- **JPEG Quality**: 80
-- **Storage**: Redis Streams with base64-encoded frames
+**Simulated Cameras (via FFmpeg containers):**
+- **cam1-cam4**: Stream from MP4 test videos using FFmpeg
+- **Configuration**: 
+  - Codec: H.264
+  - Bitrate: 2500k
+  - Sampling: 6 FPS
+  - Resolution: 640x480
 
-### Architecture
+**MediaMTX RTSP Server:**
+- Acts as RTSP relay
+- Receives streams from FFmpeg containers
+- Backend connects and reads frames
+
+### Backend Frame Processing
+
 ```
-FFmpeg (Host/Container)
-  └─ Encode video
-     └─ Stream RTSP (libx264, veryfast preset)
-        └─ MediaMTX RTSP Server (Container)
-           └─ Backend CameraWorker reads frames
-              ├─ Sample 6 FPS
-              ├─ Store in-memory frame buffer
-              └─ Push metadata to Redis Streams
+RTSP Stream → Backend Worker
+    ├─ Reads raw frame
+    ├─ Resize to 640x480
+    ├─ Encode as JPEG (quality 80)
+    ├─ Pack as msgpack binary
+    └─ Publish to Kafka
+       └─ Key: camera_id (for partitioning)
 ```
 
-## Testing
-
-### Test RTSP Streams
+### Testing RTSP Streams
 
 ```bash
-# Test simulated cameras
+# Test camera RTSP streams (requires ffplay)
 ffplay -rtsp_transport tcp rtsp://localhost:8554/cam1
 ffplay -rtsp_transport tcp rtsp://localhost:8554/cam2
 ffplay -rtsp_transport tcp rtsp://localhost:8554/cam3
 ffplay -rtsp_transport tcp rtsp://localhost:8554/cam4
 
-# Test USB camera (if available)
-ffplay -rtsp_transport tcp rtsp://localhost:8554/usb-cam
-```
-
-### Test Backend Health
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Get detailed stats
-curl http://localhost:8000/stats
-```
-
-### Test Redis Frames
-
-```bash
-# Connect to Redis container
-docker exec -it violence-detection-redis redis-cli
-
-# Inside redis-cli:
-> XLEN frames:cam1                    # Total frames in stream
-> XRANGE frames:cam1 - + COUNT 1      # Get first frame
-> XLEN frames:cam2
-> XLEN frames:cam3
-> XLEN frames:cam4
-> XLEN frames:usb-cam                 # USB camera stream
-> exit
+# Check stream with ffprobe
+ffprobe rtsp://localhost:8554/cam1
 ```
