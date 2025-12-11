@@ -281,6 +281,13 @@ class InferenceConsumer:
                 
                 self.frames_processed += 1
                 
+                # Log every 10 frames to show processing is happening
+                if self.frames_processed % 10 == 0:
+                    logger.info(
+                        f"[{camera_id}] Processed {self.frames_processed} frames, "
+                        f"violence={detection['violence']}, confidence={detection['confidence']:.2f}"
+                    )
+                
                 # Check if should send alert (deduplication)
                 if not self._should_alert(camera_id, frame_msg.timestamp):
                     self.alerts_deduped += 1
