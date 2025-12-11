@@ -211,3 +211,110 @@ ffplay -rtsp_transport tcp rtsp://localhost:8554/cam4
 # Check stream with ffprobe
 ffprobe rtsp://localhost:8554/cam1
 ```
+
+## Testing & Debugging
+
+### Health Checks
+
+```bash
+# Backend health
+curl http://localhost:8000/health
+
+# View system statistics
+curl http://localhost:8000/stats
+
+# Check Kafka broker
+docker exec violence-detection-kafka kafka-broker-api-versions --bootstrap-server localhost:9092
+```
+
+### Monitor Data Flowing Through Kafka
+
+```bash
+# View frame topics (binary msgpack data)
+docker exec violence-detection-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic frames \
+  --max-messages 5
+
+# View detection results topic
+docker exec violence-detection-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic detections \
+  --max-messages 5
+
+# Check topic offsets
+docker exec violence-detection-kafka kafka-consumer-groups \
+  --bootstrap-server localhost:9092 \
+  --list
+```
+
+### View Backend Logs
+
+```bash
+# Real-time backend logs
+docker-compose logs -f backend
+
+# Inference service logs
+docker-compose logs -f inference
+
+# See last 50 lines
+docker-compose logs --tail 50 backend
+```
+
+### Check Redis Cache
+
+```bash
+# Connect to Redis
+docker exec -it violence-detection-redis redis-cli
+
+# Inside redis-cli:
+> KEYS *                              # List all keys
+> GET violations:latest               # Get latest violation
+> HGETALL camera:stats                # Camera statistics
+> exit
+```
+
+## Troubleshooting
+
+### No frames appearing in Kafka
+
+1. Check backend is running:
+   ```bash
+   curl http://localhost:8000/health
+   ```
+
+2. Verify RTSP streams are accessible:
+   ```bash
+   ffprobe rtsp://localhost:8554/cam1
+   ```
+
+3. Check backend logs for connection errors:
+   ```bash
+   docker-compose logs backend | grep -i "error\|exception"
+   ```
+
+### Inference not consuming frames
+
+1. Check inference service is running:
+   ```bash
+   docker-compose logs inference | tail -20
+   ```
+
+2. Verify Kafka connectivity:
+   ```bash
+   docker exec violence-detection-kafka kafka-consumer-groups \
+     --bootstrap-server localhost:9092 \
+     --group inference \
+     --describe
+   ```
+
+3. Check for model path issues:
+   ```bash
+   docker exec violence-detection-inference ls -la /app/training/two-stage/checkpoints/
+   ```
+
+### High memory usage
+
+- Adjust `INFERENCE_BATCH_SIZE` (lower = less memory)
+- Check frame resolution is being resized properly
+- Monitor with: `docker stats`
