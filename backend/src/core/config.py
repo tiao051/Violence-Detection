@@ -2,6 +2,7 @@
 
 import os
 from typing import List
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     # Kafka
     kafka_enabled: bool = os.getenv("KAFKA_ENABLED", "False").lower() == "true"
     kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-    kafka_frame_topic: str = os.getenv("KAFKA_FRAME_TOPIC", "processed-frames")
+    kafka_frame_topic: str = os.getenv("KAFKA_FRAME_TOPIC", "frames")
     kafka_jpeg_quality: int = int(os.getenv("KAFKA_JPEG_QUALITY", "80"))
     kafka_consumer_group: str = os.getenv("KAFKA_CONSUMER_GROUP", "inference-group")
     kafka_compression_type: str = os.getenv("KAFKA_COMPRESSION_TYPE", "gzip")
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
     # RTSP
     rtsp_enabled: bool = os.getenv("RTSP_ENABLED", "False").lower() == "true"
     rtsp_base_url: str = os.getenv("RTSP_BASE_URL", "rtsp://rtsp-server:8554")
-    rtsp_cameras: List[str] = ["cam1", "cam2", "cam3", "cam4" ]  # Main simulated cameras (USB camera disabled for now)
+    rtsp_cameras: List[str] = Field(default=["cam1", "cam2", "cam3", "cam4"])  # Comma-separated camera IDs from env or default
     rtsp_sample_rate: int = int(os.getenv("RTSP_SAMPLE_RATE", "6"))  # FPS
     rtsp_frame_width: int = int(os.getenv("RTSP_FRAME_WIDTH", "640"))
     rtsp_frame_height: int = int(os.getenv("RTSP_FRAME_HEIGHT", "480"))

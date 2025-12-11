@@ -3,10 +3,8 @@ FastAPI Application Entry Point
 
 Clean Architecture setup with dependency injection
 """
-import asyncio
 import logging
 import time
-import os
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
@@ -16,6 +14,7 @@ from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.redis.streams import RedisStreamProducer
+from src.infrastructure.kafka import get_kafka_producer
 from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
 from src.infrastructure.firebase.setup import initialize_firebase
@@ -75,6 +74,12 @@ async def startup() -> None:
         # 3. Create Redis producer
         redis_producer = RedisStreamProducer(redis_client)
 
+        # 3.5. Connect Kafka producer
+        logger.info("Connecting to Kafka...")
+        kafka_producer = get_kafka_producer()
+        await kafka_producer.connect()
+        logger.info("Kafka producer connected")
+
         # 4. Start Event Processor (Background Worker)
         event_processor = get_event_processor(redis_client)
         await event_processor.start()
@@ -90,7 +95,7 @@ async def startup() -> None:
                 worker = CameraWorker(
                     camera_id=cam_id,
                     stream_url=stream_url,
-                    redis_producer=redis_producer,
+                    kafka_producer=None,  # Will use singleton
                     sample_rate=settings.rtsp_sample_rate
                 )
                 await worker.start()

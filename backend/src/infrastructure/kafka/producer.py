@@ -69,7 +69,7 @@ class KafkaFrameProducer:
                 compression_type=self.compression_type,
                 max_batch_size=1048576,  # 1MB per batch
                 linger_ms=10,  # Wait 10ms to batch messages
-                acks='1',  # Wait for leader ack (faster than 'all')
+                acks=1,  # Wait for leader ack (faster than 'all')
             )
             await self.producer.start()
             self.is_connected = True

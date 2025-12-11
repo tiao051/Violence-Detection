@@ -355,9 +355,10 @@ class InferenceConsumer:
             )
             
             # Append to stream (persistent log)
+            # Note: xadd requires string values, use alert_json
             await self.redis_client.xadd(
                 f"detection:stream:{camera_id}",
-                alert_message,
+                {'detection': alert_json},
                 maxlen=100,  # Keep last 100 detections per camera
             )
             

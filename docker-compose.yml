@@ -66,6 +66,7 @@ services:
       - ./backend/.env
     environment:
       RTSP_BASE_URL: rtsp://rtsp-server:8554
+      RTSP_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
