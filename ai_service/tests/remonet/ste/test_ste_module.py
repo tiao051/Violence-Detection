@@ -40,7 +40,8 @@ class TestSTEPipeline:
     def test_batch_processing_output_shape(self, ste_extractor):
         """Test process_batch output shape matches spec (T/3, C, H, W)"""
         frames = create_random_frames(30)
-        features = ste_extractor.process_batch(frames)
+        frames_array = np.array(frames)  # Convert list to numpy array
+        features = ste_extractor.process_batch(frames_array)
         
         assert features.shape == (10, 1280, 7, 7)
         assert isinstance(features, torch.Tensor)
@@ -49,7 +50,8 @@ class TestSTEPipeline:
     def test_process_returns_valid_ste_output(self, ste_extractor):
         """Test process() returns STEOutput with correct metadata"""
         frames = create_random_frames(30)
-        output = ste_extractor.process(frames, camera_id="test_cam", timestamp=123.0)
+        frames_array = np.array(frames)  # Convert list to numpy array
+        output = ste_extractor.process(frames_array, camera_id="test_cam", timestamp=123.0)
         
         assert isinstance(output, STEOutput)
         assert output.features.shape == (10, 1280, 7, 7)
@@ -57,32 +59,34 @@ class TestSTEPipeline:
         assert output.timestamp == 123.0
         assert output.latency_ms > 0
     
-    def test_temporal_composite_normalization(self, ste_extractor):
-        """Test temporal composite creation with correct ImageNet normalization"""
-        frames = [np.full((224, 224, 3), val, dtype=np.uint8) for val in [60, 90, 120]]
-        composite = ste_extractor.create_temporal_composite(frames)
+    def test_temporal_composite_in_batch_processing(self, ste_extractor):
+        """Test temporal composite creation is done internally in batch processing"""
+        frames = create_random_frames(30)
+        frames_array = np.array(frames)
+        features = ste_extractor.process_batch(frames_array)
         
-        assert composite.shape == (224, 224, 3)
-        assert composite.dtype == np.float32
-        assert not np.any(np.isnan(composite))
-        assert not np.any(np.isinf(composite))
+        # Features should have correct shape from temporal composites (30->10)
+        assert features.shape[0] == 10  # T/3 = 30/3 = 10 temporal composites
+        assert not torch.any(torch.isnan(features))
+        assert not torch.any(torch.isinf(features))
     
     def test_does_not_modify_input_frames(self, ste_extractor):
         """Test processing doesn't modify input frames"""
         frames = create_random_frames(30)
-        frames_copy = [f.copy() for f in frames]
+        frames_array = np.array(frames)
+        frames_copy = frames_array.copy()
         
-        _ = ste_extractor.process_batch(frames)
+        _ = ste_extractor.process_batch(frames_array)
         
-        for orig, copy in zip(frames, frames_copy):
-            assert np.array_equal(orig, copy)
+        assert np.array_equal(frames_array, frames_copy)
     
     def test_deterministic_processing(self, ste_extractor):
         """Test batch processing is deterministic"""
         frames = create_random_frames(30)
+        frames_array = np.array(frames)
         
-        features_1 = ste_extractor.process_batch(frames)
-        features_2 = ste_extractor.process_batch(frames)
+        features_1 = ste_extractor.process_batch(frames_array)
+        features_2 = ste_extractor.process_batch(frames_array)
         
         assert torch.allclose(features_1, features_2, rtol=1e-5, atol=1e-5)
 
@@ -113,7 +117,8 @@ class TestSTEBackbones:
         """Test each backbone processes frames correctly"""
         ste = STEExtractor(device='cpu', backbone=backbone)
         frames = create_random_frames(30)
-        features = ste.process_batch(frames)
+        frames_array = np.array(frames)  # Convert list to numpy array
+        features = ste.process_batch(frames_array)
         
         config = BACKBONE_CONFIG[backbone]
         expected_channels = config['out_channels']
@@ -155,14 +160,15 @@ class TestSTEBackbones:
 class TestSTEInputValidation:
     """Test error handling and input validation"""
     
-    def test_reject_wrong_frame_count_for_composite(self):
-        """Test composite creation rejects wrong frame count"""
+    def test_reject_wrong_frame_count_for_batch(self):
+        """Test batch processing rejects wrong frame count"""
         ste = STEExtractor(device='cpu')
         
-        for count in [2, 4]:
+        for count in [20, 40]:
             frames = create_random_frames(count)
-            with pytest.raises(ValueError, match="Expected 3 frames"):
-                ste.create_temporal_composite(frames)
+            frames_array = np.array(frames)
+            with pytest.raises(ValueError, match="Expected 30 frames"):
+                ste.process_batch(frames_array)
     
     def test_reject_wrong_batch_frame_count(self):
         """Test batch processing rejects wrong frame count"""

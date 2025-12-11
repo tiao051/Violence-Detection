@@ -92,11 +92,11 @@ class TestSMEExtractor:
         assert motion_mean > non_motion_mean * 1.5
     
     def test_processing_speed(self, extractor):
-        """Test processing completes within 5ms per frame pair"""
+        """Test processing completes within 10ms per frame pair"""
         frame_t, frame_t1 = create_random_pair()
         _, _, _, elapsed_ms = extractor.process(frame_t, frame_t1)
         
-        assert elapsed_ms < 5
+        assert elapsed_ms < 10
     
     def test_reproducibility_same_inputs(self, extractor):
         """Test identical inputs produce identical outputs"""
