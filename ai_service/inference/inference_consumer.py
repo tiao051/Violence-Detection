@@ -124,6 +124,7 @@ class InferenceConsumer:
             logger.info("Starting Inference Consumer...")
             
             # Connect to Kafka
+            # Increase timeouts to handle slow CPU inference (12+ seconds per frame)
             self.consumer = AIOKafkaConsumer(
                 self.kafka_topic,
                 bootstrap_servers=self.kafka_bootstrap_servers,
@@ -132,6 +133,10 @@ class InferenceConsumer:
                 enable_auto_commit=True,
                 value_deserializer=lambda m: m,  # Raw bytes for MessagePack binary format
                 key_deserializer=lambda k: k.decode('utf-8') if k else None,
+                # Prevent Kafka from kicking consumer during slow inference
+                session_timeout_ms=60000,  # 60 seconds (default 10s)
+                heartbeat_interval_ms=20000,  # 20 seconds (should be < session_timeout/3)
+                max_poll_interval_ms=300000,  # 5 minutes for slow batch processing
             )
             await self.consumer.start()
             logger.info(f"Kafka consumer started: topic={self.kafka_topic}")
