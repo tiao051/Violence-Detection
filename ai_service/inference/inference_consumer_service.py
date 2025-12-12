@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 # Add parent directory to path so we can import remonet
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -34,11 +35,38 @@ from inference.inference_consumer import InferenceConsumer
 from inference.inference_model import ViolenceDetectionModel, InferenceConfig
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s'
-)
-logger = logging.getLogger(__name__)
+def setup_logging():
+    """Configure logging to both console and file."""
+    os.makedirs("logs", exist_ok=True)
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter(
+        '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
+    )
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+    
+    # File handler
+    try:
+        file_handler = RotatingFileHandler(
+            "logs/inference.log",
+            maxBytes=10_000_000,  # 10MB
+            backupCount=5
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(console_formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        logger.warning(f"Failed to create file handler: {e}")
+    
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 
 async def main():

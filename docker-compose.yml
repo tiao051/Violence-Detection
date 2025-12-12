@@ -92,7 +92,6 @@ services:
       - ./backend:/app
       # Persist logs on host
       - ./backend/logs:/app/logs
-      - ./ai_service:/app/ai_service
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json
       - /app/__pycache__
     depends_on:
@@ -127,6 +126,7 @@ services:
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
     volumes:
       - ./ai_service:/app
+      - ./ai_service/logs:/app/logs
       - /app/__pycache__
     depends_on:
       redis:
