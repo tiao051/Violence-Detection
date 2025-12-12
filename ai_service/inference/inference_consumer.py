@@ -272,7 +272,8 @@ class InferenceConsumer:
                 # Run in thread pool to prevent blocking Kafka heartbeats
                 detection = await loop.run_in_executor(
                     self._executor,
-                    self.model.predict
+                    self.model.predict,
+                    frame_msg.timestamp  # Pass frame timestamp for e2e latency
                 )
                 
                 if detection is None:
@@ -358,7 +359,8 @@ class InferenceConsumer:
                 'timestamp': frame_msg.timestamp,
                 'violence': detection['violence'],
                 'confidence': float(detection['confidence']),
-                'latency_ms': float(detection.get('latency_ms', 0)),
+                'inference_latency_ms': float(detection.get('latency_ms', 0)),
+                'e2e_latency_ms': float(detection.get('e2e_latency_ms', 0)),
             }
             
             alert_json = json.dumps(alert_message)
@@ -388,7 +390,8 @@ class InferenceConsumer:
                 f"[{camera_id}] Detection published: "
                 f"violence={detection['violence']}, "
                 f"confidence={detection['confidence']:.2f}, "
-                f"latency={detection.get('latency_ms', 0):.1f}ms"
+                f"inference={detection.get('latency_ms', 0):.1f}ms, "
+                f"e2e={detection.get('e2e_latency_ms', 0):.1f}ms"
             )
         
         except Exception as e:

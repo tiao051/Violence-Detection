@@ -289,9 +289,13 @@ class ViolenceDetectionModel:
         if len(self.frame_buffer) > self.MAX_BUFFER_SIZE:
             self.frame_buffer.pop(0)
     
-    def predict(self) -> Optional[Dict]:
+    def predict(self, frame_timestamp: Optional[float] = None) -> Optional[Dict]:
         """
         Perform inference on buffered frames.
+        
+        Args:
+            frame_timestamp: Timestamp when frame was received from Kafka.
+                           If provided, latency includes batching delay.
         
         Returns:
             Dict with detection result if buffer is full, else None
@@ -341,14 +345,20 @@ class ViolenceDetectionModel:
             confidence = violence_prob if is_violence else no_violence_prob
             
             # Calculate latency
-            self.last_inference_latency = (time.time() - inference_start) * 1000  # ms
+            inference_only_latency = (time.time() - inference_start) * 1000  # ms
+            self.last_inference_latency = inference_only_latency
+            
+            # If frame_timestamp provided, calculate end-to-end latency including batching
+            e2e_latency = (time.time() - frame_timestamp) * 1000 if frame_timestamp else inference_only_latency
+            
             self.last_inference_time = time.time()
             
             return {
                 'violence': is_violence,
                 'confidence': confidence,
                 'buffer_size': len(self.frame_buffer),
-                'latency_ms': self.last_inference_latency
+                'latency_ms': inference_only_latency,  # Inference only
+                'e2e_latency_ms': e2e_latency  # End-to-end (includes batching)
             }
         
         except Exception as e:
