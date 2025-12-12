@@ -23,12 +23,51 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InferenceConfig:
     """Configuration for violence detection inference."""
-    model_path: str
+    model_path: Optional[str] = None  # Path to model checkpoint
     backbone: str = 'mobilenet_v2'  # STE backbone used during training
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     confidence_threshold: float = 0.5
     num_frames: int = 30
     frame_size: tuple = (224, 224)
+    
+    def __post_init__(self):
+        """Auto-detect model path if not provided."""
+        if self.model_path is None:
+            self.model_path = self._auto_detect_model_path()
+    
+    @staticmethod
+    def _auto_detect_model_path() -> str:
+        """
+        Auto-detect best_model.pt from standard locations.
+        
+        Priority order:
+        1. ai_service/training/two-stage/checkpoints/best_model.pt
+        2. ai_service/checkpoints/best_model.pt
+        3. checkpoints/best_model.pt
+        
+        Returns:
+            Path to model checkpoint
+            
+        Raises:
+            FileNotFoundError: If no model found
+        """
+        search_paths = [
+            Path(__file__).parent.parent / 'training' / 'two-stage' / 'checkpoints' / 'best_model.pt',
+            Path(__file__).parent.parent / 'checkpoints' / 'best_model.pt',
+            Path('checkpoints') / 'best_model.pt',
+            Path('best_model.pt'),
+        ]
+        
+        for path in search_paths:
+            if path.exists():
+                logger.info(f"Auto-detected model: {path}")
+                return str(path)
+        
+        available = '\n'.join(str(p) for p in search_paths)
+        raise FileNotFoundError(
+            f"Could not find best_model.pt in standard locations:\n{available}\n"
+            f"Please specify model_path explicitly in InferenceConfig"
+        )
 
 
 class ViolenceDetectionModel:
@@ -282,8 +321,11 @@ def get_violence_detection_model(config: Optional[InferenceConfig] = None) -> Vi
     """
     Get or create violence detection model instance.
     
+    Auto-detects best_model.pt if config not provided.
+    
     Args:
-        config: InferenceConfig (required on first call)
+        config: InferenceConfig (optional)
+                If None, will auto-detect model path
     
     Returns:
         ViolenceDetectionModel instance
@@ -292,7 +334,7 @@ def get_violence_detection_model(config: Optional[InferenceConfig] = None) -> Vi
     
     if _model_instance is None:
         if config is None:
-            raise ValueError("config required on first initialization")
+            config = InferenceConfig()  # Auto-detect model
         _model_instance = ViolenceDetectionModel(config)
     
     return _model_instance
