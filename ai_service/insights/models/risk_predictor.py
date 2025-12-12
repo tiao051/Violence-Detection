@@ -1,10 +1,60 @@
 """
-Risk Prediction Model using Random Forest
+Risk Prediction Model - Random Forest for Violence Risk Assessment
 
-Predicts violence risk level for given conditions.
-Example output: "Friday 8PM at Parking Lot → HIGH risk (+25% vs average)"
+================================================================================
+WHAT IS RANDOM FOREST?
+================================================================================
+Random Forest is a supervised machine learning algorithm that builds multiple
+decision trees and combines their predictions (ensemble learning). It's called
+"forest" because it creates many trees, and "random" because each tree is trained
+on a random subset of data and features.
 
-Uses scikit-learn Random Forest classifier.
+HOW IT WORKS (simplified):
+1. Create N decision trees (we use 100 trees)
+2. Each tree is trained on a random sample of the data (with replacement)
+3. Each tree also uses a random subset of features at each split
+4. For prediction, each tree "votes" and the majority vote wins
+5. We also get probability estimates based on voting percentages
+
+WHY RANDOM FOREST FOR RISK PREDICTION?
+- Robust: Multiple trees reduce overfitting
+- Handles non-linear relationships well
+- Works with both categorical and numerical features
+- Provides feature importance (which factors matter most)
+- Returns probability estimates (not just class labels)
+
+WHAT ARE WE PREDICTING?
+- Target: Severity level (High / Medium / Low)
+- Given: Hour, Day of week, Camera location
+- Output: Predicted severity + probability + comparison vs average
+
+FEATURES USED:
+- Hour (0-23): Time of day
+- Day of week (0-6): Which day (Monday=0, Sunday=6)
+- Is weekend (0/1): Weekend or weekday
+- Time period (encoded): Morning/Afternoon/Evening/Night
+- Camera (encoded): Location of the camera
+
+EXAMPLE OUTPUT:
+  "Saturday 20:00 at Parking Lot → High risk (+27% vs average)"
+  This means:
+  - The model predicts HIGH severity
+  - The probability is 27% HIGHER than the baseline average
+
+KEY METRICS:
+- Accuracy: How often the model predicts correctly (e.g., 65%)
+- Feature Importance: Which features matter most for prediction
+  - Higher importance = feature is more predictive
+
+PARAMETERS:
+- n_estimators: Number of trees (more trees = more stable but slower)
+- max_depth: Maximum depth of each tree (deeper = more complex patterns)
+
+TECHNICAL NOTES:
+- Uses scikit-learn's RandomForestClassifier
+- Uses stratified train/test split (preserves class distribution)
+- LabelEncoder for categorical features (day, camera, period)
+================================================================================
 """
 
 from typing import List, Dict, Any, Optional, Tuple

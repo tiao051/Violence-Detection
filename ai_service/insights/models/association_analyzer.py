@@ -1,10 +1,67 @@
 """
-Association Rule Mining using FP-Growth
+Association Rule Mining - FP-Growth Algorithm for Violence Event Patterns
 
-Discovers association rules in violence detection events.
-Example output: "IF Saturday AND Evening → HIGH violence probability"
+================================================================================
+WHAT IS ASSOCIATION RULE MINING?
+================================================================================
+Association Rule Mining is a machine learning technique that finds interesting
+relationships ("IF-THEN" rules) between items in a dataset. It was originally
+used for market basket analysis (e.g., "customers who buy bread also buy butter").
 
-Uses mlxtend library for FP-Growth algorithm.
+We use it here to find patterns like:
+  "IF Saturday AND Evening → High probability of violence"
+  "IF Parking Lot AND Night → High severity incidents"
+
+KEY CONCEPTS:
+-------------
+1. SUPPORT: How frequently an itemset appears in the data
+   - Support(A) = (Transactions containing A) / (Total transactions)
+   - Example: If 20% of events happen on weekends, Support(weekend) = 0.20
+
+2. CONFIDENCE: How often the rule is true
+   - Confidence(A→B) = Support(A∪B) / Support(A)  
+   - Example: "IF Saturday → High severity" with confidence 75% means:
+     "When it's Saturday, 75% of events are high severity"
+
+3. LIFT: How much more likely B is when A happens (vs random chance)
+   - Lift(A→B) = Confidence(A→B) / Support(B)
+   - Lift > 1: Positive correlation (A makes B more likely)
+   - Lift = 1: No correlation (A and B are independent)
+   - Lift < 1: Negative correlation (A makes B less likely)
+   - Example: Lift of 1.5 means B is 50% more likely when A happens
+
+WHY FP-GROWTH (instead of Apriori)?
+-----------------------------------
+- FP-Growth is FASTER than the older Apriori algorithm
+- It scans the database only twice
+- Uses a compact tree structure (FP-tree) for efficient mining
+- Better for large datasets
+
+EXAMPLE OUTPUT:
+  Rule 1: IF day_Saturday AND period_Evening → severity_High
+          Confidence: 75%, Lift: 1.45
+  Rule 2: IF camera_Parking_Lot AND is_weekend → severity_High  
+          Confidence: 68%, Lift: 1.32
+
+ITEMS WE EXTRACT FROM EACH EVENT:
+- Day name (day_Monday, day_Saturday, etc.)
+- Time period (period_Morning, period_Evening, etc.)
+- Weekend/Weekday (is_weekend, is_weekday)
+- Hour bucket (hour_morning, hour_evening, etc.)
+- Camera location (camera_Parking_Lot, camera_Main_Entrance, etc.)
+- Severity level (severity_High, severity_Medium, severity_Low)
+- Confidence bucket (confidence_high, confidence_medium, confidence_low)
+
+PARAMETERS:
+- min_support: Minimum frequency (0.05 = 5% of events)
+- min_confidence: Minimum rule reliability (0.5 = 50%)
+- min_lift: Minimum correlation strength (>1.0)
+
+TECHNICAL NOTES:
+- Uses mlxtend library for FP-Growth implementation
+- TransactionEncoder converts items to binary matrix
+- Results sorted by lift (most interesting rules first)
+================================================================================
 """
 
 from typing import List, Dict, Any, Optional

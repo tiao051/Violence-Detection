@@ -1,10 +1,46 @@
 """
-Cluster Pattern Analyzer
+Cluster Pattern Analyzer - K-means Clustering for Violence Event Patterns
 
-Uses K-means clustering to automatically discover patterns 
-in violence detection events.
+================================================================================
+WHAT IS K-MEANS CLUSTERING?
+================================================================================
+K-means is an unsupervised machine learning algorithm that groups similar data
+points into K distinct clusters. Unlike supervised learning (where we provide
+labels), K-means DISCOVERS patterns automatically from the data.
 
-This is an actual ML model (unsupervised learning).
+HOW IT WORKS (simplified):
+1. Choose K (number of clusters) - we use 3 clusters
+2. Randomly place K "centroids" (cluster centers) in the feature space
+3. Assign each data point to the nearest centroid
+4. Move each centroid to the mean of its assigned points
+5. Repeat steps 3-4 until centroids stop moving (convergence)
+
+Result: Similar events are grouped together, revealing hidden patterns!
+
+WHY USE K-MEANS FOR VIOLENCE EVENTS?
+- Automatically discovers patterns without prior knowledge
+- Groups events by time, location, severity similarity
+- Each cluster represents a distinct "type" of violence incident
+- Helps identify when/where different types of incidents occur
+
+EXAMPLE OUTPUT:
+  Cluster 0: "evening/night hours, mostly weekends, near Parking Lot, HIGH severity"
+  Cluster 1: "morning hours, mostly weekdays, near Main Entrance, low severity"
+  Cluster 2: "afternoon hours, near Cafeteria, medium severity"
+
+FEATURES USED FOR CLUSTERING:
+- Hour of day (0-23)
+- Day of week (0-6, where 0=Monday)
+- Is weekend (0 or 1)
+- Time period (Morning/Afternoon/Evening/Night)
+- Camera location (encoded as numbers)
+- Confidence score (0.0 to 1.0)
+
+TECHNICAL NOTES:
+- Uses StandardScaler to normalize features (important for K-means)
+- Uses scikit-learn's KMeans implementation
+- n_init=10 means it runs 10 times and picks the best result
+================================================================================
 """
 
 from typing import List, Dict, Any, Optional

@@ -260,6 +260,99 @@ class InsightsModel:
             print(f"    - {c['day']} {c['hour']:02d}:00 at {c['camera']}: {c['high_prob']:.0%}")
         
         print("\n" + "=" * 70)
+    
+    # ==================== Save / Load ====================
+    
+    def save(self, filepath: str) -> str:
+        """
+        Save the trained model to a file.
+        
+        This saves all 3 trained ML models (K-means, FP-Growth, Random Forest)
+        along with metadata, so you can reload them later without retraining.
+        
+        Args:
+            filepath: Path to save the model (e.g., "insights_model.pkl")
+            
+        Returns:
+            Absolute path to the saved file
+            
+        Example:
+            >>> model = InsightsModel()
+            >>> model.fit(events)
+            >>> model.save("trained_insights_model.pkl")
+            'C:/path/to/trained_insights_model.pkl'
+        """
+        self._check_fitted()
+        
+        # Create save data dictionary
+        save_data = {
+            "version": "1.0",
+            "fit_time": self.fit_time.isoformat() if self.fit_time else None,
+            "n_events": len(self.events),
+            
+            # Model instances (these contain trained sklearn/mlxtend objects)
+            "cluster_model": self.cluster_model,
+            "association_model": self.association_model,
+            "prediction_model": self.prediction_model,
+            
+            # Model parameters (for reference)
+            "params": {
+                "n_clusters": self.cluster_model.n_clusters,
+                "min_support": self.association_model.min_support,
+                "min_confidence": self.association_model.min_confidence,
+                "n_estimators": self.prediction_model.n_estimators,
+            }
+        }
+        
+        # Save using joblib (efficient for sklearn models)
+        abs_path = os.path.abspath(filepath)
+        joblib.dump(save_data, abs_path)
+        
+        print(f"Model saved to: {abs_path}")
+        return abs_path
+    
+    @classmethod
+    def load(cls, filepath: str) -> "InsightsModel":
+        """
+        Load a trained model from a file.
+        
+        This restores all 3 trained ML models so you can use them
+        immediately without retraining.
+        
+        Args:
+            filepath: Path to the saved model file
+            
+        Returns:
+            InsightsModel instance with trained models
+            
+        Example:
+            >>> model = InsightsModel.load("trained_insights_model.pkl")
+            >>> prediction = model.predict(hour=20, day="Saturday", camera="Parking Lot")
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file not found: {filepath}")
+        
+        # Load saved data
+        save_data = joblib.load(filepath)
+        
+        # Create new instance
+        instance = cls()
+        
+        # Restore models
+        instance.cluster_model = save_data["cluster_model"]
+        instance.association_model = save_data["association_model"]
+        instance.prediction_model = save_data["prediction_model"]
+        
+        # Restore metadata
+        instance.is_fitted = True
+        instance.fit_time = datetime.fromisoformat(save_data["fit_time"]) if save_data["fit_time"] else None
+        instance.events = []  # Events are not saved (too large)
+        
+        print(f"Model loaded from: {os.path.abspath(filepath)}")
+        print(f"  - Originally trained on {save_data['n_events']} events")
+        print(f"  - Trained at: {save_data['fit_time']}")
+        
+        return instance
 
 
 # For easy import

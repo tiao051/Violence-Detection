@@ -3,7 +3,7 @@ VIOLENCE INSIGHTS - DEMO FOR TASK GIVER
 
 This script demonstrates all 3 ML models built for violence insights.
 
-Run: python ai_service/insights/demo_for_taskgiver.py
+Run: python ai_service/insights/demo.py
 """
 
 import sys
