@@ -49,13 +49,17 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" }
         ],
-        // Optimize for low latency
         bundlePolicy: "max-bundle",
         rtcpMuxPolicy: "require",
         iceTransportPolicy: "all"
       });
 
       pcRef.current = peer;
+
+      // Add transceiver to limit bandwidth and configure direction
+      peer.addTransceiver('video', {
+        direction: 'recvonly'
+      });
 
       // Monitor connection state
       peer.onconnectionstatechange = () => {
@@ -77,6 +81,15 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
       peer.ontrack = (event) => {
         if (videoRef.current && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0];
+          
+          // OPTIMIZATION: Add playout delay hint for smoother playback
+          // Trade-off: slightly higher latency (0.2s) for much smoother video
+          // @ts-ignore - playoutDelayHint is experimental but widely supported
+          if (event.receiver && event.receiver.playoutDelayHint !== undefined) {
+             // @ts-ignore
+             event.receiver.playoutDelayHint = 0.2; 
+          }
+
           videoRef.current.play().catch(() => console.warn("Autoplay blocked"));
           setLoading(false);
         }
@@ -87,12 +100,21 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         offerToReceiveAudio: false,
         offerToReceiveVideo: true
       });
-      await peer.setLocalDescription(offer);
+
+      // OPTIMIZATION: Modify SDP to limit bitrate (e.g., 1000kbps)
+      // This prevents 4 cameras from saturating the network/CPU
+      let sdp = offer.sdp;
+      if (sdp) {
+        // Add bandwidth limit (b=AS:1000) to video section
+        sdp = sdp.replace(/a=mid:video\r\n/g, 'a=mid:video\r\nb=AS:1000\r\n');
+      }
+      
+      await peer.setLocalDescription({ type: "offer", sdp: sdp });
 
       // Send offer to MediaMTX WHIP endpoint
       const res = await fetch(`${signalingServer}/${cameraId}/whep`, {
         method: "POST",
-        body: offer.sdp,
+        body: sdp,
         headers: { "Content-Type": "application/sdp" }
       });
 
