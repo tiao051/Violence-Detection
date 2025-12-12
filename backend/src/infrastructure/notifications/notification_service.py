@@ -1,8 +1,7 @@
 """Notification Service for sending FCM messages."""
 
 import logging
-from typing import List, Dict, Any, Optional
-import firebase_admin
+from typing import List, Dict, Optional
 from firebase_admin import messaging
 
 logger = logging.getLogger(__name__)
