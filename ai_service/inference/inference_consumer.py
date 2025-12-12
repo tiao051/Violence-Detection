@@ -63,7 +63,6 @@ class InferenceConsumer:
         redis_url: str = None,
         batch_size: int = None,
         batch_timeout_ms: int = None,
-        alert_cooldown_seconds: int = None,
     ):
         """
         Initialize inference consumer.
@@ -76,7 +75,6 @@ class InferenceConsumer:
             redis_url: Redis connection URL (from REDIS_URL env, required)
             batch_size: Frames to accumulate before inference (from INFERENCE_BATCH_SIZE env, required)
             batch_timeout_ms: Max wait for batch (from INFERENCE_BATCH_TIMEOUT_MS env, required)
-            alert_cooldown_seconds: Alert deduplication cooldown (from ALERT_COOLDOWN_SECONDS env, required)
         """
         # Load from environment - all required, fail if missing
         self.kafka_bootstrap_servers = kafka_bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
@@ -85,7 +83,6 @@ class InferenceConsumer:
         self.redis_url = redis_url or os.getenv("REDIS_URL")
         self.batch_size = batch_size or int(os.getenv("INFERENCE_BATCH_SIZE", "") or 0)
         self.batch_timeout_ms = batch_timeout_ms or int(os.getenv("INFERENCE_BATCH_TIMEOUT_MS", "") or 0)
-        self.alert_cooldown_seconds = alert_cooldown_seconds or int(os.getenv("ALERT_COOLDOWN_SECONDS", "") or 0)
         
         # Validate all required config
         if not self.kafka_bootstrap_servers:
@@ -100,8 +97,6 @@ class InferenceConsumer:
             raise ValueError("INFERENCE_BATCH_SIZE env variable not set or invalid")
         if self.batch_timeout_ms <= 0:
             raise ValueError("INFERENCE_BATCH_TIMEOUT_MS env variable not set or invalid")
-        if self.alert_cooldown_seconds <= 0:
-            raise ValueError("ALERT_COOLDOWN_SECONDS env variable not set or invalid")
         
         self.model = model
         
@@ -112,14 +107,12 @@ class InferenceConsumer:
         
         # Per-camera buffers and state
         self.camera_buffers: Dict[str, List[FrameMessage]] = {}
-        self.camera_last_alert: Dict[str, float] = {}  # Timestamp of last alert
         
         # Metrics
         self.frames_consumed = 0
         self.frames_processed = 0
         self.detections_made = 0
         self.alerts_sent = 0
-        self.alerts_deduped = 0
         self.start_time = time.time()
         
         # ThreadPoolExecutor for CPU-bound inference
@@ -328,11 +321,6 @@ class InferenceConsumer:
                 if not detection['violence']:
                     continue
                 
-                # Check if should send alert (deduplication)
-                if not self._should_alert(camera_id, frame_msg.timestamp):
-                    self.alerts_deduped += 1
-                    continue
-                
                 # Save batch frames to temp and publish detection
                 # frames contains the batch being processed
                 # Run I/O in thread pool to prevent blocking
@@ -354,34 +342,6 @@ class InferenceConsumer:
         finally:
             # Remove processed frames from buffer (sliding window)
             self.camera_buffers[camera_id] = frames[self.batch_size:]
-    
-    def _should_alert(self, camera_id: str, timestamp: float) -> bool:
-        """
-        Check deduplication: should we send alert for this detection?
-        
-        Logic: Don't spam alerts. Max 1 per camera per cooldown period.
-        
-        Args:
-            camera_id: Camera identifier
-            timestamp: Frame timestamp
-        
-        Returns:
-            True if should send alert, False if within cooldown period
-        """
-        last_alert = self.camera_last_alert.get(camera_id, 0)
-        
-        # Check if last alert was within cooldown period
-        if timestamp - last_alert < self.alert_cooldown_seconds:
-            logger.debug(
-                f"[{camera_id}] Alert deduped "
-                f"(last alert {timestamp - last_alert:.1f}s ago, "
-                f"cooldown {self.alert_cooldown_seconds}s)"
-            )
-            return False
-        
-        # Update last alert time
-        self.camera_last_alert[camera_id] = timestamp
-        return True
     
     async def _publish_detection(
         self,
@@ -426,7 +386,7 @@ class InferenceConsumer:
             # Store latest detection (with TTL)
             await self.redis_client.setex(
                 f"detection:latest:{camera_id}",
-                self.alert_cooldown_seconds,
+                60, # Default TTL 60s
                 alert_json,
             )
             
@@ -457,7 +417,6 @@ class InferenceConsumer:
             'frames_processed': self.frames_processed,
             'detections_made': self.detections_made,
             'alerts_sent': self.alerts_sent,
-            'alerts_deduped': self.alerts_deduped,
             'fps': self.frames_consumed / elapsed if elapsed > 0 else 0,
             'elapsed_seconds': elapsed,
         }

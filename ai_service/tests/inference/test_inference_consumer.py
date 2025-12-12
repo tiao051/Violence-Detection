@@ -62,7 +62,6 @@ def inference_consumer(mock_kafka_consumer, mock_model, mock_redis):
         redis_url="redis://localhost:6379",
         batch_size=4,
         batch_timeout_ms=5000,
-        alert_cooldown_seconds=60
     )
     # Inject mocks
     consumer.consumer = mock_kafka_consumer
@@ -89,7 +88,6 @@ class TestInferenceConsumerStructure:
         """Test correct initialization of attributes"""
         assert inference_consumer.kafka_topic == "processed-frames"
         assert inference_consumer.batch_size == 4
-        assert inference_consumer.alert_cooldown_seconds == 60
         # Check new Queue architecture components
         assert isinstance(inference_consumer.frame_queue, asyncio.Queue)
         assert inference_consumer.frame_queue.maxsize == 100
@@ -118,26 +116,6 @@ class TestInferenceConsumerBatching:
         assert len(inference_consumer.camera_buffers['cam1']) == 1
         assert len(inference_consumer.camera_buffers['cam2']) == 1
         assert inference_consumer.camera_buffers['cam1'] != inference_consumer.camera_buffers['cam2']
-
-
-class TestInferenceConsumerAlertDedup:
-    """Test alert deduplication logic"""
-    
-    def test_should_alert_logic(self, inference_consumer):
-        """Test _should_alert method directly"""
-        camera_id = "cam1"
-        
-        # 1. First alert - should pass
-        assert inference_consumer._should_alert(camera_id, 100.0) is True
-        assert inference_consumer.camera_last_alert[camera_id] == 100.0
-        
-        # 2. Alert 10s later (cooldown 60s) - should fail
-        assert inference_consumer._should_alert(camera_id, 110.0) is False
-        assert inference_consumer.camera_last_alert[camera_id] == 100.0 # Timestamp shouldn't update
-        
-        # 3. Alert 61s later - should pass
-        assert inference_consumer._should_alert(camera_id, 161.0) is True
-        assert inference_consumer.camera_last_alert[camera_id] == 161.0
 
 
 class TestInferenceConsumerQueueLogic:
@@ -180,7 +158,6 @@ class TestInferenceConsumerConfig:
             redis_url="redis://custom:6379",
             batch_size=8,
             batch_timeout_ms=1000,
-            alert_cooldown_seconds=30
         )
         
         assert consumer.kafka_bootstrap_servers == "custom:9092"

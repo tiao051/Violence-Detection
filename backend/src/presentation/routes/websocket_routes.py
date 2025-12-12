@@ -56,44 +56,25 @@ async def websocket_threat_alerts(websocket: WebSocket):
     """
     await manager.connect(websocket)
     try:
-        # Wait briefly for app startup to initialize redis_producer (lifespan may still be running)
-        redis_producer = getattr(websocket.app.state, "redis_producer", None)
+        # Wait briefly for app startup to initialize redis_client
+        redis_client = getattr(websocket.app.state, "redis_client", None)
         wait_ms = 0
-        while not redis_producer and wait_ms < 5000:
+        while not redis_client and wait_ms < 5000:
             await asyncio.sleep(0.25)
             wait_ms += 250
-            redis_producer = getattr(websocket.app.state, "redis_producer", None)
+            redis_client = getattr(websocket.app.state, "redis_client", None)
 
-        if not redis_producer:
-            logger.warning("Redis producer not available after initial wait; will keep connection open and retry")
-            # Keep the WebSocket open and retry periodically until the app provides the producer
-            while True:
-                # If client disconnected while waiting, stop retrying
-                if getattr(websocket, "client_state", None) is not None:
-                    if websocket.client_state is not None and websocket.client_state != WebSocketState.CONNECTED:
-                        logger.info("Client disconnected while waiting for redis_producer")
-                        break
-                await asyncio.sleep(1.0)
-                redis_producer = getattr(websocket.app.state, "redis_producer", None)
-                if redis_producer:
-                    logger.info("Redis producer became available; continuing WebSocket subscription")
-                    break
-            if not redis_producer:
-                # Client disconnected while we were waiting; exit handler cleanly
-                return
-
-        redis_client = getattr(redis_producer, "redis_client", None)
         if not redis_client:
             logger.error("Redis client not available")
             try:
                 await manager.send_personal(websocket, {"type": "error", "message": "Redis client unavailable"})
             except Exception:
-                logger.debug("Failed to notify client about missing redis client")
+                pass
             return
 
-        # Subscribe to threat alerts channel
+        # Subscribe to all camera alerts
         pubsub = redis_client.pubsub()
-        await pubsub.subscribe("threat_alerts")
+        await pubsub.psubscribe("alerts:*")
         
         try:
             while True:
@@ -104,7 +85,7 @@ async def websocket_threat_alerts(websocket: WebSocket):
                     logger.error(f"Error fetching message from pubsub: {e}")
                     message = None
 
-                if message and message.get("type") == "message":
+                if message and message.get("type") == "pmessage":
                     try:
                         # message["data"] may be bytes; ensure string
                         data = message.get("data")
@@ -118,10 +99,8 @@ async def websocket_threat_alerts(websocket: WebSocket):
                         logger.error(f"Failed to parse alert message: {e}")
 
                 # If the client disconnected, stop the loop
-                if getattr(websocket, "client_state", None) is not None:
-                    if websocket.client_state != WebSocketState.CONNECTED:
-                        logger.info("Detected client disconnect in loop")
-                        break
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    break
 
                 await asyncio.sleep(0.05)
 
@@ -130,7 +109,7 @@ async def websocket_threat_alerts(websocket: WebSocket):
         except Exception as e:
             logger.error(f"Error in pub/sub loop: {e}")
         finally:
-            await pubsub.unsubscribe("threat_alerts")
+            await pubsub.punsubscribe("alerts:*")
             await pubsub.close()
 
     except Exception as e:

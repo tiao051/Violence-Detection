@@ -1,5 +1,4 @@
 """Redis infrastructure module."""
 
-from .streams import RedisStreamProducer, get_redis_stream_producer, set_redis_stream_producer
-
-__all__ = ["RedisStreamProducer", "get_redis_stream_producer", "set_redis_stream_producer"]
+# No exports needed as streams.py and alert_deduplication.py are removed.
+# This package now serves as a namespace for Redis-related infrastructure if needed in future.

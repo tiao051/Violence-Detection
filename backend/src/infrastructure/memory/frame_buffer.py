@@ -23,12 +23,13 @@ class FrameBuffer:
     - Fast access
     """
 
-    def __init__(self, max_buffer_size: int = 60):
+    def __init__(self, max_buffer_size: int = 300):
         """
         Initialize frame buffer.
         
         Args:
-            max_buffer_size: Max frames to keep per camera (default 60 = 10s @ 6fps)
+            max_buffer_size: Max frames to keep per camera (default 300 = 60s @ 5fps)
+                             Increased to allow capturing longer violence events.
         """
         self.max_buffer_size = max_buffer_size
         self.buffers: Dict[str, Deque[np.ndarray]] = {}
@@ -103,21 +104,47 @@ class FrameBuffer:
                 return None
             return self.buffers[camera_id][-1]
 
-    def get_video_frames(self, camera_id: str) -> List[np.ndarray]:
+    def get_video_frames(
+        self, 
+        camera_id: str, 
+        start_timestamp: Optional[float] = None,
+        end_timestamp: Optional[float] = None
+    ) -> List[np.ndarray]:
         """
-        Retrieve ALL frames currently in buffer for a camera.
-        Useful for generating video clips.
+        Retrieve sequence of frames for video generation.
         
         Args:
             camera_id: Camera identifier
-            
+            start_timestamp: Optional start time filter
+            end_timestamp: Optional end time filter
+        
         Returns:
-            List of numpy arrays (frames)
+            List of frames (numpy arrays)
         """
         self.register_camera(camera_id)
         
         with self.locks[camera_id]:
-            return list(self.buffers[camera_id])
+            # If no time filter, return all frames
+            if start_timestamp is None and end_timestamp is None:
+                return list(self.buffers[camera_id])
+            
+            # Filter by timestamp
+            frames = []
+            buffer_list = list(self.buffers[camera_id])
+            metadata_list = list(self.metadata[camera_id])
+            
+            for frame, meta in zip(buffer_list, metadata_list):
+                ts = meta['timestamp']
+                
+                # Check time window
+                if start_timestamp and ts < start_timestamp:
+                    continue
+                if end_timestamp and ts > end_timestamp:
+                    continue
+                    
+                frames.append(frame)
+                
+            return frames
 
     def get_with_metadata(self, camera_id: str) -> tuple:
         """

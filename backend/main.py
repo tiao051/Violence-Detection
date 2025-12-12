@@ -13,7 +13,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
-from src.infrastructure.redis.streams import RedisStreamProducer
 from src.infrastructure.kafka import get_kafka_producer
 from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Global state
 redis_client: redis.Redis = None
-redis_producer: RedisStreamProducer = None
 camera_workers: list = []
 startup_time: float = 0
 
@@ -37,11 +35,7 @@ async def lifespan(app: FastAPI):
 
     # Startup
     logger.info("Starting up application...")
-    await startup()
-    
-    # Set redis_producer in app state
-    app.state.redis_producer = redis_producer
-    logger.info("App state initialized with redis_producer")
+    await startup(app)
     
     yield
 
@@ -50,9 +44,9 @@ async def lifespan(app: FastAPI):
     await shutdown()
 
 
-async def startup() -> None:
+async def startup(app: FastAPI) -> None:
     """Initialize application on startup."""
-    global redis_client, redis_producer, camera_workers, startup_time
+    global redis_client, camera_workers, startup_time
 
     startup_time = time.time()
 
@@ -69,12 +63,10 @@ async def startup() -> None:
         logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
+        app.state.redis_client = redis_client
         logger.info("Redis connected")
 
-        # 3. Create Redis producer
-        redis_producer = RedisStreamProducer(redis_client)
-
-        # 3.5. Connect Kafka producer
+        # 3. Connect Kafka producer
         logger.info("Connecting to Kafka...")
         kafka_producer = get_kafka_producer()
         await kafka_producer.connect()
