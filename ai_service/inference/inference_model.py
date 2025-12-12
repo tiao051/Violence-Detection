@@ -20,6 +20,31 @@ from remonet.gte.extractor import GTEExtractor
 logger = logging.getLogger(__name__)
 
 
+# Model specifications for different backbones
+MODEL_SPECS = {
+    'mobilenet_v2': {
+        'params': '3.51M',
+        'flops': '3.15G',
+    },
+    'mobilenet_v3_small': {
+        'params': '2.54M',
+        'flops': '1.25G',
+    },
+    'mobilenet_v3_large': {
+        'params': '5.49M',
+        'flops': '4.70G',
+    },
+    'efficientnet_b0': {
+        'params': '5.29M',
+        'flops': '8.30G',
+    },
+    'mnasnet': {
+        'params': '4.39M',
+        'flops': '6.72G',
+    },
+}
+
+
 @dataclass
 class InferenceConfig:
     """Configuration for violence detection inference."""
@@ -111,6 +136,36 @@ class ViolenceDetectionModel:
         self.last_inference_latency = 0.0
         
         logger.info(f"ViolenceDetectionModel initialized on {self.device}")
+        self._log_model_info()
+    
+    def _log_model_info(self) -> None:
+        """Log model architecture and specs."""
+        backbone = self.config.backbone
+        model_path = Path(self.config.model_path)
+        model_size_kb = model_path.stat().st_size / 1024
+        
+        specs = MODEL_SPECS.get(backbone, {})
+        params = specs.get('params', 'N/A')
+        flops = specs.get('flops', 'N/A')
+        
+        logger.info("\n" + "="*70)
+        logger.info("🎯 Violence Detection Model Loaded")
+        logger.info("="*70)
+        logger.info(f"Backbone: {backbone}")
+        logger.info(f"  └─ Params: {params}")
+        logger.info(f"  └─ FLOPs: {flops}")
+        logger.info(f"\nModel File: {model_path.name}")
+        logger.info(f"  └─ Size: {model_size_kb:.1f} KB")
+        logger.info(f"  └─ Type: GTE Classifier Head (29KB)")
+        logger.info(f"\nPipeline:")
+        logger.info(f"  1. SME (Spatial Motion Extractor)")
+        logger.info(f"  2. STE (Spatial Temporal Extractor)")
+        logger.info(f"     └─ Backbone: {backbone} + Feature Extraction")
+        logger.info(f"  3. GTE (Global Temporal Extractor - 29KB)")
+        logger.info(f"     └─ Classification Head")
+        logger.info(f"\nDevice: {self.device}")
+        logger.info(f"Confidence Threshold: {self.config.confidence_threshold}")
+        logger.info("="*70 + "\n")
     
     def _load_gte_model(self) -> GTEExtractor:
         """Load trained GTE model from checkpoint."""
