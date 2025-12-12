@@ -120,7 +120,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       INFERENCE_BATCH_SIZE: 4
       INFERENCE_BATCH_TIMEOUT_MS: 5000
-      ALERT_COOLDOWN_SECONDS: 60
+      ALERT_COOLDOWN_SECONDS: 30
       MODEL_PATH: /app/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
