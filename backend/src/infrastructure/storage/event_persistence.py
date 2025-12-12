@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 import tempfile
+import shutil
 import cv2
 import numpy as np
 from datetime import datetime, timezone
@@ -38,13 +39,14 @@ class EventPersistenceService:
             self.db = None
             self.bucket = None
 
-    async def save_event(self, camera_id: str, detection: Dict[str, Any]) -> Optional[str]:
+    async def save_event(self, camera_id: str, detection: Dict[str, Any], frames_temp_path: Optional[str] = None) -> Optional[str]:
         """
         Save a violence event.
         
         Args:
             camera_id: ID of the camera
             detection: Detection result dictionary
+            frames_temp_path: Optional path to temp directory with batch frames
             
         Returns:
             Event ID if successful, None otherwise
@@ -55,31 +57,65 @@ class EventPersistenceService:
 
         logger.info(f"Processing event persistence for camera {camera_id}")
 
-        # 1. Get video frames from buffer
-        frames = self.frame_buffer.get_video_frames(camera_id)
-        if not frames:
+        # 1. Get all frames from buffer
+        all_frames = self.frame_buffer.get_video_frames(camera_id)
+        if not all_frames:
             logger.warning(f"No frames found in buffer for camera {camera_id}")
             return None
         
-        logger.info(f"Retrieved {len(frames)} frames for event generation")
+        logger.info(f"Retrieved {len(all_frames)} frames from buffer")
 
-        # 2. Generate MP4 video file
-        video_path = self._create_video_file(frames, camera_id)
-        if not video_path:
+        # 2. Filter frames: only keep from inference batch onwards
+        # Inference processes in batches of 30, so violence detection uses last 30 frames
+        # We keep: last 30 frames (violent) + some padding before
+        # Total: ~30 frames padding + 30 frames violent = 60 frames
+        # But if buffer has less, use all
+        if len(all_frames) >= 60:
+            # Keep last 60 frames (buffer is full, we have enough context)
+            frames_to_save = all_frames[-60:]
+        elif len(all_frames) >= 30:
+            # Keep all frames (buffer not full, but we have violence frames)
+            frames_to_save = all_frames
+        else:
+            # Not enough frames, save what we have
+            frames_to_save = all_frames
+        
+        logger.info(f"Using {len(frames_to_save)} frames for video (out of {len(all_frames)} in buffer)")
+
+        # 3. Generate MP4 video file (temp location)
+        temp_video_path = self._create_video_file(frames_to_save, camera_id)
+        if not temp_video_path:
             return None
 
         try:
-            # 3. Upload to Firebase Storage
-            video_url = self._upload_video(video_path, camera_id)
-            if not video_url:
-                return None
+            # 4. Save to local disk
+            local_video_path = self._save_video_locally(temp_video_path, camera_id)
+            if not local_video_path:
+                logger.warning("Failed to save video locally, continuing with Firebase only")
             
-            # 4. Save to Firestore
-            event_id = self._save_to_firestore(camera_id, video_url, detection)
+            # 5. Save batch frames to local disk (if available from inference)
+            frames_folder_path = None
+            if frames_temp_path:
+                logger.info(f"Checking frames_temp_path: {frames_temp_path}")
+                if os.path.exists(frames_temp_path):
+                    logger.info(f"Frames temp path exists, saving batch frames...")
+                    frames_folder_path = self._save_batch_frames(frames_temp_path, camera_id, local_video_path)
+                else:
+                    logger.warning(f"Frames temp path does not exist: {frames_temp_path}")
+            else:
+                logger.info("No frames_temp_path provided")
+            
+            # 6. Upload to Firebase Storage
+            video_url = self._upload_video(temp_video_path, camera_id)
+            if not video_url:
+                logger.warning("Failed to upload to Firebase, continuing with local copy only")
+            
+            # 7. Save to Firestore with both paths
+            event_id = self._save_to_firestore(camera_id, video_url, local_video_path, detection, frames_folder_path)
             
             logger.info(f"Event saved successfully: {event_id}")
             
-            # 5. Send push notification to user
+            # 8. Send push notification to user
             await self._send_push_notification(camera_id, event_id, detection)
             
             return event_id
@@ -89,11 +125,74 @@ class EventPersistenceService:
             return None
         finally:
             # Cleanup temp file
-            if video_path and os.path.exists(video_path):
+            if temp_video_path and os.path.exists(temp_video_path):
                 try:
-                    os.remove(video_path)
+                    os.remove(temp_video_path)
                 except Exception:
                     pass
+
+    def _save_video_locally(self, temp_path: str, camera_id: str) -> Optional[str]:
+        """Save video to local disk at backend/outputs/{camera_id}/"""
+        try:
+            # Create outputs directory
+            outputs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs", camera_id)
+            os.makedirs(outputs_dir, exist_ok=True)
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            filename = f"violence_{camera_id}_{timestamp}.mp4"
+            local_path = os.path.join(outputs_dir, filename)
+            
+            # Copy temp file to local
+            shutil.copy2(temp_path, local_path)
+            
+            file_size = os.path.getsize(local_path)
+            logger.info(f"Saved video locally: {local_path} ({file_size} bytes)")
+            
+            return local_path
+        except Exception as e:
+            logger.error(f"Failed to save video locally: {e}")
+            return None
+
+    def _save_batch_frames(self, frames_temp_path: str, camera_id: str, local_video_path: Optional[str]) -> Optional[str]:
+        """Save batch frames from inference to local disk."""
+        try:
+            if not os.path.exists(frames_temp_path):
+                logger.warning(f"Frames temp path does not exist: {frames_temp_path}")
+                return None
+            
+            # Create frames directory next to video
+            # E.g., /app/src/outputs/cam1/violence_cam1_20251212_131441/
+            if local_video_path:
+                video_name = os.path.splitext(os.path.basename(local_video_path))[0]
+                frames_dir = os.path.join(os.path.dirname(local_video_path), video_name)
+            else:
+                # Fallback if no video path
+                outputs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs", camera_id)
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                frames_dir = os.path.join(outputs_dir, f"violence_{camera_id}_{timestamp}")
+            
+            os.makedirs(frames_dir, exist_ok=True)
+            
+            # Copy all frames from temp directory
+            frame_count = 0
+            for filename in os.listdir(frames_temp_path):
+                if filename.endswith('.jpg'):
+                    src = os.path.join(frames_temp_path, filename)
+                    dst = os.path.join(frames_dir, filename)
+                    shutil.copy2(src, dst)
+                    frame_count += 1
+            
+            logger.info(f"Saved {frame_count} frames to: {frames_dir}")
+            return frames_dir
+            
+        except Exception as e:
+            logger.error(f"Failed to save batch frames: {e}")
+            return None
+            return local_path
+        except Exception as e:
+            logger.error(f"Failed to save video locally: {e}")
+            return None
 
     def _create_video_file(self, frames: List[np.ndarray], camera_id: str) -> Optional[str]:
         """Encode frames to MP4 file."""
@@ -149,7 +248,7 @@ class EventPersistenceService:
             logger.error(f"Failed to upload video: {e}")
             return None
 
-    def _save_to_firestore(self, camera_id: str, video_url: str, detection: Dict[str, Any]) -> str:
+    def _save_to_firestore(self, camera_id: str, video_url: Optional[str], local_video_path: Optional[str], detection: Dict[str, Any], frames_folder_path: Optional[str] = None) -> str:
         """Save event document to Firestore."""
         
         # MOCK: Get owner ID (In production this should come from a Camera Service)
@@ -162,7 +261,9 @@ class EventPersistenceService:
             "type": "violence",
             "status": "new",
             "timestamp": firestore.SERVER_TIMESTAMP,
-            "videoUrl": video_url,
+            "videoUrl": video_url or "",  # Firebase URL (may be empty)
+            "localVideoPath": local_video_path or "",  # Local path (may be empty)
+            "framesPath": frames_folder_path or "",  # Frames folder path (may be empty)
             "thumbnailUrl": "", # TODO: Generate thumbnail
             "confidence": detection.get("confidence", 0.0),
             "viewed": False

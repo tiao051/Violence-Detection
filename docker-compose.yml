@@ -92,6 +92,8 @@ services:
       - ./backend:/app
       # Persist logs on host
       - ./backend/logs:/app/logs
+      # Persist generated videos on host
+      - ./backend/outputs:/app/src/outputs
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json
       - /app/__pycache__
     depends_on:
@@ -127,6 +129,7 @@ services:
     volumes:
       - ./ai_service:/app
       - ./ai_service/logs:/app/logs
+      - ./backend/outputs:/app/violence_frames
       - /app/__pycache__
     depends_on:
       redis:

@@ -16,6 +16,9 @@ import logging
 import os
 import json
 import time
+import tempfile
+import uuid
+import shutil
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
@@ -122,6 +125,10 @@ class InferenceConsumer:
         # ThreadPoolExecutor for CPU-bound inference
         # Prevents blocking event loop so Kafka heartbeats can continue
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
+        
+        # Queue for decoupling Kafka consumer and Inference worker
+        # Maxsize 100 to prevent memory overflow if inference is slow
+        self.frame_queue = asyncio.Queue(maxsize=100)
     
     async def start(self) -> None:
         """Start consuming from Kafka."""
@@ -148,9 +155,10 @@ class InferenceConsumer:
             
             self.is_running = True
             
-            # Start main loop
-            asyncio.create_task(self._run())
-            logger.info("Inference consumer running")
+            # Start tasks
+            asyncio.create_task(self._kafka_reader_task())
+            asyncio.create_task(self._inference_worker_task())
+            logger.info("Inference consumer running with Queue architecture")
         
         except Exception as e:
             logger.error(f"Failed to start consumer: {e}")
@@ -169,8 +177,11 @@ class InferenceConsumer:
         
         logger.info("Inference consumer stopped")
     
-    async def _run(self) -> None:
-        """Main consumer loop."""
+    async def _kafka_reader_task(self) -> None:
+        """
+        Task 1: Consumes frames from Kafka and puts them into the internal queue.
+        This task is lightweight and ensures we don't block Kafka consumption.
+        """
         try:
             async for msg in self.consumer:
                 if not self.is_running:
@@ -184,22 +195,46 @@ class InferenceConsumer:
                     
                     self.frames_consumed += 1
                     
-                    # Add to per-camera buffer
-                    camera_id = frame_msg.camera_id
-                    if camera_id not in self.camera_buffers:
-                        self.camera_buffers[camera_id] = []
+                    # If queue is full, drop oldest frame to maintain real-time
+                    if self.frame_queue.full():
+                        try:
+                            self.frame_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            pass
                     
-                    self.camera_buffers[camera_id].append(frame_msg)
-                    
-                    # Process batch if buffer size reached
-                    if len(self.camera_buffers[camera_id]) >= self.batch_size:
-                        await self._process_batch(camera_id)
+                    await self.frame_queue.put(frame_msg)
                 
                 except Exception as e:
-                    logger.error(f"Error processing message: {e}")
+                    logger.error(f"Error processing message in reader task: {e}")
         
         except Exception as e:
-            logger.error(f"Consumer error: {e}")
+            logger.error(f"Kafka reader task error: {e}")
+
+    async def _inference_worker_task(self) -> None:
+        """
+        Task 2: Takes frames from queue, batches them, and runs inference.
+        This task handles the heavy lifting (AI model) without blocking the reader.
+        """
+        while self.is_running:
+            try:
+                # Get frame from queue
+                frame_msg = await self.frame_queue.get()
+                
+                # Add to per-camera buffer for batching
+                camera_id = frame_msg.camera_id
+                if camera_id not in self.camera_buffers:
+                    self.camera_buffers[camera_id] = []
+                
+                self.camera_buffers[camera_id].append(frame_msg)
+                
+                # Process batch if buffer size reached
+                if len(self.camera_buffers[camera_id]) >= self.batch_size:
+                    await self._process_batch(camera_id)
+                    
+            except Exception as e:
+                logger.error(f"Inference worker task error: {e}")
+                # Sleep briefly to avoid tight loop in case of persistent error
+                await asyncio.sleep(0.1)
     
     def _parse_message(self, key: str, value: bytes) -> Optional[FrameMessage]:
         """
@@ -289,13 +324,27 @@ class InferenceConsumer:
                         f"violence={detection['violence']}, confidence={detection['confidence']:.2f}"
                     )
                 
+                # Only process alerts if violence is detected
+                if not detection['violence']:
+                    continue
+                
                 # Check if should send alert (deduplication)
                 if not self._should_alert(camera_id, frame_msg.timestamp):
                     self.alerts_deduped += 1
                     continue
                 
+                # Save batch frames to temp and publish detection
+                # frames contains the batch being processed
+                # Run I/O in thread pool to prevent blocking
+                frames_temp_path = await loop.run_in_executor(
+                    self._executor,
+                    self._save_frames_to_temp,
+                    frames,
+                    camera_id
+                )
+                
                 # Publish detection result to Redis
-                await self._publish_detection(camera_id, frame_msg, detection)
+                await self._publish_detection(camera_id, frame_msg, detection, frames_temp_path)
                 self.alerts_sent += 1
                 self.detections_made += 1
         
@@ -339,6 +388,7 @@ class InferenceConsumer:
         camera_id: str,
         frame_msg: FrameMessage,
         detection: Dict,
+        frames_temp_path: Optional[str] = None,
     ) -> None:
         """
         Publish detection result to Redis.
@@ -349,6 +399,7 @@ class InferenceConsumer:
             camera_id: Camera identifier
             frame_msg: Frame message with metadata
             detection: Detection result from model
+            frames_temp_path: Path to temp directory with batch frames (optional)
         """
         try:
             # Prepare alert message
@@ -361,6 +412,7 @@ class InferenceConsumer:
                 'confidence': float(detection['confidence']),
                 'inference_latency_ms': float(detection.get('latency_ms', 0)),
                 'e2e_latency_ms': float(detection.get('e2e_latency_ms', 0)),
+                'frames_temp_path': frames_temp_path or '',  # Path to batch frames if available
             }
             
             alert_json = json.dumps(alert_message)
@@ -409,3 +461,35 @@ class InferenceConsumer:
             'fps': self.frames_consumed / elapsed if elapsed > 0 else 0,
             'elapsed_seconds': elapsed,
         }
+
+    def _save_frames_to_temp(self, frames: List[FrameMessage], camera_id: str) -> Optional[str]:
+        """
+        Save batch frames to mounted volume directory.
+        
+        Args:
+            frames: List of FrameMessage objects
+            camera_id: Camera identifier
+            
+        Returns:
+            Path to directory containing frames, or None if failed
+        """
+        try:
+            # Create directory on mounted volume (maps to host backend/outputs)
+            frames_dir = os.path.join("/app/violence_frames", camera_id, f"batch_{uuid.uuid4()}")
+            os.makedirs(frames_dir, exist_ok=True)
+            
+            # Save each frame as JPEG
+            for idx, frame_msg in enumerate(frames, 1):
+                frame_path = os.path.join(frames_dir, f"frame_{idx:03d}.jpg")
+                
+                # Encode as JPEG
+                success = cv2.imwrite(frame_path, frame_msg.frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not success:
+                    logger.warning(f"Failed to save frame {idx} for {camera_id}")
+            
+            logger.info(f"Saved {len(frames)} frames to: {frames_dir}")
+            return frames_dir
+            
+        except Exception as e:
+            logger.error(f"Failed to save frames: {e}")
+            return None

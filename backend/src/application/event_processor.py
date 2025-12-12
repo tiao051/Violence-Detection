@@ -4,6 +4,8 @@ import logging
 import json
 import asyncio
 import time
+import os
+import shutil
 from typing import Dict, Optional
 import redis.asyncio as redis
 from src.infrastructure.storage.event_persistence import get_event_persistence_service
@@ -44,16 +46,16 @@ class EventProcessor:
     async def _run(self) -> None:
         """Main loop listening to Redis."""
         pubsub = self.redis_client.pubsub()
-        await pubsub.subscribe("threat_alerts")
+        await pubsub.psubscribe("alerts:*")
         
-        logger.info("Event Processor subscribed to 'threat_alerts'")
+        logger.info("Event Processor subscribed to 'alerts:*' pattern")
 
         try:
             while self.is_running:
                 try:
                     message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                     
-                    if message and message['type'] == 'message':
+                    if message and message['type'] == 'pmessage':
                         await self._handle_message(message['data'])
                     
                     # Small sleep to prevent tight loop if get_message returns immediately
@@ -63,7 +65,7 @@ class EventProcessor:
                     logger.error(f"Event Processor loop error: {e}")
                     await asyncio.sleep(1.0)
         finally:
-            await pubsub.unsubscribe("threat_alerts")
+            await pubsub.punsubscribe("alerts:*")
             await pubsub.close()
             logger.info("Event Processor stopped")
 
@@ -91,14 +93,26 @@ class EventProcessor:
             # Valid new event -> Persist it
             logger.info(f"Processing new violence event for {camera_id} (confidence={alert.get('confidence')})")
             
-            # Trigger persistence (Video + Firestore)
-            event_id = await self.persistence_service.save_event(camera_id, alert)
+            # Extract frames temp path if available
+            frames_temp_path = alert.get('frames_temp_path')
+            logger.info(f"Extracted frames_temp_path: {frames_temp_path}")
+            
+            # Trigger persistence (Video + Firestore + Frames)
+            event_id = await self.persistence_service.save_event(camera_id, alert, frames_temp_path)
             
             if event_id:
                 self.last_event_time[camera_id] = now
                 logger.info(f"Event processed and saved: {event_id}")
             else:
                 logger.warning(f"Failed to save event for {camera_id}")
+            
+            # Cleanup temp frames if they exist
+            if frames_temp_path and os.path.exists(frames_temp_path):
+                try:
+                    shutil.rmtree(frames_temp_path)
+                    logger.debug(f"Cleaned up temp frames: {frames_temp_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp frames: {e}")
                 
         except json.JSONDecodeError:
             logger.error("Failed to decode alert message JSON")

@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 from .rtsp_client import RTSPClient
 from ..kafka import get_kafka_producer
+from ..memory import get_frame_buffer
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class CameraWorker:
         self.stream_url = stream_url
         self.kafka_producer = kafka_producer or get_kafka_producer()
         self.sample_rate = sample_rate
+        self.frame_buffer = get_frame_buffer()
         
         # Create RTSP client
         self.client = RTSPClient(
@@ -153,6 +155,15 @@ class CameraWorker:
                 self.frames_sampled += 1
                 
                 frame_id = str(uuid.uuid4())
+                
+                # Store frame in buffer for video recording (in case of violence detection)
+                self.frame_buffer.put(
+                    camera_id=self.camera_id,
+                    frame=frame,
+                    frame_id=frame_id,
+                    timestamp=current_time,
+                    frame_seq=self.frames_sampled,
+                )
                 
                 # Send raw frame to Kafka producer
                 # Producer will handle resize + JPEG compression (optimization point)
