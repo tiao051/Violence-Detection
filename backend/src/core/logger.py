@@ -49,6 +49,7 @@ def setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("redis").setLevel(logging.WARNING)
+    logging.getLogger("aiokafka").setLevel(logging.INFO)  # Only show INFO and WARNING, hide DEBUG
 
 
 def get_logger(name: str) -> logging.Logger:

@@ -49,7 +49,7 @@ MODEL_SPECS = {
 class InferenceConfig:
     """Configuration for violence detection inference."""
     model_path: Optional[str] = None  # Path to model checkpoint
-    backbone: str = 'mobilenet_v2'  # STE backbone used during training
+    backbone: str = 'mobilenet_v3_small'  # STE backbone used during training
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     confidence_threshold: float = 0.5
     num_frames: int = 30
@@ -148,8 +148,6 @@ class ViolenceDetectionModel:
         params = specs.get('params', 'N/A')
         flops = specs.get('flops', 'N/A')
         
-        logger.info("\n" + "="*70)
-        logger.info("🎯 Violence Detection Model Loaded")
         logger.info("="*70)
         logger.info(f"Backbone: {backbone}")
         logger.info(f"  └─ Params: {params}")
