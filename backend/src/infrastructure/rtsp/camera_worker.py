@@ -145,6 +145,8 @@ class CameraWorker:
                 # Check if should sample this frame (time-based)
                 current_time = time.time()
                 if (current_time - self.last_sample_time) < self.sample_interval:
+                    # Avoid busy-waiting: yield control if not time to sample yet
+                    await asyncio.sleep(0.001)  # 1ms to prevent CPU spin
                     continue
                 
                 self.last_sample_time = current_time
