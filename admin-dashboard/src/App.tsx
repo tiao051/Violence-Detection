@@ -2,38 +2,45 @@ import React, { useState } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
-import { ThemeProvider } from './contexts'
+import AlertHistory from './components/AlertHistory/AlertHistory'
+import { ThemeProvider, AlertProvider } from './contexts'
 import './App.css'
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('live');
 
-  const renderContent = () => {
+  // Render other tabs (not live)
+  const renderOtherContent = () => {
     switch (activeTab) {
-      case 'live':
-        return <VideoDashboard />;
       case 'history':
-        return <div className="placeholder-view"><h2>📜 Alert History</h2><p>Coming soon...</p></div>;
+        return <AlertHistory />;
       case 'analytics':
         return <div className="placeholder-view"><h2>📈 Analytics</h2><p>Coming soon...</p></div>;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:
-        return <VideoDashboard />;
+        return null;
     }
   };
 
   return (
     <ThemeProvider>
-      <div className="app-container">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <div className="main-content">
-          <Header />
-          <main className="content-area">
-            {renderContent()}
-          </main>
+      <AlertProvider>
+        <div className="app-container">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <div className="main-content">
+            <Header />
+            <main className="content-area">
+              {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
+              <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
+                <VideoDashboard />
+              </div>
+              {/* Other tabs render normally */}
+              {activeTab !== 'live' && renderOtherContent()}
+            </main>
+          </div>
         </div>
-      </div>
+      </AlertProvider>
     </ThemeProvider>
   )
 }

@@ -25,6 +25,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
@@ -34,35 +35,44 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from inference.inference_consumer import InferenceConsumer
 from inference.inference_model import ViolenceDetectionModel, InferenceConfig
 
-# Setup logging
+# Setup logging - minimal output (only startup + errors)
 def setup_logging():
-    """Configure logging to both console and file."""
+    """Configure logging - WARNING level by default (only errors shown)."""
     os.makedirs("logs", exist_ok=True)
     
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    # Check if verbose logging is enabled
+    verbose = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
+    log_level = logging.INFO if verbose else logging.WARNING
     
-    # Console handler
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    
+    # Console handler - minimal format
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(log_level)
     console_formatter = logging.Formatter(
-        '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
+        '%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S'
     )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
-    # File handler
+    # File handler - only errors
     try:
         file_handler = RotatingFileHandler(
             "logs/inference.log",
             maxBytes=10_000_000,  # 10MB
             backupCount=5
         )
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.WARNING)
         file_handler.setFormatter(console_formatter)
         logger.addHandler(file_handler)
-    except Exception as e:
-        logger.warning(f"Failed to create file handler: {e}")
+    except Exception:
+        pass  # Silently fail
+    
+    # Silence noisy libraries
+    logging.getLogger("aiokafka").setLevel(logging.ERROR)
+    logging.getLogger("kafka").setLevel(logging.ERROR)
     
     return logging.getLogger(__name__)
 
@@ -71,13 +81,10 @@ logger = setup_logging()
 
 async def main():
     """Start the inference consumer service."""
-    logger.info("=" * 80)
-    logger.info("Starting Inference Consumer Service (Standalone)")
-    logger.info("=" * 80)
+    start_time = time.time()
     
     try:
         # Get inference parameters from environment
-        logger.info("Loading violence detection model...")
         model_path = os.getenv('MODEL_PATH')
         inference_device = os.getenv('INFERENCE_DEVICE', 'cpu')
         confidence_threshold = float(os.getenv('VIOLENCE_CONFIDENCE_THRESHOLD', '0.5'))
@@ -94,12 +101,14 @@ async def main():
         
         # Initialize model
         model = ViolenceDetectionModel(config=config)
-        logger.info(f"Model loaded successfully (device: {inference_device})")
         
         # Create and start inference consumer
         consumer = InferenceConsumer(model=model)
         await consumer.start()
-        logger.info("Inference Consumer started")
+        
+        # Print startup complete (always shown)
+        elapsed = time.time() - start_time
+        print(f"\n✅ AI Service started in {elapsed:.1f}s | Device: {inference_device} | Threshold: {confidence_threshold}\n")
         
         # Keep running indefinitely
         # Will be stopped by signal (SIGTERM/SIGINT from Docker or Ctrl+C)
@@ -107,7 +116,7 @@ async def main():
             await asyncio.sleep(1)
     
     except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt received, shutting down...")
+        print("\n🛑 AI Service stopped")
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         raise

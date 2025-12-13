@@ -8,8 +8,10 @@ import time
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
@@ -34,13 +36,11 @@ async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
 
     # Startup
-    logger.info("Starting up application...")
     await startup(app)
     
     yield
 
     # Shutdown
-    logger.info("Shutting down application...")
     await shutdown()
 
 
@@ -60,17 +60,13 @@ async def startup(app: FastAPI) -> None:
         # InferenceConsumer runs independently in ai_service/inference_consumer_service.py
         
         # 2. Connect to Redis
-        logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
         app.state.redis_client = redis_client
-        logger.info("Redis connected")
 
         # 3. Connect Kafka producer
-        logger.info("Connecting to Kafka...")
         kafka_producer = get_kafka_producer()
         await kafka_producer.connect()
-        logger.info("Kafka producer connected")
 
         # 4. Start Event Processor (Background Worker)
         event_processor = get_event_processor(redis_client)
@@ -78,7 +74,6 @@ async def startup(app: FastAPI) -> None:
 
         # 5. Start Camera Workers
         if settings.rtsp_enabled:
-            logger.info(f"Starting camera workers for: {settings.rtsp_cameras}")
             for cam_id in settings.rtsp_cameras:
                 # Construct stream URL
                 # If using a simulator, it might be rtsp://localhost:8554/cam1
@@ -92,8 +87,10 @@ async def startup(app: FastAPI) -> None:
                 )
                 await worker.start()
                 camera_workers.append(worker)
-        else:
-            logger.info("RTSP disabled in settings")
+
+        # Print startup complete message (always shown)
+        elapsed = time.time() - startup_time
+        print(f"\n✅ Backend started in {elapsed:.1f}s | Cameras: {len(camera_workers)} | http://localhost:8000/docs\n")
 
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)
@@ -112,20 +109,14 @@ async def shutdown() -> None:
 
         # Stop camera workers
         if camera_workers:
-            logger.info(f"Stopping {len(camera_workers)} camera workers...")
-
             for worker in camera_workers:
                 await worker.stop()
-                stats = worker.get_stats()
-                logger.info(f"Worker stats: {worker.camera_id} - {stats}")
-
-            logger.info("All camera workers stopped")
 
         # Close Redis connection
         if redis_client:
-            logger.info("Closing Redis connection...")
             await redis_client.close()
-            logger.info("Redis closed")
+
+        print("🛑 Backend stopped")
 
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}", exc_info=True)
@@ -157,6 +148,68 @@ app.add_middleware(
 app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
+
+# Mount static files for video playback
+import os
+outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+os.makedirs(outputs_dir, exist_ok=True)
+app.mount("/videos", StaticFiles(directory=outputs_dir), name="videos")
+
+
+@app.get("/api/events/{event_id}")
+async def get_event(event_id: str):
+    """Get event details including video URL if available."""
+    global redis_client
+    
+    try:
+        if not redis_client:
+            return {"error": "Redis unavailable"}, 503
+        
+        # Try to get event data from Redis (stored during save_event)
+        event_data = await redis_client.get(f"event:{event_id}")
+        if event_data:
+            return json.loads(event_data)
+        
+        # Fallback: Return minimal response
+        return {"id": event_id, "video_url": None}
+    except Exception as e:
+        logger.error(f"Error fetching event {event_id}: {e}")
+        return {"error": str(e)}, 500
+
+
+@app.get("/api/events/lookup")
+async def lookup_event(camera_id: str, timestamp: int):
+    """
+    Lookup event by camera_id and timestamp (ms).
+    Useful when frontend ID differs from backend ID.
+    """
+    global redis_client
+    
+    try:
+        if not redis_client:
+            return {"error": "Redis unavailable"}, 503
+            
+        # Convert ms to seconds
+        ts_sec = timestamp / 1000.0
+        
+        # Search window: +/- 60 seconds
+        min_ts = ts_sec - 60
+        max_ts = ts_sec + 60
+        
+        timeline_key = f"events:timeline:{camera_id}"
+        # zrangebyscore returns list of members (bytes)
+        results = await redis_client.zrangebyscore(timeline_key, min_ts, max_ts)
+        
+        if results:
+            # Return the most recent match in the window
+            # results are sorted by score (timestamp), so last one is newest
+            data = json.loads(results[-1])
+            return data
+            
+        return {"video_url": None}
+    except Exception as e:
+        logger.error(f"Error looking up event: {e}")
+        return {"error": str(e)}, 500
 
 
 @app.get("/")

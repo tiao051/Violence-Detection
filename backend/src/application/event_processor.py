@@ -154,7 +154,7 @@ class EventProcessor:
                         video_end_time = event['last_seen'] + self.post_event_padding
                         
                         # Trigger persistence with time window
-                        event_id = await self.persistence_service.save_event(
+                        result = await self.persistence_service.save_event(
                             camera_id, 
                             final_alert, 
                             frames_temp_paths=event['frames_temp_paths'], # Pass list of paths
@@ -162,8 +162,61 @@ class EventProcessor:
                             end_timestamp=video_end_time
                         )
                         
-                        if event_id:
+                        if result:
+                            event_id = result['id']
+                            local_path = result.get('local_video_path')
                             logger.info(f"[{camera_id}] Event saved successfully: {event_id}")
+
+                            # Publish "Event Saved" message to update frontend
+                            if local_path:
+                                # Convert local path to relative URL
+                                # Path is like .../backend/outputs/cam1/violence_...mp4
+                                # We want /videos/cam1/violence_...mp4
+                                try:
+                                    filename = os.path.basename(local_path)
+                                    video_url = f"/videos/{camera_id}/{filename}"
+                                    
+                                    # Store event data in Redis for quick lookup
+                                    event_data = {
+                                        "id": event_id,
+                                        "camera_id": camera_id,
+                                        "timestamp": event['start_time'],
+                                        "video_url": video_url,
+                                        "confidence": event['max_confidence']
+                                    }
+                                    await self.redis_client.setex(
+                                        f"event:{event_id}",
+                                        86400,  # 24h TTL
+                                        json.dumps(event_data)
+                                    )
+                                    
+                                    # Add to timeline ZSET for lookup by timestamp
+                                    timeline_key = f"events:timeline:{camera_id}"
+                                    event_summary = {
+                                        "id": event_id,
+                                        "video_url": video_url,
+                                        "timestamp": event['start_time']
+                                    }
+                                    # zadd expects mapping {member: score}
+                                    await self.redis_client.zadd(timeline_key, {json.dumps(event_summary): event['start_time']})
+                                    # Keep only last 100 events to prevent infinite growth
+                                    await self.redis_client.zremrangebyrank(timeline_key, 0, -101)
+
+                                    update_msg = {
+                                        "type": "event_saved",
+                                        "camera_id": camera_id,
+                                        "timestamp": event['start_time'], # Use start time to match alert
+                                        "event_id": event_id,
+                                        "video_url": video_url
+                                    }
+                                    
+                                    await self.redis_client.publish(
+                                        f"alerts:{camera_id}",
+                                        json.dumps(update_msg)
+                                    )
+                                    logger.info(f"[{camera_id}] Published event_saved update: {video_url}")
+                                except Exception as e:
+                                    logger.error(f"Failed to publish event update: {e}")
                         
                         # Remove from active list
                         del self.active_events[camera_id]

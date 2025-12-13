@@ -1,15 +1,19 @@
 import React from "react";
 import CameraVideo from "./CameraVideo";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import { useAlerts } from "../../contexts";
 import "./VideoDashboard.css";
 
 const cameras = ["cam1", "cam2", "cam3", "cam4"];
 
 const VideoDashboard: React.FC = () => {
   // Connect to WebSocket for threat alerts
-  const { alerts, isConnected, error } = useWebSocket(
+  const { messages, isConnected, error } = useWebSocket(
     `ws://localhost:8000/ws/threats`
   );
+
+  // Global Alert History Context
+  const { addAlert, updateAlert } = useAlerts();
 
   // State for active alerts per camera (camera_id -> timestamp)
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
@@ -19,53 +23,59 @@ const VideoDashboard: React.FC = () => {
   // State for expanded camera
   const [expandedCamera, setExpandedCamera] = React.useState<string | null>(null);
 
-  // Process incoming alerts
+  // Process incoming messages
   React.useEffect(() => {
-    if (alerts.length > 0) {
-      const latestAlert = alerts[alerts.length - 1];
+    if (messages.length > 0) {
+      const latestMsg = messages[messages.length - 1];
       
-      if (latestAlert.violence && latestAlert.camera_id) {
-        // Update active alerts state
+      if (latestMsg.type === 'alert' && latestMsg.violence && latestMsg.camera_id) {
+        // 1. Add to Global History (Context)
+        addAlert({
+          camera_id: latestMsg.camera_id,
+          violence_score: latestMsg.confidence || 0.9,
+          image_base64: latestMsg.snapshot
+        });
+
+        // 2. Update active alerts state (Visual Red Border)
         setActiveAlerts(prev => ({
           ...prev,
-          [latestAlert.camera_id]: Date.now()
+          [latestMsg.camera_id]: Date.now()
         }));
 
-        // Update snapshot if available
-        // @ts-ignore
-        if (latestAlert.snapshot) {
+        // 3. Update snapshot if available
+        if (latestMsg.snapshot) {
           setAlertSnapshots(prev => ({
             ...prev,
-            // @ts-ignore
-            [latestAlert.camera_id]: latestAlert.snapshot
+            [latestMsg.camera_id]: latestMsg.snapshot
           }));
         }
 
-        // Auto-clear alert after 5 seconds if no new alerts come in
+        // Auto-clear alert after 5 seconds
         setTimeout(() => {
           setActiveAlerts(prev => {
             const newState = { ...prev };
-            // Only clear if the alert is older than 4.5 seconds (debounce)
-            if (Date.now() - newState[latestAlert.camera_id] > 4500) {
-              delete newState[latestAlert.camera_id];
+            if (Date.now() - newState[latestMsg.camera_id] > 4500) {
+              delete newState[latestMsg.camera_id];
             }
             return newState;
           });
           
-          // Clear snapshot after alert ends
           setAlertSnapshots(prev => {
              const newState = { ...prev };
-             // We can keep the snapshot a bit longer or clear it with the alert
-             // For now, let's clear it when the alert clears
-             if (Date.now() - activeAlerts[latestAlert.camera_id] > 4500) {
-                delete newState[latestAlert.camera_id];
+             if (Date.now() - activeAlerts[latestMsg.camera_id] > 4500) {
+                delete newState[latestMsg.camera_id];
              }
              return newState;
           });
         }, 5000);
+      } else if (latestMsg.type === 'event_saved' && latestMsg.video_url) {
+        // Handle video saved event
+        updateAlert(latestMsg.camera_id, latestMsg.timestamp, {
+          video_url: latestMsg.video_url
+        });
       }
     }
-  }, [alerts]);
+  }, [messages]); // Only runs when new message arrives
 
   const handleCameraClick = (cameraId: string) => {
     if (expandedCamera === cameraId) {

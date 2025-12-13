@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-interface ThreatAlert {
-  type: 'alert';
+export interface WebSocketMessage {
+  type: 'alert' | 'event_saved';
   camera_id: string;
-  timestamp: string;
-  confidence: number;
+  timestamp: number;
+  confidence?: number;
+  video_url?: string;
+  snapshot?: string;
+  violence?: boolean;
 }
 
 interface WebSocketHookResult {
-  alerts: ThreatAlert[];
+  messages: WebSocketMessage[];
   isConnected: boolean;
   error: string | null;
-  clearAlerts: () => void;
+  clearMessages: () => void;
 }
 
 export const useWebSocket = (url: string): WebSocketHookResult => {
-  const [alerts, setAlerts] = useState<ThreatAlert[]>([]);
+  const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -31,8 +34,8 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
   const maxReconnectAttempts = 5;
   const baseReconnectDelay = 1000; // 1 second
 
-  const clearAlerts = useCallback(() => {
-    setAlerts([]);
+  const clearMessages = useCallback(() => {
+    setMessages([]);
   }, []);
 
   const getReconnectDelay = useCallback((attempts: number) => {
@@ -95,8 +98,8 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
       ws.onmessage = (event) => {
         try {
           const data: ThreatAlert = JSON.parse(event.data);
-          if (data.type === 'alert') {
-            setAlerts(prev => [...prev, data]);
+          if (data.type === 'alert' || data.type === 'event_saved') {
+            setMessages(prev => [...prev, data]);
           }
         } catch (err) {
           console.error('Failed to parse WebSocket message:', err);
@@ -156,9 +159,9 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
   }, [connect, disconnect]);
 
   return {
-    alerts,
+    messages,
     isConnected,
     error,
-    clearAlerts
+    clearMessages
   };
 };
