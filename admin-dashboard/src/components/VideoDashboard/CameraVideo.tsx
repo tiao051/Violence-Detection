@@ -4,6 +4,7 @@ interface CameraVideoProps {
   cameraId: string;       // cam1, cam2, cam3, cam4
   signalingServer?: string; // MediaMTX WebRTC HTTP (default 8889)
   isAlerting?: boolean;   // New prop for alert state
+  alertSnapshot?: string | null; // New prop for alert snapshot
   onClick?: () => void;   // New prop for click handler
   isExpanded?: boolean;   // New prop for expanded state
 }
@@ -12,6 +13,7 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
   cameraId,
   signalingServer = import.meta.env.VITE_MEDIAMTX_URL || "http://localhost:8889",
   isAlerting = false,
+  alertSnapshot = null,
   onClick,
   isExpanded = false
 }) => {
@@ -150,6 +152,11 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         <div className="alert-overlay">
           <span className="alert-icon">⚠️</span>
           <span className="alert-text">VIOLENCE DETECTED</span>
+          {alertSnapshot && (
+            <div className="alert-snapshot">
+              <img src={alertSnapshot} alt="Violence Snapshot" />
+            </div>
+          )}
         </div>
       )}
 

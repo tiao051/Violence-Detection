@@ -70,6 +70,7 @@
   padding: 8px 12px;
   border-radius: 4px;
   display: flex;
+  flex-direction: column; /* Stack icon/text and image */
   align-items: center;
   gap: 8px;
   font-weight: bold;
@@ -77,6 +78,21 @@
   z-index: 20;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   animation: pulse 1s infinite;
+  max-width: 200px; /* Limit width */
+}
+
+.alert-snapshot {
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 2px solid white;
+  margin-top: 4px;
+}
+
+.alert-snapshot img {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 @keyframes pulse {

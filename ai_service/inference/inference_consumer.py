@@ -19,6 +19,7 @@ import time
 import tempfile
 import uuid
 import shutil
+import base64
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
@@ -362,6 +363,10 @@ class InferenceConsumer:
             frames_temp_path: Path to temp directory with batch frames (optional)
         """
         try:
+            # Encode frame to base64 for immediate visual feedback
+            _, buffer = cv2.imencode('.jpg', frame_msg.frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+
             # Prepare alert message
             alert_message = {
                 'camera_id': camera_id,
@@ -372,7 +377,8 @@ class InferenceConsumer:
                 'confidence': float(detection['confidence']),
                 'inference_latency_ms': float(detection.get('latency_ms', 0)),
                 'e2e_latency_ms': float(detection.get('e2e_latency_ms', 0)),
-                'frames_temp_path': frames_temp_path or '',  # Path to batch frames if available
+                'frames_temp_path': frames_temp_path or '',
+                'snapshot': f"data:image/jpeg;base64,{frame_base64}" # Add snapshot
             }
             
             alert_json = json.dumps(alert_message)
