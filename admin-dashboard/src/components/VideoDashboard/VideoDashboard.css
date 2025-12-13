@@ -211,11 +211,41 @@
   z-index: 10;
 }
 
-/* Connection status indicator */
+/* Audio Control Button */
+.audio-control-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px; /* Default position */
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 25; /* Above alert overlay */
+  transition: all 0.2s;
+  font-size: 16px;
+}
+
+.audio-control-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.1);
+}
+
+.audio-control-btn.muted {
+  background: rgba(220, 38, 38, 0.8); /* Red when muted */
+  border-color: rgba(220, 38, 38, 1);
+}
+
+/* Adjust connection status position to not overlap with audio button */
 .connection-status {
   position: absolute;
   top: 10px;
-  right: 10px;
+  right: 50px; /* Move left to make space for audio button */
   display: flex;
   align-items: center;
   gap: 6px;

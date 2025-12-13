@@ -32,6 +32,55 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
   const [replayUrl, setReplayUrl] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Audio Alert Logic
+  const [isMuted, setIsMuted] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playAlarmSound = useCallback(() => {
+    if (isMuted) return;
+    
+    try {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        
+        const ctx = audioContextRef.current;
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume();
+        }
+
+        if (ctx) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+            osc.frequency.linearRampToValueAtTime(440, ctx.currentTime + 0.5); // Drop to A4
+            
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+        }
+    } catch (e) {
+        console.error("Audio play failed", e);
+    }
+  }, [isMuted]);
+
+  // Trigger alarm when alerting
+  useEffect(() => {
+    let interval: number;
+    if (isAlerting && !isMuted) {
+        playAlarmSound(); // Play immediately
+        interval = window.setInterval(playAlarmSound, 1000); // Repeat every second
+    }
+    return () => clearInterval(interval);
+  }, [isAlerting, isMuted, playAlarmSound]);
+
   const cleanup = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -326,6 +375,22 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
       <div className="camera-label">
         <span className="camera-name">{cameraId.toUpperCase()}</span>
       </div>
+
+      {/* Audio Control */}
+      <button 
+        className={`audio-control-btn ${isMuted ? 'muted' : ''}`}
+        onClick={(e) => {
+            e.stopPropagation();
+            setIsMuted(!isMuted);
+        }}
+        title={isMuted ? "Unmute Alert" : "Mute Alert"}
+      >
+        {isMuted ? (
+            <span>🔇</span>
+        ) : (
+            <span>🔊</span>
+        )}
+      </button>
 
       {/* Alert Overlay */}
       {isAlerting && (
