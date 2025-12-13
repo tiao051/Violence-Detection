@@ -87,6 +87,23 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
       };
 
       peer.ontrack = (event) => {
+        // SYNC STRATEGY: Add delay to video to match AI processing latency
+        // AI processing takes ~1-2s. We buffer video by 2s so alerts appear in sync with the action.
+        if (event.receiver) {
+          // Modern API (Chrome 112+, milliseconds)
+          // @ts-ignore
+          if (event.receiver.jitterBufferTarget !== undefined) {
+             // @ts-ignore
+             event.receiver.jitterBufferTarget = 2000; // Delay 2000ms (2s)
+          } 
+          // Legacy API (Chrome proprietary, seconds)
+          // @ts-ignore
+          else if (event.receiver.playoutDelayHint !== undefined) {
+             // @ts-ignore
+             event.receiver.playoutDelayHint = 2.0; // Delay 2.0s
+          }
+        }
+
         if (videoRef.current && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0];
           videoRef.current.play().catch(() => console.warn("Autoplay blocked"));
