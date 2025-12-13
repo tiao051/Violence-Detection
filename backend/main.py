@@ -18,6 +18,7 @@ from src.infrastructure.rtsp import CameraWorker
 from src.infrastructure.kafka import get_kafka_producer
 from src.presentation.routes import auth_router
 from src.presentation.routes.websocket_routes import router as websocket_router
+from src.presentation.routes.analytics_routes import router as analytics_router
 from src.infrastructure.firebase.setup import initialize_firebase
 from src.application.event_processor import get_event_processor
 
@@ -144,10 +145,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register authentication routes
+# Register routes
 app.include_router(auth_router)
-# Register WebSocket routes
 app.include_router(websocket_router)
+app.include_router(analytics_router)
 
 # Mount static files for video playback
 import os
