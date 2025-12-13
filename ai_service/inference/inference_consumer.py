@@ -127,8 +127,6 @@ class InferenceConsumer:
     async def start(self) -> None:
         """Start consuming from Kafka."""
         try:
-            logger.info("Starting Inference Consumer...")
-            
             # Connect to Kafka
             self.consumer = AIOKafkaConsumer(
                 self.kafka_topic,
@@ -140,19 +138,16 @@ class InferenceConsumer:
                 key_deserializer=lambda k: k.decode('utf-8') if k else None,
             )
             await self.consumer.start()
-            logger.info(f"Kafka consumer started: topic={self.kafka_topic}")
             
             # Connect to Redis
             self.redis_client = await redis.from_url(self.redis_url)
             await self.redis_client.ping()
-            logger.info("Redis connected for publishing results")
             
             self.is_running = True
             
             # Start tasks
             asyncio.create_task(self._kafka_reader_task())
             asyncio.create_task(self._inference_worker_task())
-            logger.info("Inference consumer running with Queue architecture")
         
         except Exception as e:
             logger.error(f"Failed to start consumer: {e}")
@@ -160,7 +155,6 @@ class InferenceConsumer:
     
     async def stop(self) -> None:
         """Stop consuming."""
-        logger.info("Stopping Inference Consumer...")
         self.is_running = False
         
         if self.consumer:
@@ -168,8 +162,6 @@ class InferenceConsumer:
         
         if self.redis_client:
             await self.redis_client.close()
-        
-        logger.info("Inference consumer stopped")
     
     async def _kafka_reader_task(self) -> None:
         """
@@ -310,13 +302,6 @@ class InferenceConsumer:
                     continue
                 
                 self.frames_processed += 1
-                
-                # Log every 10 frames to show processing is happening
-                if self.frames_processed % 10 == 0:
-                    logger.info(
-                        f"[{camera_id}] Processed {self.frames_processed} frames, "
-                        f"violence={detection['violence']}, confidence={detection['confidence']:.2f}"
-                    )
                 
                 # Only process alerts if violence is detected
                 if not detection['violence']:

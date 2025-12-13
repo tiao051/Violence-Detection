@@ -34,13 +34,11 @@ async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
 
     # Startup
-    logger.info("Starting up application...")
     await startup(app)
     
     yield
 
     # Shutdown
-    logger.info("Shutting down application...")
     await shutdown()
 
 
@@ -60,17 +58,13 @@ async def startup(app: FastAPI) -> None:
         # InferenceConsumer runs independently in ai_service/inference_consumer_service.py
         
         # 2. Connect to Redis
-        logger.info("Connecting to Redis...")
         redis_client = await redis.from_url(settings.redis_url)
         await redis_client.ping()
         app.state.redis_client = redis_client
-        logger.info("Redis connected")
 
         # 3. Connect Kafka producer
-        logger.info("Connecting to Kafka...")
         kafka_producer = get_kafka_producer()
         await kafka_producer.connect()
-        logger.info("Kafka producer connected")
 
         # 4. Start Event Processor (Background Worker)
         event_processor = get_event_processor(redis_client)
@@ -78,7 +72,6 @@ async def startup(app: FastAPI) -> None:
 
         # 5. Start Camera Workers
         if settings.rtsp_enabled:
-            logger.info(f"Starting camera workers for: {settings.rtsp_cameras}")
             for cam_id in settings.rtsp_cameras:
                 # Construct stream URL
                 # If using a simulator, it might be rtsp://localhost:8554/cam1
@@ -92,8 +85,10 @@ async def startup(app: FastAPI) -> None:
                 )
                 await worker.start()
                 camera_workers.append(worker)
-        else:
-            logger.info("RTSP disabled in settings")
+
+        # Print startup complete message (always shown)
+        elapsed = time.time() - startup_time
+        print(f"\n✅ Backend started in {elapsed:.1f}s | Cameras: {len(camera_workers)} | http://localhost:8000/docs\n")
 
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)
@@ -112,20 +107,14 @@ async def shutdown() -> None:
 
         # Stop camera workers
         if camera_workers:
-            logger.info(f"Stopping {len(camera_workers)} camera workers...")
-
             for worker in camera_workers:
                 await worker.stop()
-                stats = worker.get_stats()
-                logger.info(f"Worker stats: {worker.camera_id} - {stats}")
-
-            logger.info("All camera workers stopped")
 
         # Close Redis connection
         if redis_client:
-            logger.info("Closing Redis connection...")
             await redis_client.close()
-            logger.info("Redis closed")
+
+        print("🛑 Backend stopped")
 
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}", exc_info=True)
