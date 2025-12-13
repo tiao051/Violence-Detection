@@ -1,6 +1,7 @@
 import React from "react";
 import CameraVideo from "./CameraVideo";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import { useAlerts } from "../../contexts";
 import "./VideoDashboard.css";
 
 const cameras = ["cam1", "cam2", "cam3", "cam4"];
@@ -10,6 +11,9 @@ const VideoDashboard: React.FC = () => {
   const { alerts, isConnected, error } = useWebSocket(
     `ws://localhost:8000/ws/threats`
   );
+
+  // Global Alert History Context
+  const { addAlert } = useAlerts();
 
   // State for active alerts per camera (camera_id -> timestamp)
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
@@ -25,13 +29,23 @@ const VideoDashboard: React.FC = () => {
       const latestAlert = alerts[alerts.length - 1];
       
       if (latestAlert.violence && latestAlert.camera_id) {
-        // Update active alerts state
+        // 1. Add to Global History (Context)
+        // @ts-ignore
+        addAlert({
+          camera_id: latestAlert.camera_id,
+          // @ts-ignore
+          violence_score: latestAlert.confidence || 0.9, // Fallback if missing
+          // @ts-ignore
+          image_base64: latestAlert.snapshot
+        });
+
+        // 2. Update active alerts state (Visual Red Border)
         setActiveAlerts(prev => ({
           ...prev,
           [latestAlert.camera_id]: Date.now()
         }));
 
-        // Update snapshot if available
+        // 3. Update snapshot if available
         // @ts-ignore
         if (latestAlert.snapshot) {
           setAlertSnapshots(prev => ({
@@ -55,8 +69,6 @@ const VideoDashboard: React.FC = () => {
           // Clear snapshot after alert ends
           setAlertSnapshots(prev => {
              const newState = { ...prev };
-             // We can keep the snapshot a bit longer or clear it with the alert
-             // For now, let's clear it when the alert clears
              if (Date.now() - activeAlerts[latestAlert.camera_id] > 4500) {
                 delete newState[latestAlert.camera_id];
              }
@@ -65,7 +77,7 @@ const VideoDashboard: React.FC = () => {
         }, 5000);
       }
     }
-  }, [alerts]);
+  }, [alerts]); // Only runs when new alert arrives
 
   const handleCameraClick = (cameraId: string) => {
     if (expandedCamera === cameraId) {
