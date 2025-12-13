@@ -8,10 +8,9 @@ import './App.css'
 const App = () => {
   const [activeTab, setActiveTab] = useState('live');
 
-  const renderContent = () => {
+  // Render other tabs (not live)
+  const renderOtherContent = () => {
     switch (activeTab) {
-      case 'live':
-        return <VideoDashboard />;
       case 'history':
         return <div className="placeholder-view"><h2>📜 Alert History</h2><p>Coming soon...</p></div>;
       case 'analytics':
@@ -19,7 +18,7 @@ const App = () => {
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:
-        return <VideoDashboard />;
+        return null;
     }
   };
 
@@ -30,7 +29,12 @@ const App = () => {
         <div className="main-content">
           <Header />
           <main className="content-area">
-            {renderContent()}
+            {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
+            <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
+              <VideoDashboard />
+            </div>
+            {/* Other tabs render normally */}
+            {activeTab !== 'live' && renderOtherContent()}
           </main>
         </div>
       </div>
