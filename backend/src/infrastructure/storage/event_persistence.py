@@ -47,7 +47,7 @@ class EventPersistenceService:
         frames_temp_path: Optional[str] = None, # Backward compatibility
         start_timestamp: Optional[float] = None,
         end_timestamp: Optional[float] = None
-    ) -> Optional[str]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Save a violence event.
         
@@ -60,7 +60,7 @@ class EventPersistenceService:
             end_timestamp: End time for video clip
             
         Returns:
-            Event ID if successful, None otherwise
+            Dict with event_id and video paths if successful, None otherwise
         """
         if not self.db or not self.bucket:
             logger.error("Firebase clients not initialized")
@@ -123,7 +123,11 @@ class EventPersistenceService:
             # 7. Send push notification to user
             await self._send_push_notification(camera_id, event_id, detection)
             
-            return event_id
+            return {
+                'id': event_id,
+                'local_video_path': local_video_path,
+                'firebase_video_url': video_url
+            }
 
         except Exception as e:
             logger.error(f"Error saving event: {e}")

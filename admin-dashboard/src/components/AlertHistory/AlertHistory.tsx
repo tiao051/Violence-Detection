@@ -43,6 +43,28 @@ const AlertHistory: React.FC = () => {
     setSelectedAlert(alert);
   };
 
+  const checkVideoStatus = async () => {
+    if (!selectedAlert) return;
+    
+    try {
+      // Use lookup endpoint with camera_id and timestamp
+      // This bridges the gap between Frontend ID and Backend ID
+      const response = await fetch(
+        `http://localhost:8000/api/events/lookup?camera_id=${selectedAlert.camera_id}&timestamp=${selectedAlert.timestamp}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.video_url) {
+          const updatedAlert = { ...selectedAlert, video_url: data.video_url };
+          setSelectedAlert(updatedAlert);
+        }
+      }
+    } catch (e) {
+      console.error('Error checking video status:', e);
+    }
+  };
+
   return (
     <div className="alert-history-container">
       <div className="history-header">
@@ -155,13 +177,28 @@ const AlertHistory: React.FC = () => {
             </div>
             <div className="detail-content">
               <div className="detail-image-container">
-                {selectedAlert.image_base64 ? (
-                  <img 
-                    src={selectedAlert.image_base64.startsWith('data:') ? selectedAlert.image_base64 : `data:image/jpeg;base64,${selectedAlert.image_base64}`}
-                    alt="Full Snapshot" 
-                  />
+                {selectedAlert.video_url ? (
+                  <div className="video-wrapper">
+                    <video 
+                      controls 
+                      autoPlay 
+                      src={`http://localhost:8000${selectedAlert.video_url}`}
+                      className="detail-video"
+                    />
+                  </div>
+                ) : selectedAlert.image_base64 ? (
+                  <div className="no-video-yet">
+                    <img 
+                      src={selectedAlert.image_base64.startsWith('data:') ? selectedAlert.image_base64 : `data:image/jpeg;base64,${selectedAlert.image_base64}`}
+                      alt="Snapshot" 
+                    />
+                    <div className="video-pending">
+                      <p>📹 Video processing...</p>
+                      <button onClick={checkVideoStatus} className="refresh-btn">Check Again</button>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="no-image">No Snapshot Available</div>
+                  <div className="no-image">No Evidence Available</div>
                 )}
               </div>
               <div className="detail-info">

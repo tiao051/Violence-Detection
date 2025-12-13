@@ -7,11 +7,13 @@ export interface Alert {
   violence_score: number;
   image_base64?: string;
   is_reviewed?: boolean;
+  video_url?: string;
 }
 
 interface AlertContextType {
   alerts: Alert[];
   addAlert: (alert: Omit<Alert, 'id' | 'timestamp' | 'is_reviewed'>) => void;
+  updateAlert: (cameraId: string, timestamp: number, updates: Partial<Alert>) => void;
   clearAlerts: () => void;
   markAsReviewed: (id: string) => void;
   unreadCount: number;
@@ -71,6 +73,23 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
   };
 
+  const updateAlert = (cameraId: string, timestamp: number, updates: Partial<Alert>) => {
+    setAlerts(prev => {
+      // Find alert that matches camera and is close in time (within 30s)
+      const index = prev.findIndex(a => 
+        a.camera_id === cameraId && 
+        Math.abs(a.timestamp - timestamp) < 30000
+      );
+
+      if (index !== -1) {
+        const newAlerts = [...prev];
+        newAlerts[index] = { ...newAlerts[index], ...updates };
+        return newAlerts;
+      }
+      return prev;
+    });
+  };
+
   const clearAlerts = () => setAlerts([]);
 
   const markAsReviewed = (id: string) => {
@@ -80,7 +99,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const unreadCount = alerts.filter(a => !a.is_reviewed).length;
 
   return (
-    <AlertContext.Provider value={{ alerts, addAlert, clearAlerts, markAsReviewed, unreadCount }}>
+    <AlertContext.Provider value={{ alerts, addAlert, updateAlert, clearAlerts, markAsReviewed, unreadCount }}>
       {children}
     </AlertContext.Provider>
   );

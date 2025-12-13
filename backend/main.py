@@ -8,8 +8,10 @@ import time
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
@@ -146,6 +148,68 @@ app.add_middleware(
 app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
+
+# Mount static files for video playback
+import os
+outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+os.makedirs(outputs_dir, exist_ok=True)
+app.mount("/videos", StaticFiles(directory=outputs_dir), name="videos")
+
+
+@app.get("/api/events/{event_id}")
+async def get_event(event_id: str):
+    """Get event details including video URL if available."""
+    global redis_client
+    
+    try:
+        if not redis_client:
+            return {"error": "Redis unavailable"}, 503
+        
+        # Try to get event data from Redis (stored during save_event)
+        event_data = await redis_client.get(f"event:{event_id}")
+        if event_data:
+            return json.loads(event_data)
+        
+        # Fallback: Return minimal response
+        return {"id": event_id, "video_url": None}
+    except Exception as e:
+        logger.error(f"Error fetching event {event_id}: {e}")
+        return {"error": str(e)}, 500
+
+
+@app.get("/api/events/lookup")
+async def lookup_event(camera_id: str, timestamp: int):
+    """
+    Lookup event by camera_id and timestamp (ms).
+    Useful when frontend ID differs from backend ID.
+    """
+    global redis_client
+    
+    try:
+        if not redis_client:
+            return {"error": "Redis unavailable"}, 503
+            
+        # Convert ms to seconds
+        ts_sec = timestamp / 1000.0
+        
+        # Search window: +/- 60 seconds
+        min_ts = ts_sec - 60
+        max_ts = ts_sec + 60
+        
+        timeline_key = f"events:timeline:{camera_id}"
+        # zrangebyscore returns list of members (bytes)
+        results = await redis_client.zrangebyscore(timeline_key, min_ts, max_ts)
+        
+        if results:
+            # Return the most recent match in the window
+            # results are sorted by score (timestamp), so last one is newest
+            data = json.loads(results[-1])
+            return data
+            
+        return {"video_url": None}
+    except Exception as e:
+        logger.error(f"Error looking up event: {e}")
+        return {"error": str(e)}, 500
 
 
 @app.get("/")
