@@ -30,8 +30,18 @@ class ConnectionManager:
     async def send_personal(self, websocket: WebSocket, data: Dict[str, Any]):
         try:
             await websocket.send_json(data)
+        except RuntimeError as e:
+            # WebSocket is already closed or connection lost
+            if "Unexpected ASGI message" in str(e) or "websocket.close" in str(e):
+                pass
+            else:
+                logger.debug(f"Error sending personal message (client likely disconnected): {e}")
         except Exception as e:
-            logger.warning(f"Error sending personal message: {e}")
+            # Suppress common disconnect errors
+            if "1000" in str(e) or "1001" in str(e):
+                pass
+            else:
+                logger.warning(f"Error sending personal message: {e}")
 
     async def broadcast(self, data: Dict[str, Any]):
         disconnected = set()
@@ -78,6 +88,10 @@ async def websocket_threat_alerts(websocket: WebSocket):
         
         try:
             while True:
+                # Check if client is still connected
+                if websocket.client_state == WebSocketState.DISCONNECTED:
+                    break
+
                 # Wait for messages from pub/sub channel
                 try:
                     message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
@@ -92,28 +106,30 @@ async def websocket_threat_alerts(websocket: WebSocket):
                         if isinstance(data, (bytes, bytearray)):
                             data = data.decode("utf-8")
                         alert_data = json.loads(data)
+                        
+                        # Inject 'type' field if missing, required by frontend
+                        if "type" not in alert_data:
+                            alert_data["type"] = "alert"
+
                         # Send alert to WebSocket client
                         await manager.send_personal(websocket, alert_data)
                         logger.debug(f"Sent threat alert to client: {alert_data}")
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse alert message: {e}")
-
-                # If the client disconnected, stop the loop
-                if websocket.client_state != WebSocketState.CONNECTED:
-                    break
-
-                await asyncio.sleep(0.05)
+                
+                await asyncio.sleep(0.01)
 
         except WebSocketDisconnect:
-            logger.info("WebSocketDisconnect received from client")
+            logger.info("Client disconnected normally")
         except Exception as e:
             logger.error(f"Error in pub/sub loop: {e}")
         finally:
             await pubsub.punsubscribe("alerts:*")
             await pubsub.close()
 
+    except WebSocketDisconnect:
+        logger.info("Client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
         await manager.disconnect(websocket)
-        logger.info("Client disconnected")

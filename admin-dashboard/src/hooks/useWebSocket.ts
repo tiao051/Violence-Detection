@@ -87,7 +87,6 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
 
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
-        console.log('WebSocket connected to', url);
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0; // Reset on successful connection
@@ -97,7 +96,6 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
         try {
           const data: ThreatAlert = JSON.parse(event.data);
           if (data.type === 'alert') {
-            console.log('Received threat alert:', data);
             setAlerts(prev => [...prev, data]);
           }
         } catch (err) {
@@ -107,7 +105,6 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
 
       ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
-        console.log('WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
         // If this hook created the socket, clear globals when closing
         if (createdByThisHookRef.current) {
@@ -120,7 +117,6 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
         if (event.code !== 1000) {
           reconnectAttemptsRef.current++;
           const delay = getReconnectDelay(reconnectAttemptsRef.current - 1);
-          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
 
           reconnectTimeoutRef.current = window.setTimeout(() => {
             connect();
@@ -130,12 +126,10 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
 
       ws.onerror = (event) => {
         clearTimeout(connectionTimeout);
-        console.error('WebSocket error:', event);
         setError('WebSocket connection failed');
         setIsConnected(false);
       };
     } catch (err) {
-      console.error('Failed to create WebSocket connection:', err);
       setError('Failed to connect to WebSocket');
     }
   }, [url, getReconnectDelay]);

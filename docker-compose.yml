@@ -52,8 +52,6 @@ services:
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -172,7 +170,8 @@ services:
     container_name: camera-1
     command: >
       -re -stream_loop -1 -i /videos/violence_1.mp4
-      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
@@ -184,8 +183,9 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-2
     command: >
-      -re -stream_loop -1 -i /videos/violence_2.mp4
-      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -re -stream_loop -1 -i /videos/violence_4.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
@@ -197,8 +197,9 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-3
     command: >
-      -re -stream_loop -1 -i /videos/non_violence_1.mp4
-      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -re -stream_loop -1 -i /videos/violence_5.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
@@ -210,8 +211,9 @@ services:
     image: jrottenberg/ffmpeg:5.1-alpine
     container_name: camera-4
     command: >
-      -re -stream_loop -1 -i /videos/violence_3.mp4
-      -c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 50 -keyint_min 25 -pix_fmt yuv420p
+      -re -stream_loop -1 -i /videos/boxer.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
       -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
     volumes:
       - ./ai_service/utils/test_data/inputs/videos:/videos
@@ -239,6 +241,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  redis_data:
