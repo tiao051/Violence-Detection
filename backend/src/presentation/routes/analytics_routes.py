@@ -59,7 +59,7 @@ def get_model() -> InsightsModel:
         raise FileNotFoundError("Could not find ai_service/insights/data directory")
     
     model_path = os.path.join(data_dir, 'trained_model.pkl')
-    csv_path = os.path.join(data_dir, 'violence_events_100k.csv')
+    csv_path = os.path.join(data_dir, 'violence_events_20k.csv')
     
     if os.path.exists(model_path):
         print(f"Loading pre-trained model from {model_path}")

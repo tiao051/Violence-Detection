@@ -1,6 +1,6 @@
 """
-Generate large-scale mock violence event data for Analytics dashboard.
-Creates ~100,000 events spanning 3 months.
+Generate mock violence event data for Analytics dashboard.
+Creates ~20,000 events spanning 3 months.
 
 Run: python ai_service/insights/data/generate_large_dataset.py
 """
@@ -18,7 +18,7 @@ def main():
     print("=" * 60)
     
     # Config
-    N_EVENTS = 100000
+    N_EVENTS = 20000
     DAYS = 90  # 3 months
     
     # Setup
@@ -43,7 +43,7 @@ def main():
     
     # Save to CSV
     output_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(output_dir, "violence_events_100k.csv")
+    csv_path = os.path.join(output_dir, "violence_events_20k.csv")
     
     print(f"\nSaving to: {csv_path}")
     generator.save_to_csv(events, csv_path)
