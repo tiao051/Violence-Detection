@@ -15,8 +15,16 @@ from typing import Dict, Any, List, Optional
 import os
 import sys
 
-# Add ai_service to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service'))
+# Add ai_service to path (works for both local and Docker)
+# In Docker: /app/ai_service (mounted via docker-compose volume)
+# Local: ../../ai_service relative to backend folder
+ai_service_paths = [
+    '/app/ai_service',  # Docker path
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service'),  # Local path
+]
+for path in ai_service_paths:
+    if os.path.exists(path) and path not in sys.path:
+        sys.path.insert(0, path)
 
 from insights import InsightsModel
 from insights.data import ViolenceEvent
@@ -28,7 +36,6 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 _model: Optional[InsightsModel] = None
 _model_loaded: bool = False
 
-
 def get_model() -> InsightsModel:
     """Get or load the insights model."""
     global _model, _model_loaded
@@ -36,26 +43,32 @@ def get_model() -> InsightsModel:
     if _model_loaded and _model is not None:
         return _model
     
-    # Try to load from pre-trained file
-    model_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', '..', '..', 
-        'ai_service', 'insights', 'data', 'trained_model.pkl'
-    )
+    # Find insight data directory (works for both Docker and local)
+    data_dir_options = [
+        '/app/ai_service/insights/data',  # Docker path
+        os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),  # Local
+    ]
+    
+    data_dir = None
+    for path in data_dir_options:
+        if os.path.exists(path):
+            data_dir = path
+            break
+    
+    if data_dir is None:
+        raise FileNotFoundError("Could not find ai_service/insights/data directory")
+    
+    model_path = os.path.join(data_dir, 'trained_model.pkl')
+    csv_path = os.path.join(data_dir, 'violence_events_100k.csv')
     
     if os.path.exists(model_path):
         print(f"Loading pre-trained model from {model_path}")
         _model = InsightsModel.load(model_path)
     else:
-        # Train from CSV data
-        csv_path = os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', '..',
-            'ai_service', 'insights', 'data', 'violence_events_100k.csv'
-        )
-        
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"No training data found at {csv_path}")
         
-        print(f"Training model from {csv_path}")
+        print(f"Training model from {csv_path} (this may take 1-2 minutes)...")
         df = pd.read_csv(csv_path)
         
         # Convert DataFrame rows to ViolenceEvent objects
@@ -69,6 +82,7 @@ def get_model() -> InsightsModel:
         
         # Save for next time
         _model.save(model_path)
+        print(f"Model saved to {model_path}")
     
     _model_loaded = True
     return _model

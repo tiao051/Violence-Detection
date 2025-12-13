@@ -93,6 +93,8 @@ services:
       # Persist generated videos on host
       - ./backend/outputs:/app/src/outputs
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json
+      # Mount ai_service/insights for analytics
+      - ./ai_service:/app/ai_service
       - /app/__pycache__
     depends_on:
       redis:
