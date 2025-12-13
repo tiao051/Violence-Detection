@@ -3,11 +3,17 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 interface CameraVideoProps {
   cameraId: string;       // cam1, cam2, cam3, cam4
   signalingServer?: string; // MediaMTX WebRTC HTTP (default 8889)
+  isAlerting?: boolean;   // New prop for alert state
+  onClick?: () => void;   // New prop for click handler
+  isExpanded?: boolean;   // New prop for expanded state
 }
 
 const CameraVideo: React.FC<CameraVideoProps> = ({
   cameraId,
-  signalingServer = import.meta.env.VITE_MEDIAMTX_URL || "http://localhost:8889"
+  signalingServer = import.meta.env.VITE_MEDIAMTX_URL || "http://localhost:8889",
+  isAlerting = false,
+  onClick,
+  isExpanded = false
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -130,11 +136,22 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
   }, []); // Empty dependency array - only run once on mount
 
   return (
-    <div className="camera-video-container">
+    <div 
+      className={`camera-video-container ${isAlerting ? 'alert-active' : ''} ${isExpanded ? 'expanded' : ''}`}
+      onClick={onClick}
+    >
       {/* Camera label */}
       <div className="camera-label">
         <span className="camera-name">{cameraId.toUpperCase()}</span>
       </div>
+
+      {/* Alert Overlay */}
+      {isAlerting && (
+        <div className="alert-overlay">
+          <span className="alert-icon">⚠️</span>
+          <span className="alert-text">VIOLENCE DETECTED</span>
+        </div>
+      )}
 
       {loading && <div className="loading-overlay">Loading {cameraId}...</div>}
       {error && <div className="error-overlay">{error}</div>}
