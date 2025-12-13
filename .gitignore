@@ -72,6 +72,9 @@ backend/firebase-service-account.json
 dataset/
 outputs/
 
+# Generated data files (use generate_large_dataset.py to recreate)
+ai_service/insights/data/violence_events_20k.csv
+
 # Docker volumes and data
 docker-data/
 *.volume/
