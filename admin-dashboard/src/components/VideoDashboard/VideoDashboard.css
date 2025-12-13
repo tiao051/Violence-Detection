@@ -41,10 +41,78 @@
 
 .video-dashboard-grid.has-expanded .camera-video-container.expanded {
   width: 100%; /* Full width */
-  height: calc(100% - 220px); /* Remaining height */
+  height: calc(100vh - 120px); /* Maximize height */
   order: 1;
   margin-bottom: 16px;
   border-color: var(--primary-color);
+  z-index: 50;
+}
+
+/* Replay Controls */
+.replay-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 10px 20px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: opacity 0.3s;
+}
+
+.replay-controls:hover {
+  opacity: 1;
+}
+
+.control-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.control-btn.primary {
+  background: var(--primary-color);
+  padding: 12px;
+}
+
+.control-btn.primary:hover {
+  background: var(--primary-hover);
+}
+
+.control-btn.live-btn {
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: bold;
+  font-size: 12px;
+  background: #dc2626;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.control-btn.live-btn:hover {
+  background: #b91c1c;
+}
+
+.control-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 
 /* Alert State - Blinking Red Border */

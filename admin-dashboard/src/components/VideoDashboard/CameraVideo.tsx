@@ -24,6 +24,13 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<string>("connecting");
   const [isConnecting, setIsConnecting] = useState(false);
+  
+  // Replay Logic
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [replayUrl, setReplayUrl] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const cleanup = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -36,9 +43,161 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.src = "";
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (replayUrl) {
+      URL.revokeObjectURL(replayUrl);
     }
     setIsConnecting(false);
-  }, []);
+  }, [replayUrl]);
+
+  // Start recording stream for buffer
+  const startRecording = (stream: MediaStream) => {
+    try {
+      // Check supported mime types
+      const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp9") 
+        ? "video/webm; codecs=vp9" 
+        : "video/webm";
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+          // Keep last ~60 seconds (assuming 1 chunk per second)
+          if (recordedChunksRef.current.length > 60) {
+            recordedChunksRef.current.shift();
+          }
+        }
+      };
+
+      recorder.start(1000); // 1 second chunks
+    } catch (e) {
+      console.error("MediaRecorder error:", e);
+    }
+  };
+
+  const handleReplay = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent collapsing
+    if (!videoRef.current || recordedChunksRef.current.length === 0) return;
+
+    // Create blob from buffer
+    const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    setReplayUrl(url);
+    setIsReplayMode(true);
+    setIsPaused(false);
+
+    // Switch source
+    videoRef.current.srcObject = null;
+    videoRef.current.src = url;
+    
+    // Wait for metadata to seek
+    videoRef.current.onloadedmetadata = () => {
+      if (videoRef.current) {
+        const duration = videoRef.current.duration;
+        // Check if duration is finite to avoid TypeError
+        if (Number.isFinite(duration)) {
+           videoRef.current.currentTime = Math.max(0, duration - 3);
+        } else {
+           // Fallback for infinite duration (common in WebM blobs from MediaRecorder)
+           // Just play from start or current position
+           videoRef.current.currentTime = 0;
+        }
+        videoRef.current.play().catch(console.error);
+      }
+    };
+  };
+
+  const enterLiveMode = useCallback(() => {
+    if (!videoRef.current) return;
+
+    setIsReplayMode(false);
+    setIsPaused(false);
+    if (replayUrl) {
+      URL.revokeObjectURL(replayUrl);
+      setReplayUrl(null);
+    }
+
+    // Restore live stream
+    if (pcRef.current) {
+      const senders = pcRef.current.getReceivers();
+      const track = senders.find(r => r.track.kind === 'video')?.track;
+      if (track) {
+        const stream = new MediaStream([track]);
+        videoRef.current.src = "";
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(console.error);
+      }
+    }
+  }, [replayUrl]);
+
+  // Reset to live when collapsed
+  useEffect(() => {
+    if (!isExpanded && isReplayMode) {
+      enterLiveMode();
+    }
+  }, [isExpanded, isReplayMode, enterLiveMode]);
+
+  const handleGoLive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    enterLiveMode();
+  };
+
+  const togglePause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+      setIsPaused(false);
+    } else {
+      videoRef.current.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const seek = (seconds: number) => {
+    if (!videoRef.current) return;
+    const current = videoRef.current.currentTime;
+    const duration = videoRef.current.duration;
+    
+    if (Number.isFinite(duration)) {
+        videoRef.current.currentTime = Math.max(0, Math.min(duration, current + seconds));
+    } else {
+        // If duration is infinite, just seek relative to current
+        videoRef.current.currentTime = Math.max(0, current + seconds);
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!isExpanded || !isReplayMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") seek(-3);
+      if (e.key === "ArrowRight") seek(3);
+      if (e.key === " ") {
+        e.preventDefault();
+        if (videoRef.current) {
+           if (videoRef.current.paused) {
+             videoRef.current.play();
+             setIsPaused(false);
+           } else {
+             videoRef.current.pause();
+             setIsPaused(true);
+           }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isExpanded, isReplayMode]);
 
   const startWebRTC = useCallback(async () => {
     // Prevent multiple simultaneous connections
@@ -105,9 +264,13 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         }
 
         if (videoRef.current && event.streams[0]) {
-          videoRef.current.srcObject = event.streams[0];
+          const stream = event.streams[0];
+          videoRef.current.srcObject = stream;
           videoRef.current.play().catch(() => console.warn("Autoplay blocked"));
           setLoading(false);
+          
+          // Start recording for replay buffer
+          startRecording(stream);
         }
       };
 
@@ -193,6 +356,45 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         muted
         className="camera-video-element"
       />
+
+      {/* Replay Controls - Only show when expanded */}
+      {isExpanded && (
+        <div className="replay-controls" onClick={(e) => e.stopPropagation()}>
+          {!isReplayMode ? (
+            <button className="control-btn primary" onClick={handleReplay} title="Replay last 3s">
+              <svg viewBox="0 0 24 24" className="control-icon">
+                <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+              </svg>
+            </button>
+          ) : (
+            <>
+              <button className="control-btn" onClick={() => seek(-3)} title="Rewind 3s (Left Arrow)">
+                <svg viewBox="0 0 24 24" className="control-icon">
+                  <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
+                </svg>
+              </button>
+              
+              <button className="control-btn primary" onClick={togglePause} title="Play/Pause (Space)">
+                {isPaused ? (
+                  <svg viewBox="0 0 24 24" className="control-icon"><path d="M8 5v14l11-7z"/></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="control-icon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                )}
+              </button>
+
+              <button className="control-btn" onClick={() => seek(3)} title="Forward 3s (Right Arrow)">
+                <svg viewBox="0 0 24 24" className="control-icon">
+                  <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/>
+                </svg>
+              </button>
+
+              <button className="control-btn live-btn" onClick={handleGoLive} title="Return to Live Stream">
+                GO LIVE
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
