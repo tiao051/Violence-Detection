@@ -31,10 +31,12 @@ class EventProcessor:
         self.active_events: Dict[str, Dict] = {}
         
         # Config
-        self.event_timeout_seconds = 5.0  # Wait 5s after last alert to close event
+        self.event_timeout_seconds = 30.0  # Wait 30s after last alert to close event (was 5.0)
         self.min_event_duration = 1.0     # Ignore blips shorter than 1s
+        self.max_event_duration = 60.0    # Max duration for a single event (chunking)
         self.pre_event_padding = 2.0      # Seconds to include before event
         self.post_event_padding = 2.0     # Seconds to include after event
+        self.cooldown_seconds = 30.0      # Deduplication window - same as frontend (30s)
 
     async def start(self) -> None:
         """Start the event processor background task."""
@@ -90,27 +92,38 @@ class EventProcessor:
             if not camera_id:
                 return
 
-            now = time.time()
+            # Detection MUST have timestamp - no fallback to server time
+            if 'timestamp' not in alert or alert['timestamp'] is None:
+                logger.error(f"[{camera_id}] Alert missing required 'timestamp' field. Alert: {alert}")
+                return
             
-            # Logic: Debounce & Extend
+            detection_timestamp = alert['timestamp']
+            
+            # Logic: Debounce & Extend with Deduplication (same as frontend)
             if camera_id not in self.active_events:
-                # START NEW EVENT
-                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f})")
+                # START NEW EVENT - use detection timestamp
+                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, ts={detection_timestamp})")
                 self.active_events[camera_id] = {
-                    'start_time': now,
-                    'last_seen': now,
+                    'start_time': detection_timestamp,  # Always from detection
+                    'last_seen': detection_timestamp,   # Always from detection, not server time
                     'max_confidence': confidence,
                     'first_alert': alert, # Keep first alert for metadata
                     'frames_temp_paths': [] # Collect all temp paths
                 }
             else:
-                # EXTEND EXISTING EVENT
-                logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f})")
-                self.active_events[camera_id]['last_seen'] = now
-                self.active_events[camera_id]['max_confidence'] = max(
-                    self.active_events[camera_id]['max_confidence'], 
-                    confidence
-                )
+                # EXTEND EXISTING EVENT - but check deduplication cooldown first
+                event = self.active_events[camera_id]
+                time_since_start = detection_timestamp - event['start_time']
+                
+                # Only extend if within cooldown window (deduplication window)
+                if time_since_start <= self.cooldown_seconds:
+                    logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp}, elapsed={time_since_start:.1f}s)")
+                    event['last_seen'] = detection_timestamp  # Update with detection timestamp
+                    event['max_confidence'] = max(event['max_confidence'], confidence)
+                else:
+                    # Outside cooldown window - ignore this alert (deduplication)
+                    logger.debug(f"[{camera_id}] Alert suppressed by deduplication (outside {self.cooldown_seconds}s window, elapsed={time_since_start:.1f}s)")
+                    return
             
             # Collect temp frames path if available
             frames_path = alert.get('frames_temp_path')
@@ -136,12 +149,16 @@ class EventProcessor:
                 for camera_id in active_cameras:
                     event = self.active_events[camera_id]
                     
-                    # Check timeout (No new alerts for X seconds)
-                    if now - event['last_seen'] > self.event_timeout_seconds:
+                    now = time.time()
+                    duration = now - event['start_time']
+                    is_timeout = (now - event['last_seen'] > self.event_timeout_seconds)
+                    is_max_duration = (duration > self.max_event_duration)
+
+                    # Check timeout (No new alerts for X seconds) or Max Duration
+                    if is_timeout or is_max_duration:
                         # Event finished! Process it.
-                        duration = event['last_seen'] - event['start_time']
-                        
-                        logger.info(f"[{camera_id}] Event finished. Duration: {duration:.1f}s. Saving...")
+                        reason = "Timeout" if is_timeout else "Max Duration"
+                        logger.info(f"[{camera_id}] Event finished ({reason}). Duration: {duration:.1f}s. Saving...")
                         
                         # Use the first alert as template, but update confidence
                         final_alert = event['first_alert'].copy()
@@ -164,18 +181,13 @@ class EventProcessor:
                         
                         if result:
                             event_id = result['id']
-                            local_path = result.get('local_video_path')
+                            # Use Firebase URL instead of local path
+                            video_url = result.get('firebase_video_url')
                             logger.info(f"[{camera_id}] Event saved successfully: {event_id}")
 
                             # Publish "Event Saved" message to update frontend
-                            if local_path:
-                                # Convert local path to relative URL
-                                # Path is like .../backend/outputs/cam1/violence_...mp4
-                                # We want /videos/cam1/violence_...mp4
+                            if video_url:
                                 try:
-                                    filename = os.path.basename(local_path)
-                                    video_url = f"/videos/{camera_id}/{filename}"
-                                    
                                     # Store event data in Redis for quick lookup
                                     event_data = {
                                         "id": event_id,

@@ -29,11 +29,18 @@ const VideoDashboard: React.FC = () => {
       const latestMsg = messages[messages.length - 1];
       
       if (latestMsg.type === 'alert' && latestMsg.violence && latestMsg.camera_id) {
-        // 1. Add to Global History (Context)
+        // Validate that message has detection timestamp
+        if (!latestMsg.timestamp) {
+          console.warn('Alert message missing detection timestamp:', latestMsg);
+          return;
+        }
+
+        // 1. Add to Global History (Context) with detection timestamp
         addAlert({
           camera_id: latestMsg.camera_id,
           violence_score: latestMsg.confidence || 0.9,
-          image_base64: latestMsg.snapshot
+          image_base64: latestMsg.snapshot,
+          timestamp: latestMsg.timestamp  // Detection timestamp from WebSocket
         });
 
         // 2. Update active alerts state (Visual Red Border)
