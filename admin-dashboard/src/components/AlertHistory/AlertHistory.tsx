@@ -53,8 +53,9 @@ const AlertHistory: React.FC = () => {
     
     try {
       // Use lookup endpoint with camera_id and timestamp
-      // This bridges the gap between Frontend ID and Backend ID
-      const url = `http://localhost:8000/api/events/lookup?camera_id=${selectedAlert.camera_id}&timestamp=${selectedAlert.timestamp}`;
+      // Frontend timestamp is in seconds, but backend expects milliseconds
+      const timestampMs = selectedAlert.timestamp * 1000;
+      const url = `http://localhost:8000/api/events/lookup?camera_id=${selectedAlert.camera_id}&timestamp=${timestampMs}`;
       console.log('Calling lookup endpoint:', url);
       
       const response = await fetch(url);

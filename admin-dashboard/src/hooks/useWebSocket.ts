@@ -71,6 +71,7 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
       setError(null);
 
       if (!wsRef.current) {
+        console.log(`[WebSocket] Attempting to connect to: ${url}`);
         const ws = new WebSocket(url);
         wsRef.current = ws;
         // expose globally so other hook instances don't create duplicates
@@ -97,7 +98,7 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
 
       ws.onmessage = (event) => {
         try {
-          const data: ThreatAlert = JSON.parse(event.data);
+          const data: WebSocketMessage = JSON.parse(event.data);
           if (data.type === 'alert' || data.type === 'event_saved') {
             setMessages(prev => [...prev, data]);
           }

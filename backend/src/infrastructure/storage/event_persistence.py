@@ -131,8 +131,9 @@ class EventPersistenceService:
             if not frames:
                 return None
 
-            # Create temp file
-            temp_dir = tempfile.gettempdir()
+            # Create temp file in app directory instead of /tmp to avoid permission issues in Docker
+            temp_dir = "/app/tmp"  # Use app directory instead of system /tmp
+            os.makedirs(temp_dir, exist_ok=True)  # Ensure directory exists
             filename = f"violence_{camera_id}_{uuid.uuid4()}.mp4"
             filepath = os.path.join(temp_dir, filename)
 
@@ -140,16 +141,9 @@ class EventPersistenceService:
             height, width, layers = frames[0].shape
             size = (width, height)
 
-            # Initialize VideoWriter (avc1 codec for web compatibility)
-            # Note: In some docker containers 'avc1' or 'h264' might be needed
-            try:
-                fourcc = cv2.VideoWriter_fourcc(*'avc1')
-                out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
-            except Exception:
-                # Fallback to mp4v if avc1 fails
-                logger.warning("avc1 codec not found, falling back to mp4v")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
+            # Initialize VideoWriter (MJPG codec - works without FFmpeg in Docker)
+            fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+            out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
 
             for frame in frames:
                 out.write(frame)
@@ -206,13 +200,10 @@ class EventPersistenceService:
             "userId": owner_uid,
             "cameraId": camera_id,
             "cameraName": self._get_camera_name(camera_id),
-            "type": "violence",
-            "status": "new",
             "timestamp": timestamp,
-            "videoUrl": video_url or "",  # Firebase URL (may be empty)
+            "videoUrl": video_url,  # Firebase URL (may be empty)
             "thumbnailUrl": "", # TODO: Generate thumbnail
-            "confidence": detection.get("confidence", 0.0),
-            "viewed": False
+            "confidence": detection.get("confidence")
         }
         
         # Add to 'events' collection

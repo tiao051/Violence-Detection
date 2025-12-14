@@ -31,11 +31,12 @@ class EventProcessor:
         self.active_events: Dict[str, Dict] = {}
         
         # Config
-        self.event_timeout_seconds = 5.0  # Wait 5s after last alert to close event
+        self.event_timeout_seconds = 30.0  # Wait 30s after last alert to close event (was 5.0)
         self.min_event_duration = 1.0     # Ignore blips shorter than 1s
         self.max_event_duration = 60.0    # Max duration for a single event (chunking)
         self.pre_event_padding = 2.0      # Seconds to include before event
         self.post_event_padding = 2.0     # Seconds to include after event
+        self.cooldown_seconds = 30.0      # Deduplication window - same as frontend (30s)
 
     async def start(self) -> None:
         """Start the event processor background task."""
@@ -98,7 +99,7 @@ class EventProcessor:
             
             detection_timestamp = alert['timestamp']
             
-            # Logic: Debounce & Extend
+            # Logic: Debounce & Extend with Deduplication (same as frontend)
             if camera_id not in self.active_events:
                 # START NEW EVENT - use detection timestamp
                 logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, ts={detection_timestamp})")
@@ -110,13 +111,19 @@ class EventProcessor:
                     'frames_temp_paths': [] # Collect all temp paths
                 }
             else:
-                # EXTEND EXISTING EVENT - update last_seen with detection timestamp
-                logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp})")
-                self.active_events[camera_id]['last_seen'] = detection_timestamp  # Update with detection timestamp
-                self.active_events[camera_id]['max_confidence'] = max(
-                    self.active_events[camera_id]['max_confidence'], 
-                    confidence
-                )
+                # EXTEND EXISTING EVENT - but check deduplication cooldown first
+                event = self.active_events[camera_id]
+                time_since_start = detection_timestamp - event['start_time']
+                
+                # Only extend if within cooldown window (deduplication window)
+                if time_since_start <= self.cooldown_seconds:
+                    logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp}, elapsed={time_since_start:.1f}s)")
+                    event['last_seen'] = detection_timestamp  # Update with detection timestamp
+                    event['max_confidence'] = max(event['max_confidence'], confidence)
+                else:
+                    # Outside cooldown window - ignore this alert (deduplication)
+                    logger.debug(f"[{camera_id}] Alert suppressed by deduplication (outside {self.cooldown_seconds}s window, elapsed={time_since_start:.1f}s)")
+                    return
             
             # Collect temp frames path if available
             frames_path = alert.get('frames_temp_path')
