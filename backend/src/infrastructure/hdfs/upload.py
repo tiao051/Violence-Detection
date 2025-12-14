@@ -103,13 +103,15 @@ def main():
     print("HDFS Upload Script - Nonviolence Events")
     print("=" * 60)
     
-    # Paths
+    # Paths - CSV is in ai_service/insights/data/
     script_dir = Path(__file__).parent
-    input_csv = script_dir / "data" / "analytics_events.csv"
+    # Go up: hdfs/ -> infrastructure/ -> src/ -> backend/ -> project_root -> ai_service/insights/data/
+    project_root = script_dir.parent.parent.parent.parent
+    input_csv = project_root / "ai_service" / "insights" / "data" / "analytics_events.csv"
     
     if not input_csv.exists():
         print(f"Error: Input CSV not found at {input_csv}")
-        print("Please run generate_analytics_dataset.py first")
+        print("Please run: python ai_service/insights/scripts/generate_dataset.py")
         return
     
     # Create temp file for filtered data
