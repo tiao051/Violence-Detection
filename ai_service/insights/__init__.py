@@ -1,43 +1,16 @@
 """
 Violence Insights Module
 
-Provides ML models to extract insights from violence detection events.
+ML-powered analytics for violence detection patterns.
 
-Main Interface:
-    InsightsModel - Unified model combining K-means, FP-Growth, Random Forest
-
-Usage:
-    from ai_service.insights import InsightsModel
+Quick start:
+    from insights import InsightsModel, ViolenceEvent
     
     model = InsightsModel()
-    model.fit(events)  # or model.fit_from_mock(500)
-    report = model.get_full_report()
+    model.fit(events)
+    patterns = model.get_patterns()
 """
 
-__version__ = "0.2.0"
+from .core import InsightsModel, ViolenceEvent
 
-# Main unified model
-from .insights_model import InsightsModel
-
-# Data utilities
-from .data import ViolenceEventGenerator, ViolenceEvent
-
-# Individual ML models
-from .models import (
-    ClusterAnalyzer,
-    AssociationRuleAnalyzer,
-    RiskPredictor,
-)
-
-__all__ = [
-    # Main interface
-    "InsightsModel",
-    # Data
-    "ViolenceEventGenerator",
-    "ViolenceEvent",
-    # Models
-    "ClusterAnalyzer",
-    "AssociationRuleAnalyzer",
-    "RiskPredictor",
-]
-
+__all__ = ["InsightsModel", "ViolenceEvent"]

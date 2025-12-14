@@ -26,8 +26,7 @@ for path in ai_service_paths:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
 
-from insights import InsightsModel
-from insights.data import ViolenceEvent
+from insights import InsightsModel, ViolenceEvent
 import pandas as pd
 import threading
 
