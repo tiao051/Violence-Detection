@@ -29,6 +29,7 @@ for path in ai_service_paths:
 from insights import InsightsModel
 from insights.data import ViolenceEvent
 import pandas as pd
+import threading
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -39,6 +40,7 @@ _model_loaded: bool = False
 # Cache for computed results (avoid recalculating on every request)
 _cache: Dict[str, Any] = {}
 _cache_ready: bool = False
+_cache_lock = threading.Lock()  # Prevent race conditions
 
 def get_model() -> InsightsModel:
     """Get or load the insights model."""
@@ -103,26 +105,33 @@ def get_cached_results() -> Dict[str, Any]:
     """Get or compute cached results for all analytics endpoints."""
     global _cache, _cache_ready
     
+    # Fast path - return if already cached
     if _cache_ready:
         return _cache
     
-    print("Pre-computing analytics results (one-time)...")
-    import time
-    start = time.time()
-    
-    model = get_model()
-    
-    # Compute all results once
-    _cache = {
-        "summary": model.get_summary(),
-        "patterns": model.get_patterns(),
-        "rules": model.get_rules(top_n=20),
-        "high_risk": model.get_high_risk_conditions(top_n=10),
-        "full_report": model.get_full_report(),
-    }
-    
-    _cache_ready = True
-    print(f"Analytics cache ready in {time.time() - start:.1f}s")
+    # Use lock to prevent multiple threads from computing cache simultaneously
+    with _cache_lock:
+        # Double-check after acquiring lock
+        if _cache_ready:
+            return _cache
+        
+        print("Pre-computing analytics results (one-time)...")
+        import time
+        start = time.time()
+        
+        model = get_model()
+        
+        # Compute all results once
+        _cache = {
+            "summary": model.get_summary(),
+            "patterns": model.get_patterns(),
+            "rules": model.get_rules(top_n=20),
+            "high_risk": model.get_high_risk_conditions(top_n=10),
+            "full_report": model.get_full_report(),
+        }
+        
+        _cache_ready = True
+        print(f"Analytics cache ready in {time.time() - start:.1f}s")
     
     return _cache
 
