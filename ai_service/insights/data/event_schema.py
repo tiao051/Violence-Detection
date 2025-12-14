@@ -129,13 +129,6 @@ class ViolenceEvent:
             "thumbnailUrl": self.thumbnail_url,
             "confidence": self.confidence,
             "label": self.label,
-            # Derived (for ML features)
-            "hour": self.hour,
-            "day_of_week": self.day_of_week,
-            "day_name": self.day_name,
-            "is_weekend": self.is_weekend,
-            "time_period": self.time_period,
-            "severity": self.severity,
         }
     
     @classmethod

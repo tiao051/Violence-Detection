@@ -56,10 +56,6 @@ def main():
     for cam, count in df.groupby("cameraName").size().items():
         print(f"      {cam}: {count}")
     
-    print(f"\n   Events by time period:")
-    for period, count in df.groupby("time_period").size().items():
-        print(f"      {period}: {count}")
-    
     # Save to CSV
     output_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(output_dir, "data", "analytics_events.csv")
