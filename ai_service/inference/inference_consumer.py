@@ -259,6 +259,11 @@ class InferenceConsumer:
             timestamp = msg_dict.get('timestamp')
             frame_seq = msg_dict.get('frame_seq')
             
+            # Timestamp is REQUIRED - use as is, no fallback to server time
+            if timestamp is None:
+                logger.error(f"[{camera_id}] Frame {frame_id} missing required 'timestamp' field")
+                return None
+            
             # Get JPEG bytes directly (no hex decoding needed)
             jpeg_bytes = msg_dict.get('jpeg')
             if not jpeg_bytes:
@@ -321,18 +326,9 @@ class InferenceConsumer:
                 if not detection['violence']:
                     continue
                 
-                # Save batch frames to temp and publish detection
-                # frames contains the batch being processed
-                # Run I/O in thread pool to prevent blocking
-                frames_temp_path = await loop.run_in_executor(
-                    self._executor,
-                    self._save_frames_to_temp,
-                    frames,
-                    camera_id
-                )
-                
                 # Publish detection result to Redis
-                await self._publish_detection(camera_id, frame_msg, detection, frames_temp_path)
+                # frames_temp_path is None as we don't save frames to disk anymore
+                await self._publish_detection(camera_id, frame_msg, detection, None)
                 self.alerts_sent += 1
                 self.detections_made += 1
         
@@ -426,34 +422,3 @@ class InferenceConsumer:
             'elapsed_seconds': elapsed,
         }
 
-    def _save_frames_to_temp(self, frames: List[FrameMessage], camera_id: str) -> Optional[str]:
-        """
-        Save batch frames to mounted volume directory.
-        
-        Args:
-            frames: List of FrameMessage objects
-            camera_id: Camera identifier
-            
-        Returns:
-            Path to directory containing frames, or None if failed
-        """
-        try:
-            # Create directory on mounted volume (maps to host backend/outputs)
-            frames_dir = os.path.join("/app/violence_frames", camera_id, f"batch_{uuid.uuid4()}")
-            os.makedirs(frames_dir, exist_ok=True)
-            
-            # Save each frame as JPEG
-            for idx, frame_msg in enumerate(frames, 1):
-                frame_path = os.path.join(frames_dir, f"frame_{idx:03d}.jpg")
-                
-                # Encode as JPEG
-                success = cv2.imwrite(frame_path, frame_msg.frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                if not success:
-                    logger.warning(f"Failed to save frame {idx} for {camera_id}")
-            
-            logger.info(f"Saved {len(frames)} frames to: {frames_dir}")
-            return frames_dir
-            
-        except Exception as e:
-            logger.error(f"Failed to save frames: {e}")
-            return None

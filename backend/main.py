@@ -157,27 +157,6 @@ app.include_router(auth_router)
 app.include_router(websocket_router)
 
 
-@app.get("/api/events/{event_id}")
-async def get_event(event_id: str):
-    """Get event details including video URL if available."""
-    global redis_client
-    
-    try:
-        if not redis_client:
-            return {"error": "Redis unavailable"}, 503
-        
-        # Try to get event data from Redis (stored during save_event)
-        event_data = await redis_client.get(f"event:{event_id}")
-        if event_data:
-            return json.loads(event_data)
-        
-        # Fallback: Return minimal response
-        return {"id": event_id, "video_url": None}
-    except Exception as e:
-        logger.error(f"Error fetching event {event_id}: {e}")
-        return {"error": str(e)}, 500
-
-
 @app.get("/api/events/lookup")
 async def lookup_event(camera_id: str, timestamp: float):
     """
@@ -224,6 +203,27 @@ async def lookup_event(camera_id: str, timestamp: float):
         return {"id": "lookup_failed", "video_url": None}
     except Exception as e:
         logger.error(f"Error looking up event: {e}")
+        return {"error": str(e)}, 500
+
+
+@app.get("/api/events/{event_id}")
+async def get_event(event_id: str):
+    """Get event details including video URL if available."""
+    global redis_client
+    
+    try:
+        if not redis_client:
+            return {"error": "Redis unavailable"}, 503
+        
+        # Try to get event data from Redis (stored during save_event)
+        event_data = await redis_client.get(f"event:{event_id}")
+        if event_data:
+            return json.loads(event_data)
+        
+        # Fallback: Return minimal response
+        return {"id": event_id, "video_url": None}
+    except Exception as e:
+        logger.error(f"Error fetching event {event_id}: {e}")
         return {"error": str(e)}, 500
 
 

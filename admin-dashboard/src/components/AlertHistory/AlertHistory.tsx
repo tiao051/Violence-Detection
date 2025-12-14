@@ -32,7 +32,10 @@ const AlertHistory: React.FC = () => {
   }, [alerts, statusFilter, timeFilter, cameraFilter]);
 
   const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleString('vi-VN', {
+    // Backend provides timestamp in seconds (Unix time)
+    // Convert to milliseconds for JavaScript Date
+    const timestampMs = ts * 1000;
+    return new Date(timestampMs).toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       month: '2-digit', day: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -186,7 +189,7 @@ const AlertHistory: React.FC = () => {
                     <video 
                       controls 
                       autoPlay 
-                      src={`http://localhost:8000${selectedAlert.video_url}`}
+                      src={selectedAlert.video_url.startsWith('http') ? selectedAlert.video_url : `http://localhost:8000${selectedAlert.video_url}`}
                       className="detail-video"
                     />
                   </div>

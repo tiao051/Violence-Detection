@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 
 export interface Alert {
   id: string;
-  timestamp: number;
+  timestamp: number;  // Must be detection timestamp from backend (not client time)
   camera_id: string;
   violence_score: number;
   image_base64?: string;
@@ -12,7 +12,7 @@ export interface Alert {
 
 interface AlertContextType {
   alerts: Alert[];
-  addAlert: (alert: Omit<Alert, 'id' | 'timestamp' | 'is_reviewed'>) => void;
+  addAlert: (alert: Omit<Alert, 'id' | 'is_reviewed'>) => void;  // timestamp required
   updateAlert: (cameraId: string, timestamp: number, updates: Partial<Alert>) => void;
   clearAlerts: () => void;
   markAsReviewed: (id: string) => void;
@@ -31,15 +31,24 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.setItem('violence-alerts', JSON.stringify(alerts));
   }, [alerts]);
 
-  const addAlert = (newAlertData: Omit<Alert, 'id' | 'timestamp' | 'is_reviewed'>) => {
+  const addAlert = (newAlertData: Omit<Alert, 'id' | 'is_reviewed'>) => {
     const COOLDOWN_MS = 30000; // 30 seconds grouping window
-    const now = Date.now();
+    
+    // Alert MUST include detection timestamp from backend
+    if (typeof newAlertData.timestamp !== 'number') {
+      console.error('Alert must include detection timestamp:', newAlertData);
+      return;
+    }
+
+    // Convert detection timestamp from seconds to milliseconds
+    const detectionTimestampMs = newAlertData.timestamp * 1000;
 
     setAlerts(prev => {
-      // Find if there's a recent alert for this camera
+      // Find if there's a recent alert for this camera (within cooldown window)
+      // Compare detection times, not with current time
       const existingIndex = prev.findIndex(a => 
         a.camera_id === newAlertData.camera_id && 
-        (now - a.timestamp) < COOLDOWN_MS
+        (detectionTimestampMs - a.timestamp * 1000) < COOLDOWN_MS
       );
 
       if (existingIndex !== -1) {
@@ -54,7 +63,8 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             ...existingAlert,
             violence_score: newAlertData.violence_score,
             image_base64: newAlertData.image_base64 || existingAlert.image_base64,
-            // We keep the original timestamp to show when the event STARTED
+            // Keep original timestamp (detection timestamp from first alert)
+            timestamp: existingAlert.timestamp,
           };
           return updatedAlerts;
         }
@@ -62,12 +72,12 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return prev;
       }
 
-      // No recent event, create a new alert
+      // No recent event, create a new alert with detection timestamp
       const alert: Alert = {
         ...newAlertData,
         id: crypto.randomUUID(),
-        timestamp: now,
         is_reviewed: false,
+        // timestamp comes from newAlertData (detection timestamp)
       };
       return [alert, ...prev].slice(0, 100); // Keep last 100
     });

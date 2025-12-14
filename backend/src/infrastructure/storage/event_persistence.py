@@ -8,8 +8,6 @@ import cv2
 import numpy as np
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
-
-import firebase_admin
 from firebase_admin import storage, firestore
 from src.infrastructure.memory import get_frame_buffer
 from src.infrastructure.notifications.notification_service import get_notification_service
@@ -82,8 +80,7 @@ class EventPersistenceService:
         
         if not all_frames:
             logger.warning(f"No frames found in buffer for camera {camera_id} (window: {start_timestamp}-{end_timestamp})")
-            # Fallback: get all frames if window query failed
-            all_frames = self.frame_buffer.get_video_frames(camera_id)
+            return None
         
         if not all_frames:
              logger.warning(f"Buffer completely empty for {camera_id}")
@@ -143,10 +140,16 @@ class EventPersistenceService:
             height, width, layers = frames[0].shape
             size = (width, height)
 
-            # Initialize VideoWriter (mp4v codec)
+            # Initialize VideoWriter (avc1 codec for web compatibility)
             # Note: In some docker containers 'avc1' or 'h264' might be needed
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(filepath, fourcc, 6.0, size) # 6 FPS match RTSP sample rate
+            try:
+                fourcc = cv2.VideoWriter_fourcc(*'avc1')
+                out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
+            except Exception:
+                # Fallback to mp4v if avc1 fails
+                logger.warning("avc1 codec not found, falling back to mp4v")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
 
             for frame in frames:
                 out.write(frame)
@@ -188,13 +191,24 @@ class EventPersistenceService:
         # MOCK: Get owner ID (In production this should come from a Camera Service)
         owner_uid = self._get_camera_owner(camera_id)
         
+        # Detection MUST have timestamp - no fallback to server timestamp
+        if "timestamp" not in detection or detection["timestamp"] is None:
+            raise ValueError(f"Detection missing required 'timestamp' field. Detection: {detection}")
+        
+        try:
+            # Convert float timestamp (Unix time) to Firestore-compatible datetime
+            timestamp = datetime.fromtimestamp(detection["timestamp"], tz=timezone.utc)
+            logger.info(f"Using detection timestamp: {timestamp}")
+        except Exception as e:
+            raise ValueError(f"Failed to convert detection timestamp {detection.get('timestamp')}: {e}")
+
         event_data = {
             "userId": owner_uid,
             "cameraId": camera_id,
             "cameraName": self._get_camera_name(camera_id),
             "type": "violence",
             "status": "new",
-            "timestamp": firestore.SERVER_TIMESTAMP,
+            "timestamp": timestamp,
             "videoUrl": video_url or "",  # Firebase URL (may be empty)
             "thumbnailUrl": "", # TODO: Generate thumbnail
             "confidence": detection.get("confidence", 0.0),

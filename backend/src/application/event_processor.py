@@ -91,23 +91,28 @@ class EventProcessor:
             if not camera_id:
                 return
 
-            now = time.time()
+            # Detection MUST have timestamp - no fallback to server time
+            if 'timestamp' not in alert or alert['timestamp'] is None:
+                logger.error(f"[{camera_id}] Alert missing required 'timestamp' field. Alert: {alert}")
+                return
+            
+            detection_timestamp = alert['timestamp']
             
             # Logic: Debounce & Extend
             if camera_id not in self.active_events:
-                # START NEW EVENT
-                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f})")
+                # START NEW EVENT - use detection timestamp
+                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, ts={detection_timestamp})")
                 self.active_events[camera_id] = {
-                    'start_time': now,
-                    'last_seen': now,
+                    'start_time': detection_timestamp,  # Always from detection
+                    'last_seen': detection_timestamp,   # Always from detection, not server time
                     'max_confidence': confidence,
                     'first_alert': alert, # Keep first alert for metadata
                     'frames_temp_paths': [] # Collect all temp paths
                 }
             else:
-                # EXTEND EXISTING EVENT
-                logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f})")
-                self.active_events[camera_id]['last_seen'] = now
+                # EXTEND EXISTING EVENT - update last_seen with detection timestamp
+                logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp})")
+                self.active_events[camera_id]['last_seen'] = detection_timestamp  # Update with detection timestamp
                 self.active_events[camera_id]['max_confidence'] = max(
                     self.active_events[camera_id]['max_confidence'], 
                     confidence
