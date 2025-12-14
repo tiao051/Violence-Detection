@@ -11,7 +11,6 @@ import redis.asyncio as redis
 import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from src.core.config import settings
 from src.core.logger import setup_logging
 from src.infrastructure.rtsp import CameraWorker
@@ -157,12 +156,6 @@ app.include_router(auth_router)
 # Register WebSocket routes
 app.include_router(websocket_router)
 
-# Mount static files for video playback
-import os
-outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-os.makedirs(outputs_dir, exist_ok=True)
-app.mount("/videos", StaticFiles(directory=outputs_dir), name="videos")
-
 
 @app.get("/api/events/{event_id}")
 async def get_event(event_id: str):
@@ -193,12 +186,12 @@ async def lookup_event(camera_id: str, timestamp: float):
     """
     global redis_client
     
-    # FORCE PRINT TO STDOUT (Bypassing Logger)
-    print(f"DEBUG: Lookup request for {camera_id} at {timestamp}", flush=True)
+    # Use logger instead of print
+    logger.info(f"Lookup request for {camera_id} at {timestamp}")
     
     try:
         if not redis_client:
-            print("DEBUG: Redis client is None", flush=True)
+            logger.error("Redis client is None")
             return {"error": "Redis unavailable"}, 503
             
         # Convert ms to seconds
@@ -210,27 +203,27 @@ async def lookup_event(camera_id: str, timestamp: float):
         
         timeline_key = f"events:timeline:{camera_id}"
         
-        print(f"DEBUG: Searching Redis key: {timeline_key} between {min_ts} and {max_ts}", flush=True)
+        logger.info(f"Searching Redis key: {timeline_key} between {min_ts} and {max_ts}")
         
         # zrangebyscore returns list of members (bytes)
         results = await redis_client.zrangebyscore(timeline_key, min_ts, max_ts)
         
-        print(f"DEBUG: Found {len(results)} results in Redis", flush=True)
+        logger.info(f"Found {len(results)} results in Redis")
         
         if results:
             # Return the most recent match in the window
             # results are sorted by score (timestamp), so last one is newest
             data = json.loads(results[-1])
-            print(f"DEBUG: Returning video_url: {data.get('video_url')}", flush=True)
+            logger.info(f"Returning video_url: {data.get('video_url')}")
             # Ensure we return the ID as well so frontend can update if needed
             if "id" not in data:
                 data["id"] = "lookup_found"
             return data
             
-        print("DEBUG: No matching event found", flush=True)
+        logger.info("No matching event found")
         return {"id": "lookup_failed", "video_url": None}
     except Exception as e:
-        print(f"DEBUG: Error looking up event: {e}", flush=True)
+        logger.error(f"Error looking up event: {e}")
         return {"error": str(e)}, 500
 
 

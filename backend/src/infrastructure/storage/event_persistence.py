@@ -105,8 +105,7 @@ class EventPersistenceService:
                 return None
             
             # 4. Save to Firestore
-            # Pass empty string for local paths since we removed local saving
-            event_id = self._save_to_firestore(camera_id, video_url, "", detection, "")
+            event_id = self._save_to_firestore(camera_id, video_url, detection)
             
             logger.info(f"Event saved successfully: {event_id}")
             
@@ -115,7 +114,6 @@ class EventPersistenceService:
             
             return {
                 'id': event_id,
-                'local_video_path': None,
                 'firebase_video_url': video_url
             }
 
@@ -184,7 +182,7 @@ class EventPersistenceService:
             logger.error(f"Failed to upload video: {e}")
             return None
 
-    def _save_to_firestore(self, camera_id: str, video_url: Optional[str], local_video_path: Optional[str], detection: Dict[str, Any], frames_folder_path: Optional[str] = None) -> str:
+    def _save_to_firestore(self, camera_id: str, video_url: Optional[str], detection: Dict[str, Any]) -> str:
         """Save event document to Firestore."""
         
         # MOCK: Get owner ID (In production this should come from a Camera Service)
@@ -198,8 +196,6 @@ class EventPersistenceService:
             "status": "new",
             "timestamp": firestore.SERVER_TIMESTAMP,
             "videoUrl": video_url or "",  # Firebase URL (may be empty)
-            "localVideoPath": local_video_path or "",  # Local path (may be empty)
-            "framesPath": frames_folder_path or "",  # Frames folder path (may be empty)
             "thumbnailUrl": "", # TODO: Generate thumbnail
             "confidence": detection.get("confidence", 0.0),
             "viewed": False

@@ -33,6 +33,7 @@ class EventProcessor:
         # Config
         self.event_timeout_seconds = 5.0  # Wait 5s after last alert to close event
         self.min_event_duration = 1.0     # Ignore blips shorter than 1s
+        self.max_event_duration = 60.0    # Max duration for a single event (chunking)
         self.pre_event_padding = 2.0      # Seconds to include before event
         self.post_event_padding = 2.0     # Seconds to include after event
 
@@ -136,12 +137,16 @@ class EventProcessor:
                 for camera_id in active_cameras:
                     event = self.active_events[camera_id]
                     
-                    # Check timeout (No new alerts for X seconds)
-                    if now - event['last_seen'] > self.event_timeout_seconds:
+                    now = time.time()
+                    duration = now - event['start_time']
+                    is_timeout = (now - event['last_seen'] > self.event_timeout_seconds)
+                    is_max_duration = (duration > self.max_event_duration)
+
+                    # Check timeout (No new alerts for X seconds) or Max Duration
+                    if is_timeout or is_max_duration:
                         # Event finished! Process it.
-                        duration = event['last_seen'] - event['start_time']
-                        
-                        logger.info(f"[{camera_id}] Event finished. Duration: {duration:.1f}s. Saving...")
+                        reason = "Timeout" if is_timeout else "Max Duration"
+                        logger.info(f"[{camera_id}] Event finished ({reason}). Duration: {duration:.1f}s. Saving...")
                         
                         # Use the first alert as template, but update confidence
                         final_alert = event['first_alert'].copy()

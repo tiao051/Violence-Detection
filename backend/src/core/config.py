@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_name: str = os.getenv("APP_NAME", "Violence Detection Backend")
     app_env: str = os.getenv("APP_ENV", "development")
     debug: bool = os.getenv("DEBUG", "False").lower() == "true"
+    log_to_file: bool = os.getenv("LOG_TO_FILE", "False").lower() == "true"
     
     # API
     api_v1_prefix: str = os.getenv("API_V1_PREFIX", "/api/v1")
