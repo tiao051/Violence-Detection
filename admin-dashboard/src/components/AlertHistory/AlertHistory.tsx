@@ -32,9 +32,11 @@ const AlertHistory: React.FC = () => {
   }, [alerts, statusFilter, timeFilter, cameraFilter]);
 
   const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleString('en-US', {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    return new Date(ts).toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      month: '2-digit', day: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
     });
   };
 

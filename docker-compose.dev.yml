@@ -1,10 +1,11 @@
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 version: '3.8'
 
 services:
   backend:
     environment:
       # DEV MODE: Only use 1 camera to save CPU
-      RTSP_CAMERAS: "cam1"
+      RTSP_CAMERAS: '["cam1"]'
       # DEV MODE: Reduce sample rate to 2 FPS
       RTSP_SAMPLE_RATE: "2"
       # DEV MODE: Reduce resolution if possible (requires backend support, but good to have)

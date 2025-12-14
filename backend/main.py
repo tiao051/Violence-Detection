@@ -90,7 +90,15 @@ async def startup(app: FastAPI) -> None:
 
         # Print startup complete message (always shown)
         elapsed = time.time() - startup_time
-        print(f"\n✅ Backend started in {elapsed:.1f}s | Cameras: {len(camera_workers)} | http://localhost:8000/docs\n")
+        
+        if len(settings.rtsp_cameras) == 1 and settings.rtsp_sample_rate <= 2:
+             msg = f"DEV MODE ACTIVE: Reduced load (1 Camera, {settings.rtsp_sample_rate} FPS)"
+             print(f"\n{msg}")
+             logger.info(msg)
+             
+        msg = f"Backend started in {elapsed:.1f}s | Cameras: {len(camera_workers)}"
+        print(f"\n{msg}\n")
+        logger.info(msg)
 
     except Exception as e:
         logger.error(f"Startup error: {str(e)}", exc_info=True)
@@ -116,7 +124,7 @@ async def shutdown() -> None:
         if redis_client:
             await redis_client.close()
 
-        print("🛑 Backend stopped")
+        print("Backend stopped")
 
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}", exc_info=True)

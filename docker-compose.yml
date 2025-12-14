@@ -69,6 +69,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      TZ: Asia/Ho_Chi_Minh
       RTSP_BASE_URL: rtsp://rtsp-server:8554
       RTSP_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
@@ -114,6 +115,7 @@ services:
     env_file:
       - ./ai_service/.env
     environment:
+      TZ: Asia/Ho_Chi_Minh
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_FRAME_TOPIC: frames
       KAFKA_CONSUMER_GROUP: inference
