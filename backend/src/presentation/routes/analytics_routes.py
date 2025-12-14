@@ -36,6 +36,10 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 _model: Optional[InsightsModel] = None
 _model_loaded: bool = False
 
+# Cache for computed results (avoid recalculating on every request)
+_cache: Dict[str, Any] = {}
+_cache_ready: bool = False
+
 def get_model() -> InsightsModel:
     """Get or load the insights model."""
     global _model, _model_loaded
@@ -88,6 +92,34 @@ def get_model() -> InsightsModel:
     return _model
 
 
+def get_cached_results() -> Dict[str, Any]:
+    """Get or compute cached results for all analytics endpoints."""
+    global _cache, _cache_ready
+    
+    if _cache_ready:
+        return _cache
+    
+    print("Pre-computing analytics results (one-time)...")
+    import time
+    start = time.time()
+    
+    model = get_model()
+    
+    # Compute all results once
+    _cache = {
+        "summary": model.get_summary(),
+        "patterns": model.get_patterns(),
+        "rules": model.get_rules(top_n=20),
+        "high_risk": model.get_high_risk_conditions(top_n=10),
+        "full_report": model.get_full_report(),
+    }
+    
+    _cache_ready = True
+    print(f"Analytics cache ready in {time.time() - start:.1f}s")
+    
+    return _cache
+
+
 # Request/Response models
 class PredictRequest(BaseModel):
     hour: int
@@ -112,8 +144,8 @@ class PredictResponse(BaseModel):
 async def get_summary() -> Dict[str, Any]:
     """Get quick summary of insights."""
     try:
-        model = get_model()
-        return model.get_summary()
+        cache = get_cached_results()
+        return cache["summary"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -122,8 +154,8 @@ async def get_summary() -> Dict[str, Any]:
 async def get_patterns() -> List[Dict[str, Any]]:
     """Get K-means cluster patterns."""
     try:
-        model = get_model()
-        return model.get_patterns()
+        cache = get_cached_results()
+        return cache["patterns"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -132,8 +164,9 @@ async def get_patterns() -> List[Dict[str, Any]]:
 async def get_rules(top_n: int = 10) -> List[Dict[str, Any]]:
     """Get FP-Growth association rules."""
     try:
-        model = get_model()
-        return model.get_rules(top_n=top_n)
+        cache = get_cached_results()
+        # Return cached rules, sliced to top_n
+        return cache["rules"][:top_n]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -142,8 +175,8 @@ async def get_rules(top_n: int = 10) -> List[Dict[str, Any]]:
 async def get_high_risk_conditions(top_n: int = 10) -> List[Dict[str, Any]]:
     """Get high risk conditions from Random Forest."""
     try:
-        model = get_model()
-        return model.get_high_risk_conditions(top_n=top_n)
+        cache = get_cached_results()
+        return cache["high_risk"][:top_n]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -168,7 +201,7 @@ async def predict_risk(request: PredictRequest) -> Dict[str, Any]:
 async def get_full_report() -> Dict[str, Any]:
     """Get comprehensive report from all 3 models."""
     try:
-        model = get_model()
-        return model.get_full_report()
+        cache = get_cached_results()
+        return cache["full_report"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

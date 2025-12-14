@@ -22,8 +22,11 @@ msgpack==1.0.7
 opencv-python-headless==4.8.1.78
 numpy==1.26.2
 
-# ML/AI (DEPRECATED - Model inference now runs in separate ai_service)
-# torch, torchvision, onnx, onnxruntime removed - use ai_service instead
+# ML/AI for Analytics Insights
+scikit-learn==1.5.2
+pandas==2.1.3
+mlxtend==0.23.0
+joblib==1.3.2
 
 # Dependency Injection
 dependency-injector==4.41.0
