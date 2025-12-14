@@ -94,6 +94,8 @@ services:
       # Persist logs on host
       - ./backend/logs:/app/logs
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json
+      # Mount ai_service/insights for analytics
+      - ./ai_service:/app/ai_service
       - /app/__pycache__
     depends_on:
       redis:

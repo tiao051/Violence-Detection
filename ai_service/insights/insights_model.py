@@ -216,7 +216,7 @@ class InsightsModel:
         high_risk = self.get_high_risk_conditions(3)
         
         return {
-            "total_events": len(self.events),
+            "total_events": len(self.events) if self.events else getattr(self, '_n_events', 0),
             "patterns_discovered": len(patterns),
             "rules_discovered": len(self.association_model.rules) if self.association_model.rules is not None else 0,
             "prediction_accuracy": round(self.prediction_model.accuracy, 3),
@@ -347,6 +347,7 @@ class InsightsModel:
         instance.is_fitted = True
         instance.fit_time = datetime.fromisoformat(save_data["fit_time"]) if save_data["fit_time"] else None
         instance.events = []  # Events are not saved (too large)
+        instance._n_events = save_data.get("n_events", 0)  # Store count for summary
         
         print(f"Model loaded from: {os.path.abspath(filepath)}")
         print(f"  - Originally trained on {save_data['n_events']} events")
