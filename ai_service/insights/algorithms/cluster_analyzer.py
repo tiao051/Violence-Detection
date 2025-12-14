@@ -326,6 +326,143 @@ class ClusterAnalyzer:
             print(f"   High Severity %: {pattern['high_severity_pct']}%")
         
         print("\n" + "=" * 60)
+    
+    # ==================== HOTSPOT PREDICTION ====================
+    
+    def predict_cluster(self, hour: int, day_of_week: int, camera: str, confidence: float = 0.8) -> Dict[str, Any]:
+        """
+        Predict which cluster a hypothetical event would belong to.
+        
+        Args:
+            hour: Hour of day (0-23)
+            day_of_week: Day of week (0=Monday, 6=Sunday)
+            camera: Camera name
+            confidence: Confidence score (default 0.8)
+            
+        Returns:
+            Dict with cluster_id, cluster_info, and risk_level
+        """
+        self._check_fitted()
+        
+        # Encode camera
+        try:
+            camera_encoded = self.camera_encoder.transform([camera])[0]
+        except ValueError:
+            # Unknown camera, use most common
+            camera_encoded = 0
+        
+        # Build feature vector
+        is_weekend = 1 if day_of_week >= 5 else 0
+        
+        if 6 <= hour < 12:
+            period = 0  # Morning
+        elif 12 <= hour < 18:
+            period = 1  # Afternoon
+        elif 18 <= hour < 22:
+            period = 2  # Evening
+        else:
+            period = 3  # Night
+        
+        features = np.array([[hour, day_of_week, is_weekend, period, camera_encoded, confidence]])
+        features_scaled = self.scaler.transform(features)
+        
+        # Predict cluster
+        cluster_id = self.kmeans.predict(features_scaled)[0]
+        
+        # Get cluster info
+        cluster_info = self._analyze_cluster(cluster_id)
+        cluster_info['description'] = self._generate_description(cluster_info)
+        
+        # Determine risk level
+        high_sev_pct = cluster_info.get('high_severity_pct', 0)
+        if high_sev_pct >= 70:
+            risk_level = "HIGH"
+        elif high_sev_pct >= 40:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+        
+        return {
+            "cluster_id": int(cluster_id),
+            "cluster_info": cluster_info,
+            "risk_level": risk_level,
+            "high_severity_pct": high_sev_pct,
+        }
+    
+    def forecast_next_hours(self, camera: str, current_hour: int, current_day: int, hours_ahead: int = 12) -> List[Dict[str, Any]]:
+        """
+        Forecast risk levels for the next N hours at a specific camera.
+        
+        Args:
+            camera: Camera name
+            current_hour: Current hour (0-23)
+            current_day: Current day of week (0=Monday, 6=Sunday)
+            hours_ahead: Number of hours to forecast (default 12)
+            
+        Returns:
+            List of hourly forecasts with cluster and risk info
+        """
+        self._check_fitted()
+        
+        forecasts = []
+        
+        for h in range(hours_ahead):
+            # Calculate future hour and day
+            future_hour = (current_hour + h) % 24
+            # Day changes when we pass midnight
+            days_passed = (current_hour + h) // 24
+            future_day = (current_day + days_passed) % 7
+            
+            # Predict for this hour
+            prediction = self.predict_cluster(future_hour, future_day, camera)
+            
+            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            
+            forecasts.append({
+                "hours_from_now": h,
+                "hour": future_hour,
+                "day": day_names[future_day],
+                "is_weekend": future_day >= 5,
+                "cluster_id": prediction["cluster_id"],
+                "risk_level": prediction["risk_level"],
+                "high_severity_pct": prediction["high_severity_pct"],
+            })
+        
+        return forecasts
+    
+    def get_forecast_summary(self, camera: str, current_hour: int, current_day: int, hours_ahead: int = 12) -> Dict[str, Any]:
+        """
+        Get forecast summary with peak risk times.
+        
+        Returns formatted forecast with warnings and recommendations.
+        """
+        forecasts = self.forecast_next_hours(camera, current_hour, current_day, hours_ahead)
+        
+        # Find high risk windows
+        high_risk_hours = [f for f in forecasts if f["risk_level"] == "HIGH"]
+        peak_hour = max(forecasts, key=lambda x: x["high_severity_pct"]) if forecasts else None
+        
+        # Calculate risk by time window
+        risk_by_window = {}
+        for f in forecasts:
+            window = f"hour_{f['hours_from_now']}"
+            risk_by_window[window] = f["risk_level"]
+        
+        return {
+            "camera": camera,
+            "forecast_hours": hours_ahead,
+            "current": {
+                "hour": current_hour,
+                "day_of_week": current_day,
+            },
+            "forecasts": forecasts,
+            "summary": {
+                "high_risk_count": len(high_risk_hours),
+                "peak_hour": peak_hour,
+                "next_high_risk": high_risk_hours[0] if high_risk_hours else None,
+            },
+            "warning": f"⚠️ {len(high_risk_hours)} high-risk hours in next {hours_ahead}h" if high_risk_hours else "✅ No high-risk periods detected",
+        }
 
 
 # Quick test

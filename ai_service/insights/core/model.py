@@ -173,6 +173,31 @@ class InsightsModel:
         self._check_fitted()
         return self.prediction_model.get_high_risk_conditions(top_n=top_n)
     
+    # ==================== Hotspot Forecast ====================
+    
+    def get_forecast(self, camera: str, hours_ahead: int = 12) -> Dict[str, Any]:
+        """
+        Get hotspot forecast for a camera.
+        
+        Uses K-means clusters to predict risk levels for the next N hours.
+        
+        Args:
+            camera: Camera name
+            hours_ahead: Number of hours to forecast (default 12)
+            
+        Returns:
+            Forecast with hourly predictions and summary
+        """
+        self._check_fitted()
+        from datetime import datetime
+        now = datetime.now()
+        return self.cluster_model.get_forecast_summary(
+            camera=camera,
+            current_hour=now.hour,
+            current_day=now.weekday(),
+            hours_ahead=hours_ahead
+        )
+    
     # ==================== Combined Reports ====================
     
     def get_full_report(self) -> Dict[str, Any]:

@@ -241,3 +241,28 @@ async def get_full_report() -> Dict[str, Any]:
         return cache["full_report"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/forecast/{camera}")
+async def get_forecast(camera: str, hours: int = 12) -> Dict[str, Any]:
+    """
+    Get hotspot forecast for a specific camera.
+    
+    Uses K-means clusters to predict risk levels for the next N hours.
+    
+    Args:
+        camera: Camera name (URL encoded)
+        hours: Number of hours to forecast (default 12, max 24)
+        
+    Returns:
+        Forecast with hourly predictions, peak times, and warnings
+    """
+    try:
+        model = get_model()
+        hours = min(hours, 24)  # Cap at 24 hours
+        return model.get_forecast(camera=camera, hours_ahead=hours)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
