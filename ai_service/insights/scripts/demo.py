@@ -8,7 +8,7 @@ Run: python ai_service/insights/demo.py
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from insights.data import ViolenceEventGenerator
 from insights.algorithms import ClusterAnalyzer, AssociationRuleAnalyzer, RiskPredictor

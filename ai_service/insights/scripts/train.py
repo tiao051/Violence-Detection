@@ -10,7 +10,7 @@ import sys
 import os
 
 # Add ai_service to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from insights import InsightsModel
 
@@ -19,8 +19,8 @@ def main():
     print("Pre-training Analytics Model")
     print("=" * 60)
     
-    # Paths
-    data_dir = os.path.dirname(os.path.abspath(__file__))
+    # Paths - data folder is at insights/data/
+    data_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(data_dir, 'data')
     model_path = os.path.join(data_dir, 'trained_model.pkl')
     csv_path = os.path.join(data_dir, 'analytics_events.csv')
