@@ -32,9 +32,14 @@ const AlertHistory: React.FC = () => {
   }, [alerts, statusFilter, timeFilter, cameraFilter]);
 
   const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleString('en-US', {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    // Backend provides timestamp in seconds (Unix time)
+    // Convert to milliseconds for JavaScript Date
+    const timestampMs = ts * 1000;
+    return new Date(timestampMs).toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      month: '2-digit', day: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
     });
   };
 
@@ -48,13 +53,16 @@ const AlertHistory: React.FC = () => {
     
     try {
       // Use lookup endpoint with camera_id and timestamp
-      // This bridges the gap between Frontend ID and Backend ID
-      const response = await fetch(
-        `http://localhost:8000/api/events/lookup?camera_id=${selectedAlert.camera_id}&timestamp=${selectedAlert.timestamp}`
-      );
+      // Frontend timestamp is in seconds, but backend expects milliseconds
+      const timestampMs = selectedAlert.timestamp * 1000;
+      const url = `http://localhost:8000/api/events/lookup?camera_id=${selectedAlert.camera_id}&timestamp=${timestampMs}`;
+      console.log('Calling lookup endpoint:', url);
+      
+      const response = await fetch(url);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Lookup response:', data);
         if (data.video_url) {
           const updatedAlert = { ...selectedAlert, video_url: data.video_url };
           setSelectedAlert(updatedAlert);
@@ -182,7 +190,7 @@ const AlertHistory: React.FC = () => {
                     <video 
                       controls 
                       autoPlay 
-                      src={`http://localhost:8000${selectedAlert.video_url}`}
+                      src={selectedAlert.video_url.startsWith('http') ? selectedAlert.video_url : `http://localhost:8000${selectedAlert.video_url}`}
                       className="detail-video"
                     />
                   </div>

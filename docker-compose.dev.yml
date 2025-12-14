@@ -1,0 +1,33 @@
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+version: '3.8'
+
+services:
+  backend:
+    environment:
+      # DEV MODE: Only use 1 camera to save CPU
+      RTSP_CAMERAS: '["cam1"]'
+      # DEV MODE: Reduce sample rate to 2 FPS
+      RTSP_SAMPLE_RATE: "2"
+      # DEV MODE: Reduce resolution if possible (requires backend support, but good to have)
+      RTSP_FRAME_WIDTH: "640"
+      RTSP_FRAME_HEIGHT: "480"
+
+  inference:
+    environment:
+      # DEV MODE: Batch size 1 for lower latency with single camera
+      INFERENCE_BATCH_SIZE: "1"
+      # DEV MODE: Longer timeout is fine
+      INFERENCE_BATCH_TIMEOUT_MS: "100"
+
+  # Disable extra cameras in dev mode to save CPU
+  camera-2:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"
+
+  camera-3:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"
+
+  camera-4:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"

@@ -41,7 +41,8 @@ def setup_logging():
     os.makedirs("logs", exist_ok=True)
     
     # Check if verbose logging is enabled
-    verbose = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
+    # Default to INFO to ensure we see detections
+    verbose = os.getenv('VERBOSE_LOGGING', 'true').lower() == 'true'
     log_level = logging.INFO if verbose else logging.WARNING
     
     logger = logging.getLogger()
@@ -108,7 +109,7 @@ async def main():
         
         # Print startup complete (always shown)
         elapsed = time.time() - start_time
-        print(f"\n✅ AI Service started in {elapsed:.1f}s | Device: {inference_device} | Threshold: {confidence_threshold}\n")
+        print(f"\nAI Service started in {elapsed:.1f}s | Device: {inference_device} | Threshold: {confidence_threshold}\n")
         
         # Keep running indefinitely
         # Will be stopped by signal (SIGTERM/SIGINT from Docker or Ctrl+C)
@@ -116,7 +117,7 @@ async def main():
             await asyncio.sleep(1)
     
     except KeyboardInterrupt:
-        print("\n🛑 AI Service stopped")
+        print("\nAI Service stopped")
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         raise
