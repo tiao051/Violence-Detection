@@ -92,9 +92,9 @@ def main():
     # Example predictions
     print("\nExample Predictions:")
     test_cases = [
-        {"hour": 20, "day": "Saturday", "camera": "Parking Lot"},
-        {"hour": 8, "day": "Monday", "camera": "Front Gate"},
-        {"hour": 23, "day": "Friday", "camera": "Back Yard"},
+        {"hour": 20, "day": "Saturday", "camera": "Ngã ba Âu Cơ"},
+        {"hour": 8, "day": "Monday", "camera": "Ngã tư Lê Trọng Tấn"},
+        {"hour": 23, "day": "Friday", "camera": "Ngã tư Cộng Hòa"},
     ]
     for case in test_cases:
         result = predictor.predict(**case)

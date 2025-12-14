@@ -23,12 +23,12 @@ def main():
     data_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(data_dir, 'data')
     model_path = os.path.join(data_dir, 'trained_model.pkl')
-    csv_path = os.path.join(data_dir, 'violence_events_20k.csv')
+    csv_path = os.path.join(data_dir, 'analytics_events.csv')
     
     # Check if CSV exists
     if not os.path.exists(csv_path):
         print(f"ERROR: CSV file not found: {csv_path}")
-        print("Run generate_large_dataset.py first!")
+        print("Run generate_analytics_dataset.py first!")
         sys.exit(1)
     
     # Train and save

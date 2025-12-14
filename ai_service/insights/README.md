@@ -12,18 +12,18 @@ model = InsightsModel()
 model.fit(events)  # events: List[ViolenceEvent]
 
 # Or train with mock data (for testing)
-model.fit_from_mock(n_events=500, days=60)
+model.fit_from_mock(n_events=20000, days=90)
 
 # Get insights
 patterns = model.get_patterns()           # K-means clusters
 rules = model.get_rules()                 # Association rules
-prediction = model.predict(hour=20, day="Saturday", camera="Parking Lot")
+prediction = model.predict(hour=20, day="Saturday", camera="Ngã ba Âu Cơ")
 
 # Save model (no need to retrain)
-model.save("insights_model.pkl")
+model.save("trained_model.pkl")
 
 # Load and use immediately
-model = InsightsModel.load("insights_model.pkl")
+model = InsightsModel.load("trained_model.pkl")
 ```
 
 ## ML Models
@@ -32,7 +32,7 @@ model = InsightsModel.load("insights_model.pkl")
 
 - **Algorithm**: K-means (scikit-learn)
 - **Purpose**: Automatically group similar events into patterns
-- **Output**: "evening/night hours, mostly weekends, near Parking Lot, HIGH severity"
+- **Output**: "evening/night hours, mostly weekends, near Ngã ba Âu Cơ, HIGH severity"
 
 ### 2. FP-Growth Association Rules (AssociationRuleAnalyzer)
 
@@ -44,7 +44,7 @@ model = InsightsModel.load("insights_model.pkl")
 
 - **Algorithm**: Random Forest Classifier (scikit-learn)
 - **Purpose**: Predict risk level for specific conditions
-- **Output**: "Saturday 20:00 at Parking Lot -> High risk (+27% vs average)"
+- **Output**: "Saturday 20:00 at Ngã ba Âu Cơ -> High risk (+27% vs average)"
 
 ## Module Structure
 
@@ -52,16 +52,34 @@ model = InsightsModel.load("insights_model.pkl")
 insights/
 ├── __init__.py           # Exports
 ├── insights_model.py     # Unified model (main entry point)
-├── README.md             # Documentation
-├── demo.py               # Demo script
-├── data/
-│   ├── event_schema.py   # ViolenceEvent schema
-│   └── mock_generator.py # Mock data generator
-└── models/
-    ├── cluster_analyzer.py      # K-means
-    ├── association_analyzer.py  # FP-Growth
-    └── risk_predictor.py        # Random Forest
+├── README.md             # This file
+│
+├── data/                 # Data schema & generation
+│   ├── event_schema.py   # ViolenceEvent class
+│   ├── mock_generator.py # Mock data generator
+│   └── analytics_events.csv  # Generated dataset
+│
+├── models/               # ML algorithms
+│   ├── cluster_analyzer.py      # K-means
+│   ├── association_analyzer.py  # FP-Growth
+│   └── risk_predictor.py        # Random Forest
+│
+├── demo.py                       # Demo script
+├── train_model.py                # Training script
+├── generate_analytics_dataset.py # CSV generator
+├── hdfs_upload.py                # HDFS upload script
+└── kafka_analytics_producer.py   # Kafka producer
 ```
+
+## Camera Locations (Quận Tân Phú)
+
+| Camera ID | Name                | Description                       |
+| --------- | ------------------- | --------------------------------- |
+| cam1      | Ngã tư Lê Trọng Tấn | Lê Trọng Tấn giao Tân Kỳ Tân Quý  |
+| cam2      | Ngã tư Cộng Hòa     | Tân Kỳ Tân Quý giao Cộng Hòa      |
+| cam3      | Ngã ba Âu Cơ        | Lũy Bán Bích giao Âu Cơ (Hotspot) |
+| cam4      | Ngã tư Hòa Bình     | Hòa Bình giao Lạc Long Quân       |
+| cam5      | Ngã tư Tân Sơn Nhì  | Tân Sơn Nhì giao Tây Thạnh        |
 
 ## Dependencies
 
@@ -71,26 +89,6 @@ pandas
 scikit-learn
 mlxtend
 joblib
-```
-
-## Usage with Real Data from Firestore
-
-```python
-from ai_service.insights import InsightsModel
-from ai_service.insights.data import ViolenceEvent
-
-# Convert Firestore documents to ViolenceEvent
-events = []
-for doc in firestore_docs:
-    event = ViolenceEvent.from_firestore(doc.to_dict(), doc.id)
-    events.append(event)
-
-# Train model
-model = InsightsModel()
-model.fit(events)
-
-# Get full report
-report = model.get_full_report()
 ```
 
 ## Demo
