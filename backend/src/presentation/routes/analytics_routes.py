@@ -68,10 +68,8 @@ def get_model() -> InsightsModel:
     if os.path.exists(model_path):
         print(f"Loading pre-trained model from {model_path}")
         _model = InsightsModel.load(model_path)
-    else:
-        if not os.path.exists(csv_path):
-            raise FileNotFoundError(f"No training data found at {csv_path}")
-        
+    elif os.path.exists(csv_path):
+        # Train from CSV if available
         print(f"Training model from {csv_path} (this may take 1-2 minutes)...")
         df = pd.read_csv(csv_path)
         
@@ -83,6 +81,15 @@ def get_model() -> InsightsModel:
         
         _model = InsightsModel()
         _model.fit(events)
+        
+        # Save for next time
+        _model.save(model_path)
+        print(f"Model saved to {model_path}")
+    else:
+        # No pkl, no csv - generate mock data automatically
+        print("No training data found. Generating mock data (20,000 events)...")
+        _model = InsightsModel()
+        _model.fit_from_mock(n_events=20000, days=90)
         
         # Save for next time
         _model.save(model_path)
