@@ -18,3 +18,16 @@ services:
       INFERENCE_BATCH_SIZE: "1"
       # DEV MODE: Longer timeout is fine
       INFERENCE_BATCH_TIMEOUT_MS: "100"
+
+  # Disable extra cameras in dev mode to save CPU
+  camera-2:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"
+
+  camera-3:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"
+
+  camera-4:
+    entrypoint: ["echo", "Disabled in dev mode"]
+    restart: "no"

@@ -99,33 +99,24 @@ class EventPersistenceService:
             return None
 
         try:
-            # 3. Save to local disk
-            local_video_path = self._save_video_locally(temp_video_path, camera_id)
-            if not local_video_path:
-                logger.warning("Failed to save video locally, continuing with Firebase only")
-            
-            # 4. Save batch frames to local disk (collect from all temp paths)
-            frames_folder_path = None
-            if frames_temp_paths:
-                logger.info(f"Saving frames from {len(frames_temp_paths)} batches...")
-                frames_folder_path = self._save_batch_frames_multi(frames_temp_paths, camera_id, local_video_path)
-            
-            # 5. Upload to Firebase Storage
+            # 3. Upload to Firebase Storage
             video_url = self._upload_video(temp_video_path, camera_id)
             if not video_url:
-                logger.warning("Failed to upload to Firebase, continuing with local copy only")
+                logger.error("Failed to upload to Firebase")
+                return None
             
-            # 6. Save to Firestore with both paths
-            event_id = self._save_to_firestore(camera_id, video_url, local_video_path, detection, frames_folder_path)
+            # 4. Save to Firestore
+            # Pass empty string for local paths since we removed local saving
+            event_id = self._save_to_firestore(camera_id, video_url, "", detection, "")
             
             logger.info(f"Event saved successfully: {event_id}")
             
-            # 7. Send push notification to user
+            # 5. Send push notification to user
             await self._send_push_notification(camera_id, event_id, detection)
             
             return {
                 'id': event_id,
-                'local_video_path': local_video_path,
+                'local_video_path': None,
                 'firebase_video_url': video_url
             }
 

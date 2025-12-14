@@ -127,17 +127,31 @@ class InferenceConsumer:
     async def start(self) -> None:
         """Start consuming from Kafka."""
         try:
-            # Connect to Kafka
-            self.consumer = AIOKafkaConsumer(
-                self.kafka_topic,
-                bootstrap_servers=self.kafka_bootstrap_servers,
-                group_id=self.kafka_group_id,
-                auto_offset_reset='latest',
-                enable_auto_commit=True,
-                value_deserializer=lambda m: m,  # Raw bytes for MessagePack binary format
-                key_deserializer=lambda k: k.decode('utf-8') if k else None,
-            )
-            await self.consumer.start()
+            # Connect to Kafka with retry logic
+            retry_count = 0
+            max_retries = 10
+            while retry_count < max_retries:
+                try:
+                    self.consumer = AIOKafkaConsumer(
+                        self.kafka_topic,
+                        bootstrap_servers=self.kafka_bootstrap_servers,
+                        group_id=self.kafka_group_id,
+                        auto_offset_reset='latest',
+                        enable_auto_commit=True,
+                        value_deserializer=lambda m: m,  # Raw bytes for MessagePack binary format
+                        key_deserializer=lambda k: k.decode('utf-8') if k else None,
+                        retry_backoff_ms=1000,
+                        request_timeout_ms=10000,
+                    )
+                    await self.consumer.start()
+                    logger.info("Successfully connected to Kafka")
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"Failed to connect to Kafka (attempt {retry_count}/{max_retries}): {e}")
+                    if retry_count == max_retries:
+                        raise
+                    await asyncio.sleep(2)
             
             # Connect to Redis
             self.redis_client = await redis.from_url(self.redis_url)

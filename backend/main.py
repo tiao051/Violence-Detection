@@ -186,15 +186,19 @@ async def get_event(event_id: str):
 
 
 @app.get("/api/events/lookup")
-async def lookup_event(camera_id: str, timestamp: int):
+async def lookup_event(camera_id: str, timestamp: float):
     """
     Lookup event by camera_id and timestamp (ms).
     Useful when frontend ID differs from backend ID.
     """
     global redis_client
     
+    # FORCE PRINT TO STDOUT (Bypassing Logger)
+    print(f"DEBUG: Lookup request for {camera_id} at {timestamp}", flush=True)
+    
     try:
         if not redis_client:
+            print("DEBUG: Redis client is None", flush=True)
             return {"error": "Redis unavailable"}, 503
             
         # Convert ms to seconds
@@ -205,18 +209,28 @@ async def lookup_event(camera_id: str, timestamp: int):
         max_ts = ts_sec + 60
         
         timeline_key = f"events:timeline:{camera_id}"
+        
+        print(f"DEBUG: Searching Redis key: {timeline_key} between {min_ts} and {max_ts}", flush=True)
+        
         # zrangebyscore returns list of members (bytes)
         results = await redis_client.zrangebyscore(timeline_key, min_ts, max_ts)
+        
+        print(f"DEBUG: Found {len(results)} results in Redis", flush=True)
         
         if results:
             # Return the most recent match in the window
             # results are sorted by score (timestamp), so last one is newest
             data = json.loads(results[-1])
+            print(f"DEBUG: Returning video_url: {data.get('video_url')}", flush=True)
+            # Ensure we return the ID as well so frontend can update if needed
+            if "id" not in data:
+                data["id"] = "lookup_found"
             return data
             
-        return {"video_url": None}
+        print("DEBUG: No matching event found", flush=True)
+        return {"id": "lookup_failed", "video_url": None}
     except Exception as e:
-        logger.error(f"Error looking up event: {e}")
+        print(f"DEBUG: Error looking up event: {e}", flush=True)
         return {"error": str(e)}, 500
 
 

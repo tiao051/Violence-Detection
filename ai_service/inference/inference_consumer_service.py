@@ -41,7 +41,8 @@ def setup_logging():
     os.makedirs("logs", exist_ok=True)
     
     # Check if verbose logging is enabled
-    verbose = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
+    # Default to INFO to ensure we see detections
+    verbose = os.getenv('VERBOSE_LOGGING', 'true').lower() == 'true'
     log_level = logging.INFO if verbose else logging.WARNING
     
     logger = logging.getLogger()
