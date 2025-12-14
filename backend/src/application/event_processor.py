@@ -164,18 +164,13 @@ class EventProcessor:
                         
                         if result:
                             event_id = result['id']
-                            local_path = result.get('local_video_path')
+                            # Use Firebase URL instead of local path
+                            video_url = result.get('firebase_video_url')
                             logger.info(f"[{camera_id}] Event saved successfully: {event_id}")
 
                             # Publish "Event Saved" message to update frontend
-                            if local_path:
-                                # Convert local path to relative URL
-                                # Path is like .../backend/outputs/cam1/violence_...mp4
-                                # We want /videos/cam1/violence_...mp4
+                            if video_url:
                                 try:
-                                    filename = os.path.basename(local_path)
-                                    video_url = f"/videos/{camera_id}/{filename}"
-                                    
                                     # Store event data in Redis for quick lookup
                                     event_data = {
                                         "id": event_id,
