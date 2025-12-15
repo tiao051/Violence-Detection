@@ -21,8 +21,8 @@ class AnalyticsConsumer:
                  bootstrap_servers: str = None,
                  topic: str = None,
                  hdfs_url: str = None,
-                 batch_size: int = 100,
-                 batch_timeout: int = 60):
+                 batch_size: int = 5000,
+                 batch_timeout: int = 300):
         self.bootstrap_servers = bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
         if not self.bootstrap_servers:
             raise ValueError("KAFKA_BOOTSTRAP_SERVERS is required")
@@ -48,7 +48,8 @@ class AnalyticsConsumer:
             self.topic,
             bootstrap_servers=self.bootstrap_servers,
             group_id="hdfs-archiver",
-            auto_offset_reset='latest',
+            auto_offset_reset='earliest',
+            enable_auto_commit=False,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
         )
         await self.consumer.start()
@@ -66,7 +67,8 @@ class AnalyticsConsumer:
                 
                 if len(self.buffer) >= self.batch_size or \
                    (time.time() - self.last_flush_time > self.batch_timeout and self.buffer):
-                    await self.flush_to_hdfs()
+                    if await self.flush_to_hdfs():
+                        await self.consumer.commit()
                     
         except Exception as e:
             print(f"Error consuming: {e}")
@@ -78,9 +80,9 @@ class AnalyticsConsumer:
         if self.consumer:
             await self.consumer.stop()
             
-    async def flush_to_hdfs(self):
+    async def flush_to_hdfs(self) -> bool:
         if not self.buffer:
-            return
+            return True
             
         try:
             df = pd.DataFrame(self.buffer)
@@ -95,11 +97,14 @@ class AnalyticsConsumer:
                 print(f"Uploaded {len(self.buffer)} events to {hdfs_path}")
                 self.buffer = []
                 self.last_flush_time = time.time()
+                return True
             else:
                 print("Failed to upload to HDFS, keeping buffer")
+                return False
                 
         except Exception as e:
             print(f"Error flushing to HDFS: {e}")
+            return False
 
     def _upload_to_hdfs(self, content: bytes, hdfs_path: str) -> bool:
         try:
