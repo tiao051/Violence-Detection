@@ -1,6 +1,5 @@
-"""Data loading and generation utilities."""
+"""Data generation module."""
 
-from .mock_generator import ViolenceEventGenerator
-from .event_schema import ViolenceEvent
+from .generator import ViolenceEventGenerator
 
-__all__ = ["ViolenceEventGenerator", "ViolenceEvent"]
+__all__ = ["ViolenceEventGenerator"]

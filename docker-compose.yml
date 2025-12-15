@@ -242,9 +242,49 @@ services:
     networks:
       - app-network
 
+  # ==================== HDFS (Hadoop Distributed File System) ====================
+  # Namenode - Master node that manages file system namespace
+  hdfs-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-namenode
+    environment:
+      - CLUSTER_NAME=analytics-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=1
+    volumes:
+      - hdfs_namenode:/hadoop/dfs/name
+    ports:
+      - "9870:9870"  # Web UI
+      - "9000:9000"  # HDFS port
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Datanode - Worker node that stores actual data
+  hdfs-datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=1
+    volumes:
+      - hdfs_datanode:/hadoop/dfs/data
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
 
 volumes:
   redis_data:
+  hdfs_namenode:
+  hdfs_datanode:

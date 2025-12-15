@@ -26,8 +26,7 @@ for path in ai_service_paths:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
 
-from insights import InsightsModel
-from insights.data import ViolenceEvent
+from insights import InsightsModel, ViolenceEvent
 import pandas as pd
 import threading
 
@@ -65,7 +64,7 @@ def get_model() -> InsightsModel:
         raise FileNotFoundError("Could not find ai_service/insights/data directory")
     
     model_path = os.path.join(data_dir, 'trained_model.pkl')
-    csv_path = os.path.join(data_dir, 'violence_events_20k.csv')
+    csv_path = os.path.join(data_dir, 'analytics_events.csv')
     
     if os.path.exists(model_path):
         print(f"Loading pre-trained model from {model_path}")
@@ -78,7 +77,7 @@ def get_model() -> InsightsModel:
         # Convert DataFrame rows to ViolenceEvent objects
         events = []
         for _, row in df.iterrows():
-            event = ViolenceEvent.from_dict(row.to_dict(), event_id=row.get('event_id', ''))
+            event = ViolenceEvent.from_dict(row.to_dict())
             events.append(event)
         
         _model = InsightsModel()
@@ -88,12 +87,33 @@ def get_model() -> InsightsModel:
         _model.save(model_path)
         print(f"Model saved to {model_path}")
     else:
-        # No pkl, no csv - generate mock data automatically
-        print("No training data found. Generating mock data (20,000 events)...")
-        _model = InsightsModel()
-        _model.fit_from_mock(n_events=20000, days=90)
+        # No pkl, no csv - generate CSV first then train
+        print("No training data found. Generating analytics_events.csv (20,000 events)...")
         
-        # Save for next time
+        from insights.data import ViolenceEventGenerator
+        from datetime import datetime, timedelta
+        
+        generator = ViolenceEventGenerator(seed=42)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=90)
+        
+        events = generator.generate_mixed(
+            n_events=20000,
+            violence_ratio=0.3,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        # Save CSV
+        df = generator.to_dataframe(events)
+        df.to_csv(csv_path, index=False)
+        print(f"Generated CSV saved to {csv_path}")
+        
+        # Train model
+        _model = InsightsModel()
+        _model.fit(events)
+        
+        # Save model
         _model.save(model_path)
         print(f"Model saved to {model_path}")
     
@@ -221,3 +241,28 @@ async def get_full_report() -> Dict[str, Any]:
         return cache["full_report"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/forecast/{camera}")
+async def get_forecast(camera: str, hours: int = 12) -> Dict[str, Any]:
+    """
+    Get hotspot forecast for a specific camera.
+    
+    Uses K-means clusters to predict risk levels for the next N hours.
+    
+    Args:
+        camera: Camera name (URL encoded)
+        hours: Number of hours to forecast (default 12, max 24)
+        
+    Returns:
+        Forecast with hourly predictions, peak times, and warnings
+    """
+    try:
+        model = get_model()
+        hours = min(hours, 24)  # Cap at 24 hours
+        return model.get_forecast(camera=camera, hours_ahead=hours)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
