@@ -1,60 +1,8 @@
 """
-Risk Prediction Model - Random Forest for Violence Risk Assessment
+Random Forest for Violence Risk Level Prediction.
 
-================================================================================
-WHAT IS RANDOM FOREST?
-================================================================================
-Random Forest is a supervised machine learning algorithm that builds multiple
-decision trees and combines their predictions (ensemble learning). It's called
-"forest" because it creates many trees, and "random" because each tree is trained
-on a random subset of data and features.
-
-HOW IT WORKS (simplified):
-1. Create N decision trees (we use 100 trees)
-2. Each tree is trained on a random sample of the data (with replacement)
-3. Each tree also uses a random subset of features at each split
-4. For prediction, each tree "votes" and the majority vote wins
-5. We also get probability estimates based on voting percentages
-
-WHY RANDOM FOREST FOR RISK PREDICTION?
-- Robust: Multiple trees reduce overfitting
-- Handles non-linear relationships well
-- Works with both categorical and numerical features
-- Provides feature importance (which factors matter most)
-- Returns probability estimates (not just class labels)
-
-WHAT ARE WE PREDICTING?
-- Target: Severity level (High / Medium / Low)
-- Given: Hour, Day of week, Camera location
-- Output: Predicted severity + probability + comparison vs average
-
-FEATURES USED:
-- Hour (0-23): Time of day
-- Day of week (0-6): Which day (Monday=0, Sunday=6)
-- Is weekend (0/1): Weekend or weekday
-- Time period (encoded): Morning/Afternoon/Evening/Night
-- Camera (encoded): Location of the camera
-
-EXAMPLE OUTPUT:
-  "Saturday 20:00 at Parking Lot → High risk (+27% vs average)"
-  This means:
-  - The model predicts HIGH severity
-  - The probability is 27% HIGHER than the baseline average
-
-KEY METRICS:
-- Accuracy: How often the model predicts correctly (e.g., 65%)
-- Feature Importance: Which features matter most for prediction
-  - Higher importance = feature is more predictive
-
-PARAMETERS:
-- n_estimators: Number of trees (more trees = more stable but slower)
-- max_depth: Maximum depth of each tree (deeper = more complex patterns)
-
-TECHNICAL NOTES:
-- Uses scikit-learn's RandomForestClassifier
-- Uses stratified train/test split (preserves class distribution)
-- LabelEncoder for categorical features (day, camera, period)
-================================================================================
+Predicts severity level (High/Medium/Low) given temporal/spatial conditions.
+Returns risk level, probability, and comparison vs baseline distribution.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -77,20 +25,14 @@ from sklearn.metrics import classification_report, accuracy_score
 
 class RiskPredictor:
     """
-    Random Forest model to predict violence risk levels.
+    Random Forest model for violence risk level prediction.
     
-    Given conditions (hour, day, camera), predicts:
-    - Risk level (High/Medium/Low)
-    - Probability of each level
-    - Comparison vs baseline (e.g., "+25% higher than average")
+    Given conditions (hour, day, camera), predicts severity and probability.
     
     Example:
-        >>> predictor = RiskPredictor()
-        >>> predictor.fit(events)
-        >>> 
-        >>> # Predict risk
-        >>> result = predictor.predict(hour=20, day="Saturday", camera="Parking Lot")
-        >>> print(f"Risk: {result['risk_level']} ({result['change_vs_avg']})")
+        predictor = RiskPredictor()
+        predictor.fit(events)
+        result = predictor.predict(hour=20, day="Saturday", camera="Parking Lot")
     """
     
     DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -130,28 +72,13 @@ class RiskPredictor:
         self.accuracy: float = 0.0
         
     def _prepare_features(self, events: List[ViolenceEvent]) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Prepare feature matrix and labels from events.
-        
-        Features:
-        - hour (0-23)
-        - day_of_week_encoded (0-6)
-        - is_weekend (0/1)
-        - time_period_encoded (0-3)
-        - camera_encoded (0-n)
-        
-        Labels:
-        - severity (Low/Medium/High)
-        """
-        # Collect unique values
+        """Prepare feature matrix and labels from events."""
         self.cameras = list(set(e.camera_name for e in events))
         
-        # Fit encoders
         self.camera_encoder.fit(self.cameras)
         self.day_encoder.fit(self.DAYS)
         self.period_encoder.fit(self.PERIODS)
         
-        # Build feature matrix
         X = []
         y = []
         
@@ -182,7 +109,6 @@ class RiskPredictor:
         if len(events) < 50:
             raise ValueError("Need at least 50 events for training")
         
-        # Calculate baseline probabilities
         severities = [e.severity for e in events]
         self.severity_counts = dict(Counter(severities))
         total = len(severities)
@@ -190,15 +116,11 @@ class RiskPredictor:
             sev: count / total for sev, count in self.severity_counts.items()
         }
         
-        # Prepare data
         X, y = self._prepare_features(events)
-        
-        # Split data
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=self.random_state, stratify=y
         )
         
-        # Train model
         self.model = RandomForestClassifier(
             n_estimators=self.n_estimators,
             max_depth=self.max_depth,
@@ -207,7 +129,6 @@ class RiskPredictor:
         )
         self.model.fit(X_train, y_train)
         
-        # Evaluate
         y_pred = self.model.predict(X_test)
         self.accuracy = accuracy_score(y_test, y_pred)
         
@@ -249,13 +170,11 @@ class RiskPredictor:
         """
         self._check_fitted()
         
-        # Validate inputs
         if day not in self.DAYS:
             raise ValueError(f"Invalid day: {day}. Must be one of {self.DAYS}")
         if camera not in self.cameras:
             raise ValueError(f"Unknown camera: {camera}. Known: {self.cameras}")
         
-        # Prepare features
         day_of_week = self.DAYS.index(day)
         is_weekend = 1 if day_of_week >= 5 else 0
         time_period = self._get_time_period(hour)
@@ -268,16 +187,13 @@ class RiskPredictor:
             self.camera_encoder.transform([camera])[0],
         ]])
         
-        # Predict
         risk_level = self.model.predict(features)[0]
         probabilities = self.model.predict_proba(features)[0]
         
-        # Create probability dict
         prob_dict = {}
         for i, cls in enumerate(self.model.classes_):
             prob_dict[cls] = round(probabilities[i], 3)
         
-        # Calculate change vs baseline
         baseline_prob = self.baseline_probs.get(risk_level, 0)
         predicted_prob = prob_dict.get(risk_level, 0)
         
@@ -286,7 +202,6 @@ class RiskPredictor:
         else:
             change_pct = 0
         
-        # Format change string
         if change_pct > 0:
             change_str = f"+{change_pct:.0f}% vs average"
         elif change_pct < 0:
@@ -396,74 +311,3 @@ class RiskPredictor:
             "high_risk_conditions": self.get_high_risk_conditions(5),
         }
     
-    def print_report(self) -> None:
-        """Print human-readable model report."""
-        self._check_fitted()
-        
-        summary = self.get_summary()
-        
-        print("\n" + "=" * 70)
-        print("  RISK PREDICTION MODEL REPORT (Random Forest)")
-        print("=" * 70)
-        
-        print(f"\nModel: {summary['model']}")
-        print(f"Accuracy: {summary['accuracy']:.1%}")
-        print(f"Trees: {summary['parameters']['n_estimators']}")
-        print(f"Max Depth: {summary['parameters']['max_depth']}")
-        
-        print("\n" + "-" * 70)
-        print("BASELINE SEVERITY DISTRIBUTION:")
-        print("-" * 70)
-        for sev, prob in summary['baseline_probabilities'].items():
-            print(f"   {sev}: {prob:.1%}")
-        
-        print("\n" + "-" * 70)
-        print("FEATURE IMPORTANCE:")
-        print("-" * 70)
-        for feat, imp in sorted(summary['feature_importance'].items(), key=lambda x: -x[1]):
-            bar = "#" * int(imp * 50)
-            print(f"   {feat:<15} {bar} {imp:.2%}")
-        
-        print("\n" + "-" * 70)
-        print("TOP HIGH-RISK CONDITIONS:")
-        print("-" * 70)
-        for i, cond in enumerate(summary['high_risk_conditions'], 1):
-            print(f"   {i}. {cond['day']} {cond['hour']:02d}:00 at {cond['camera']}")
-            print(f"      High probability: {cond['high_prob']:.1%}")
-        
-        print("\n" + "=" * 70)
-
-
-# Quick test
-if __name__ == "__main__":
-    from insights.data import ViolenceEventGenerator
-    
-    print("Testing RiskPredictor (Random Forest)...")
-    
-    # Generate mock data
-    generator = ViolenceEventGenerator(seed=42)
-    events = generator.generate(n_events=500)
-    
-    # Train model
-    predictor = RiskPredictor(n_estimators=100, max_depth=10)
-    predictor.fit(events)
-    
-    # Print report
-    predictor.print_report()
-    
-    # Example predictions
-    print("\nExample Predictions:")
-    print("-" * 50)
-    
-    test_cases = [
-        {"hour": 20, "day": "Saturday", "camera": "Parking Lot"},
-        {"hour": 8, "day": "Monday", "camera": "Front Gate"},
-        {"hour": 23, "day": "Friday", "camera": "Back Yard"},
-    ]
-    
-    for case in test_cases:
-        result = predictor.predict(**case)
-        print(f"   {result['insight']}")
-    
-    print("\n[OK] RiskPredictor test complete!")
-    print("This uses Random Forest from scikit-learn!")

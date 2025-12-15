@@ -13,18 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class KafkaFrameProducer:
-    """
-    Kafka producer for sending sampled frames.
-    
-    Features:
-    - Resizes frames to model input size (224x224)
-    - Compresses as JPEG before sending (reduce size ~10x)
-    - Partitions by camera_id to maintain temporal ordering
-    - Handles connection management
-    - Batches messages for throughput
-    
-    Data flow: camera_worker → [resize + compress] → Kafka
-    """
+    """Kafka producer for sending frames to inference service."""
     
     def __init__(
         self,
@@ -35,17 +24,7 @@ class KafkaFrameProducer:
         target_width: int = 224,
         target_height: int = 224,
     ):
-        """
-        Initialize Kafka producer.
-        
-        Args:
-            bootstrap_servers: Kafka broker address (from config if not provided)
-            topic: Topic to publish frames (from config if not provided)
-            compression_type: Compression type (from config if not provided)
-            jpeg_quality: JPEG quality (from config if not provided)
-            target_width: Target frame width for resize
-            target_height: Target frame height for resize
-        """
+        """Initialize Kafka producer."""
         self.bootstrap_servers = bootstrap_servers or settings.kafka_bootstrap_servers
         self.topic = topic or settings.kafka_frame_topic
         self.compression_type = compression_type or settings.kafka_compression_type
@@ -89,37 +68,20 @@ class KafkaFrameProducer:
             logger.info("Kafka producer disconnected")
     
     def _resize_and_compress(self, frame: np.ndarray) -> Optional[bytes]:
-        """
-        Resize frame to target size and compress as JPEG.
-        
-        This is the single resize point for optimization.
-        Only called here to avoid double resizing.
-        
-        Args:
-            frame: Input frame (BGR, uint8, any resolution)
-        
-        Returns:
-            JPEG bytes or None if failed
-        """
+        """Resize frame and compress as JPEG."""
         try:
-            # Check if resize is needed
             current_h, current_w = frame.shape[:2]
             
-            # Only resize if dimensions differ from target
             if (current_w, current_h) != (self.target_width, self.target_height):
                 frame = cv2.resize(frame, (self.target_width, self.target_height))
             
-            # Compress as JPEG
             success, jpeg_data = cv2.imencode(
                 '.jpg',
                 frame,
                 [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
             )
             
-            if not success:
-                return None
-            
-            return jpeg_data.tobytes()
+            return jpeg_data.tobytes() if success else None
         
         except Exception as e:
             logger.error(f"Frame compression error: {e}")
@@ -133,25 +95,12 @@ class KafkaFrameProducer:
         timestamp: float,
         frame_seq: int,
     ) -> Optional[str]:
-        """
-        Send frame to Kafka.
-        
-        Args:
-            camera_id: Camera identifier (used as Kafka key for partitioning)
-            frame: BGR frame (uint8)
-            frame_id: Unique frame ID
-            timestamp: Frame timestamp
-            frame_seq: Frame sequence number
-        
-        Returns:
-            Message ID or None if failed
-        """
+        """Send frame to Kafka."""
         if not self.is_connected:
             logger.warning("Kafka producer not connected, frame dropped")
             return None
         
         try:
-            # Resize and compress frame
             jpeg_bytes = self._resize_and_compress(frame)
             
             if jpeg_bytes is None:
@@ -159,24 +108,17 @@ class KafkaFrameProducer:
                 self.frames_failed += 1
                 return None
             
-            # Prepare binary message with MessagePack (more efficient than JSON + Base16)
-            # Raw JPEG bytes in binary format - no encoding overhead
             message = {
                 'camera_id': camera_id,
                 'frame_id': frame_id,
                 'timestamp': timestamp,
                 'frame_seq': frame_seq,
-                'jpeg': jpeg_bytes,  # Raw binary bytes, no Base16 encoding
+                'jpeg': jpeg_bytes,
                 'frame_shape': [self.target_height, self.target_width, 3],
             }
             
-            # Pack using MessagePack (binary format)
-            # ~50% smaller than JSON + Base16 encoding
             packed_message = msgpack.packb(message)
             
-            # Send to Kafka with camera_id as key
-            # This ensures all frames from same camera go to same partition
-            # and are processed in order by same consumer
             await self.producer.send_and_wait(
                 self.topic,
                 value=packed_message,

@@ -43,17 +43,6 @@ class ConnectionManager:
             else:
                 logger.warning(f"Error sending personal message: {e}")
 
-    async def broadcast(self, data: Dict[str, Any]):
-        disconnected = set()
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(data)
-            except Exception as e:
-                logger.warning(f"Error broadcasting to client: {e}")
-                disconnected.add(connection)
-        for connection in disconnected:
-            self.active_connections.discard(connection)
-
 
 manager = ConnectionManager()
 

@@ -1,148 +1,109 @@
 """
-HDFS Upload Script
+HDFS Upload Script via WebHDFS API
 
 Uploads nonviolence events from analytics CSV to HDFS.
-This script filters the CSV to only include nonviolence events
-before uploading to HDFS.
-
-Usage:
-    python hdfs_upload.py
-    
-Prerequisites:
-    - HDFS namenode and datanode must be running
-    - docker compose up hdfs-namenode hdfs-datanode
+Filters CSV to only include nonviolence events before uploading.
 """
 
 import os
 import pandas as pd
-import subprocess
-import tempfile
+import requests
 from pathlib import Path
 
 
-def filter_nonviolence_events(input_csv: str, output_csv: str) -> int:
-    """
-    Filter CSV to only include nonviolence events.
-    
-    Args:
-        input_csv: Path to input CSV with mixed events
-        output_csv: Path to output CSV with only nonviolence events
-        
-    Returns:
-        Number of nonviolence events
-    """
-    df = pd.read_csv(input_csv)
-    
-    # Filter only nonviolence events
+def filter_nonviolence_events(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter DataFrame to only include nonviolence events."""
     nonviolence_df = df[df['label'] == 'nonviolence']
-    
-    # Save to output file
-    nonviolence_df.to_csv(output_csv, index=False)
-    
-    print(f"Filtered {len(nonviolence_df)} nonviolence events from {len(df)} total events")
-    return len(nonviolence_df)
+    print(f"Filtered {len(nonviolence_df)} nonviolence events from {len(df)} total")
+    return nonviolence_df
 
 
-def upload_to_hdfs(local_path: str, hdfs_path: str) -> bool:
+def upload_to_hdfs(file_content: bytes, hdfs_path: str, namenode_url: str = "http://localhost:9870") -> bool:
     """
-    Upload file to HDFS using docker exec.
+    Upload data to HDFS using WebHDFS API.
     
     Args:
-        local_path: Path to local file
-        hdfs_path: Target path in HDFS
+        file_content: Bytes to upload
+        hdfs_path: Target path in HDFS (e.g., /analytics/events.csv)
+        namenode_url: WebHDFS namenode URL
         
     Returns:
         True if successful, False otherwise
     """
     try:
-        # First, copy file into the namenode container
-        container_path = f"/tmp/{os.path.basename(local_path)}"
+        # Create parent directory
+        parent_dir = os.path.dirname(hdfs_path)
+        mkdir_url = f"{namenode_url}/webhdfs/v1{parent_dir}"
+        mkdir_params = {"op": "MKDIRS", "permission": "755"}
         
-        # Copy file to container
-        copy_cmd = [
-            "docker", "cp", 
-            local_path, 
-            f"hdfs-namenode:{container_path}"
-        ]
-        print(f"Copying file to container: {' '.join(copy_cmd)}")
-        subprocess.run(copy_cmd, check=True)
+        print(f"Creating HDFS directory: {parent_dir}")
+        resp = requests.put(mkdir_url, params=mkdir_params)
+        if resp.status_code not in [200, 201, 409]:
+            print(f"Warning: Directory creation returned {resp.status_code}")
         
-        # Create HDFS directory if it doesn't exist
-        mkdir_cmd = [
-            "docker", "exec", "hdfs-namenode",
-            "hdfs", "dfs", "-mkdir", "-p", os.path.dirname(hdfs_path)
-        ]
-        print(f"Creating HDFS directory: {' '.join(mkdir_cmd)}")
-        subprocess.run(mkdir_cmd, check=False)  # May fail if already exists
+        # Upload file via WebHDFS
+        webhdfs_url = f"{namenode_url}/webhdfs/v1{hdfs_path}"
+        put_params = {"op": "CREATE", "overwrite": "true", "permission": "644"}
         
-        # Upload to HDFS
-        put_cmd = [
-            "docker", "exec", "hdfs-namenode",
-            "hdfs", "dfs", "-put", "-f", container_path, hdfs_path
-        ]
-        print(f"Uploading to HDFS: {' '.join(put_cmd)}")
-        subprocess.run(put_cmd, check=True)
+        print(f"Uploading to HDFS: {hdfs_path}")
         
-        # Verify upload
-        ls_cmd = [
-            "docker", "exec", "hdfs-namenode",
-            "hdfs", "dfs", "-ls", hdfs_path
-        ]
-        result = subprocess.run(ls_cmd, capture_output=True, text=True)
-        print(f"HDFS file info: {result.stdout}")
+        # First request gets redirect to datanode
+        resp = requests.put(webhdfs_url, params=put_params, allow_redirects=False)
         
-        return True
+        if resp.status_code == 307:
+            # Follow redirect to datanode for actual data upload
+            redirect_url = resp.headers.get("Location")
+            if redirect_url:
+                resp = requests.put(redirect_url, data=file_content)
+                if resp.status_code == 201:
+                    print(f"Successfully uploaded to HDFS: {hdfs_path}")
+                    return True
         
-    except subprocess.CalledProcessError as e:
+        print(f"Upload failed: {resp.status_code}")
+        return False
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection error: {e}")
+        print(f"Is HDFS running at {namenode_url}?")
+        return False
+    except Exception as e:
         print(f"Error uploading to HDFS: {e}")
         return False
 
 
 def main():
-    print("=" * 60)
-    print("HDFS Upload Script - Nonviolence Events")
-    print("=" * 60)
-    
-    # Paths - CSV is in ai_service/insights/data/
     script_dir = Path(__file__).parent
-    # Go up: hdfs/ -> infrastructure/ -> src/ -> backend/ -> project_root -> ai_service/insights/data/
     project_root = script_dir.parent.parent.parent.parent
     input_csv = project_root / "ai_service" / "insights" / "data" / "analytics_events.csv"
     
     if not input_csv.exists():
         print(f"Error: Input CSV not found at {input_csv}")
-        print("Please run: python ai_service/insights/scripts/generate_dataset.py")
         return
     
-    # Create temp file for filtered data
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
-        output_csv = tmp.name
+    print("=" * 60)
+    print("HDFS Upload - Nonviolence Events")
+    print("=" * 60)
     
     try:
-        # Filter nonviolence events
-        print("\n1. Filtering nonviolence events...")
-        n_events = filter_nonviolence_events(str(input_csv), output_csv)
-        print(f"   Saved {n_events} nonviolence events to temp file")
+        df = pd.read_csv(input_csv)
+        nonviolence_df = filter_nonviolence_events(df)
         
-        # Upload to HDFS
+        csv_bytes = nonviolence_df.to_csv(index=False).encode('utf-8')
+        
         print("\n2. Uploading to HDFS...")
         hdfs_path = "/analytics/nonviolence_events.csv"
-        success = upload_to_hdfs(output_csv, hdfs_path)
+        
+        success = upload_to_hdfs(csv_bytes, hdfs_path)
         
         if success:
-            print(f"\n✅ Successfully uploaded to HDFS: {hdfs_path}")
-            print(f"   View in HDFS Web UI: http://localhost:9870")
+            print(f"\nView in HDFS Web UI: http://localhost:9870")
         else:
-            print("\n❌ Failed to upload to HDFS")
+            print("\nUpload failed")
             
-    finally:
-        # Cleanup temp file
-        if os.path.exists(output_csv):
-            os.remove(output_csv)
+    except Exception as e:
+        print(f"Error: {e}")
     
     print("\n" + "=" * 60)
-    print("Done!")
-    print("=" * 60)
 
 
 if __name__ == "__main__":

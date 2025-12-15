@@ -1,46 +1,8 @@
 """
-Cluster Pattern Analyzer - K-means Clustering for Violence Event Patterns
+K-means Clustering for Violence Event Pattern Discovery.
 
-================================================================================
-WHAT IS K-MEANS CLUSTERING?
-================================================================================
-K-means is an unsupervised machine learning algorithm that groups similar data
-points into K distinct clusters. Unlike supervised learning (where we provide
-labels), K-means DISCOVERS patterns automatically from the data.
-
-HOW IT WORKS (simplified):
-1. Choose K (number of clusters) - we use 3 clusters
-2. Randomly place K "centroids" (cluster centers) in the feature space
-3. Assign each data point to the nearest centroid
-4. Move each centroid to the mean of its assigned points
-5. Repeat steps 3-4 until centroids stop moving (convergence)
-
-Result: Similar events are grouped together, revealing hidden patterns!
-
-WHY USE K-MEANS FOR VIOLENCE EVENTS?
-- Automatically discovers patterns without prior knowledge
-- Groups events by time, location, severity similarity
-- Each cluster represents a distinct "type" of violence incident
-- Helps identify when/where different types of incidents occur
-
-EXAMPLE OUTPUT:
-  Cluster 0: "evening/night hours, mostly weekends, near Parking Lot, HIGH severity"
-  Cluster 1: "morning hours, mostly weekdays, near Main Entrance, low severity"
-  Cluster 2: "afternoon hours, near Cafeteria, medium severity"
-
-FEATURES USED FOR CLUSTERING:
-- Hour of day (0-23)
-- Day of week (0-6, where 0=Monday)
-- Is weekend (0 or 1)
-- Time period (Morning/Afternoon/Evening/Night)
-- Camera location (encoded as numbers)
-- Confidence score (0.0 to 1.0)
-
-TECHNICAL NOTES:
-- Uses StandardScaler to normalize features (important for K-means)
-- Uses scikit-learn's KMeans implementation
-- n_init=10 means it runs 10 times and picks the best result
-================================================================================
+Groups similar events into K clusters to reveal temporal/spatial patterns.
+Uses StandardScaler for feature normalization and scikit-learn's KMeans.
 """
 
 from typing import List, Dict, Any, Optional
@@ -60,21 +22,12 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 class ClusterAnalyzer:
     """
-    Uses K-means clustering to discover patterns in violence events.
-    
-    This is an ACTUAL ML MODEL that:
-    1. Learns patterns from data (unsupervised)
-    2. Groups similar events into clusters
-    3. Describes each cluster as an insight
+    Discovers patterns in violence events using K-means clustering.
     
     Example:
-        >>> analyzer = ClusterAnalyzer(n_clusters=3)
-        >>> analyzer.fit(events)
-        >>> 
-        >>> # Get discovered patterns
-        >>> patterns = analyzer.get_cluster_insights()
-        >>> for p in patterns:
-        ...     print(f"Pattern {p['cluster_id']}: {p['description']}")
+        analyzer = ClusterAnalyzer(n_clusters=3)
+        analyzer.fit(events)
+        patterns = analyzer.get_cluster_insights()
     """
     
     def __init__(self, n_clusters: int = 3, random_state: int = 42):
@@ -100,41 +53,28 @@ class ClusterAnalyzer:
         self.is_fitted: bool = False
         
     def _prepare_features(self, events: List[ViolenceEvent]) -> np.ndarray:
-        """
-        Convert events to feature matrix for clustering.
-        
-        Features used:
-        - hour (0-23)
-        - day_of_week (0-6)
-        - is_weekend (0/1)
-        - time_period_encoded (0-3)
-        - camera_encoded (0-n)
-        - confidence (0-1)
-        """
-        # Encode cameras
+        """Convert events to feature matrix for clustering."""
         camera_ids = [e.camera_id for e in events]
         camera_encoded = self.camera_encoder.fit_transform(camera_ids)
         
-        # Time period encoding
         period_map = {"Morning": 0, "Afternoon": 1, "Evening": 2, "Night": 3}
         
-        # Build feature matrix
         features = []
         for i, event in enumerate(events):
             features.append([
-                event.hour,                           # 0-23
-                event.day_of_week,                    # 0-6
-                1 if event.is_weekend else 0,         # 0/1
-                period_map[event.time_period],        # 0-3
-                camera_encoded[i],                    # 0-n
-                event.confidence,                     # 0-1
+                event.hour,
+                event.day_of_week,
+                1 if event.is_weekend else 0,
+                period_map[event.time_period],
+                camera_encoded[i],
+                event.confidence,
             ])
         
         return np.array(features)
     
     def fit(self, events: List[ViolenceEvent]) -> "ClusterAnalyzer":
         """
-        Fit the clustering model on event data.
+        Fit clustering model on event data.
         
         Args:
             events: List of ViolenceEvent instances
@@ -146,21 +86,15 @@ class ClusterAnalyzer:
             raise ValueError(f"Need at least {self.n_clusters} events for {self.n_clusters} clusters")
         
         self.events = events
-        
-        # Prepare features
         self.features = self._prepare_features(events)
-        
-        # Scale features (important for K-means)
         features_scaled = self.scaler.fit_transform(self.features)
         
-        # Fit K-means
         self.kmeans = KMeans(
             n_clusters=self.n_clusters,
             random_state=self.random_state,
             n_init=10,
         )
         self.labels = self.kmeans.fit_predict(features_scaled)
-        
         self.is_fitted = True
         return self
     
@@ -181,37 +115,28 @@ class ClusterAnalyzer:
     
     def _analyze_cluster(self, cluster_id: int) -> Dict[str, Any]:
         """Analyze a single cluster to describe its pattern."""
-        # Get events in this cluster
         cluster_mask = self.labels == cluster_id
         cluster_events = [e for e, m in zip(self.events, cluster_mask) if m]
         
         if not cluster_events:
             return {"cluster_id": cluster_id, "size": 0}
         
-        # Analyze time patterns
         hours = [e.hour for e in cluster_events]
         avg_hour = np.mean(hours)
-        
-        days = [e.day_of_week for e in cluster_events]
         weekend_pct = sum(1 for e in cluster_events if e.is_weekend) / len(cluster_events)
         
-        # Most common time period
         periods = Counter([e.time_period for e in cluster_events])
         top_period = periods.most_common(1)[0][0]
         
-        # Most common camera
         cameras = Counter([e.camera_name for e in cluster_events])
         top_camera = cameras.most_common(1)[0][0]
         
-        # Confidence stats
         confidences = [e.confidence for e in cluster_events]
         avg_confidence = np.mean(confidences)
         
-        # Most common day
         day_names = Counter([e.day_name for e in cluster_events])
         top_day = day_names.most_common(1)[0][0]
         
-        # Severity distribution
         severities = Counter([e.severity for e in cluster_events])
         high_severity_pct = severities.get("High", 0) / len(cluster_events)
         
@@ -232,7 +157,6 @@ class ClusterAnalyzer:
         """Generate human-readable description for a cluster."""
         parts = []
         
-        # Time description
         hour = analysis['avg_hour']
         if hour < 6:
             time_desc = "late night"
@@ -244,16 +168,13 @@ class ClusterAnalyzer:
             time_desc = "evening/night"
         parts.append(f"{time_desc} hours")
         
-        # Weekend
         if analysis['weekend_pct'] > 60:
             parts.append("mostly weekends")
         elif analysis['weekend_pct'] < 30:
             parts.append("mostly weekdays")
         
-        # Location
         parts.append(f"near {analysis['top_camera']}")
         
-        # Severity
         if analysis['high_severity_pct'] > 40:
             parts.append("HIGH severity")
         elif analysis['high_severity_pct'] < 20:
@@ -295,39 +216,6 @@ class ClusterAnalyzer:
             "inertia": round(self.kmeans.inertia_, 2),  # Within-cluster sum of squares
             "patterns": insights,
         }
-    
-    def print_report(self) -> None:
-        """Print human-readable clustering report."""
-        self._check_fitted()
-        
-        print("\n" + "=" * 60)
-        print("  CLUSTER ANALYSIS REPORT (K-means)")
-        print("=" * 60)
-        
-        summary = self.get_summary()
-        
-        print(f"\nModel: {summary['model']}")
-        print(f"Number of clusters: {summary['n_clusters']}")
-        print(f"Total events: {summary['total_events']}")
-        print(f"Inertia (lower = tighter clusters): {summary['inertia']}")
-        
-        print("\n" + "-" * 60)
-        print("DISCOVERED PATTERNS:")
-        print("-" * 60)
-        
-        for pattern in summary['patterns']:
-            print(f"\n[Cluster {pattern['cluster_id']}] - {pattern['size']} events ({pattern['percentage']}%)")
-            print(f"   Description: {pattern['description']}")
-            print(f"   Avg Hour: {pattern['avg_hour']:.0f}:00")
-            print(f"   Top Period: {pattern['top_period']}")
-            print(f"   Top Camera: {pattern['top_camera']}")
-            print(f"   Weekend %: {pattern['weekend_pct']}%")
-            print(f"   Avg Confidence: {pattern['avg_confidence']}")
-            print(f"   High Severity %: {pattern['high_severity_pct']}%")
-        
-        print("\n" + "=" * 60)
-    
-    # ==================== HOTSPOT PREDICTION ====================
     
     def predict_cluster(self, hour: int, day_of_week: int, camera: str, confidence: float = 0.8) -> Dict[str, Any]:
         """
@@ -463,24 +351,3 @@ class ClusterAnalyzer:
             },
             "warning": f"⚠️ {len(high_risk_hours)} high-risk hours in next {hours_ahead}h" if high_risk_hours else "✅ No high-risk periods detected",
         }
-
-
-# Quick test
-if __name__ == "__main__":
-    from insights.data import ViolenceEventGenerator
-    
-    print("Testing ClusterAnalyzer (K-means)...")
-    
-    # Generate mock data
-    generator = ViolenceEventGenerator(seed=42)
-    events = generator.generate(n_events=300)
-    
-    # Cluster with 3 groups
-    analyzer = ClusterAnalyzer(n_clusters=3)
-    analyzer.fit(events)
-    
-    # Print report
-    analyzer.print_report()
-    
-    print("\n[OK] ClusterAnalyzer test complete!")
-    print("This is an ACTUAL ML MODEL using scikit-learn K-means!")

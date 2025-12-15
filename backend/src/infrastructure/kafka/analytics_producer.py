@@ -6,9 +6,6 @@ for analytics model inference.
 
 This creates a pipeline:
 HDFS (nonviolence_events.csv) -> Kafka (analytics-events topic) -> InsightsModel
-
-Usage:
-    python kafka_analytics_producer.py
     
 Prerequisites:
     - Kafka must be running
@@ -198,9 +195,9 @@ def main():
         published = producer.process_from_hdfs()
         
         if published > 0:
-            print(f"\n✅ Successfully published {published} events to Kafka")
+            print(f"\nSuccessfully published {published} events to Kafka")
         else:
-            print("\n❌ No events published")
+            print("\nNo events published")
             
     finally:
         producer.close()
