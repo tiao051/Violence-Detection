@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import cv2
 import msgpack
-from aiokafka import AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,8 @@ class InferenceConsumer:
         # State
         self.is_running = False
         self.consumer: Optional[AIOKafkaConsumer] = None
+        self.producer: Optional[AIOKafkaProducer] = None
+        self.kafka_result_topic = os.getenv("KAFKA_RESULT_TOPIC", "inference-results")
         self.redis_client: Optional[redis.Redis] = None
         
         # Per-camera buffers and state
@@ -144,7 +146,15 @@ class InferenceConsumer:
                         request_timeout_ms=10000,
                     )
                     await self.consumer.start()
-                    logger.info("Successfully connected to Kafka")
+                    logger.info("Successfully connected to Kafka Consumer")
+                    
+                    # Initialize Producer
+                    self.producer = AIOKafkaProducer(
+                        bootstrap_servers=self.kafka_bootstrap_servers,
+                        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                    )
+                    await self.producer.start()
+                    logger.info("Successfully connected to Kafka Producer")
                     break
                 except Exception as e:
                     retry_count += 1
@@ -173,6 +183,9 @@ class InferenceConsumer:
         
         if self.consumer:
             await self.consumer.stop()
+            
+        if self.producer:
+            await self.producer.stop()
         
         if self.redis_client:
             await self.redis_client.close()
@@ -321,6 +334,20 @@ class InferenceConsumer:
                     continue
                 
                 self.frames_processed += 1
+                
+                # Publish ALL results to Kafka for HDFS archiving
+                if self.producer:
+                    try:
+                        result_msg = {
+                            'camera_id': camera_id,
+                            'timestamp': frame_msg.timestamp,
+                            'violence': detection['violence'],
+                            'confidence': float(detection['confidence']),
+                            'label': 'violence' if detection['violence'] else 'nonviolence'
+                        }
+                        await self.producer.send(self.kafka_result_topic, result_msg)
+                    except Exception as e:
+                        logger.error(f"Failed to produce result to Kafka: {e}")
                 
                 # Only process alerts if violence is detected
                 if not detection['violence']:
