@@ -8,6 +8,7 @@ This schema matches the event_persistence.py structure in backend.
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict
+from ..time_utils import get_time_period, get_day_name, is_weekend
 
 
 @dataclass
@@ -36,24 +37,15 @@ class ViolenceEvent:
     
     @property
     def day_name(self) -> str:
-        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        return days[self.day_of_week]
+        return get_day_name(self.day_of_week)
     
     @property
     def is_weekend(self) -> bool:
-        return self.day_of_week >= 5
+        return is_weekend(self.day_of_week)
     
     @property
     def time_period(self) -> str:
-        hour = self.hour
-        if 6 <= hour < 12:
-            return "Morning"
-        elif 12 <= hour < 18:
-            return "Afternoon"
-        elif 18 <= hour < 22:
-            return "Evening"
-        else:
-            return "Night"
+        return get_time_period(self.hour)
     
     @property
     def severity(self) -> str:

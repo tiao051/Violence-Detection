@@ -2,25 +2,21 @@
 K-means Clustering for Violence Event Pattern Discovery.
 
 Groups similar events into K clusters to reveal temporal/spatial patterns.
-Uses StandardScaler for feature normalization and scikit-learn's KMeans.
 """
 
 from typing import List, Dict, Any, Optional
 from collections import Counter
 import numpy as np
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
+from . import BaseAnalyzer
+from ..time_utils import DAYS, PERIOD_MAP, get_time_description
 from insights.core.schema import ViolenceEvent
 
-# ML imports
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 
-class ClusterAnalyzer:
+class ClusterAnalyzer(BaseAnalyzer):
     """
     Discovers patterns in violence events using K-means clustering.
     
@@ -31,57 +27,36 @@ class ClusterAnalyzer:
     """
     
     def __init__(self, n_clusters: int = 3, random_state: int = 42):
-        """
-        Initialize cluster analyzer.
-        
-        Args:
-            n_clusters: Number of clusters to find
-            random_state: Random seed for reproducibility
-        """
+        super().__init__()
         self.n_clusters = n_clusters
         self.random_state = random_state
         
-        # ML components
         self.kmeans: Optional[KMeans] = None
         self.scaler = StandardScaler()
         self.camera_encoder = LabelEncoder()
         
-        # Data
         self.events: List[ViolenceEvent] = []
         self.features: Optional[np.ndarray] = None
         self.labels: Optional[np.ndarray] = None
-        self.is_fitted: bool = False
         
     def _prepare_features(self, events: List[ViolenceEvent]) -> np.ndarray:
-        """Convert events to feature matrix for clustering."""
         camera_ids = [e.camera_id for e in events]
         camera_encoded = self.camera_encoder.fit_transform(camera_ids)
         
-        period_map = {"Morning": 0, "Afternoon": 1, "Evening": 2, "Night": 3}
-        
-        features = []
-        for i, event in enumerate(events):
-            features.append([
+        features = [
+            [
                 event.hour,
                 event.day_of_week,
                 1 if event.is_weekend else 0,
-                period_map[event.time_period],
+                PERIOD_MAP[event.time_period],
                 camera_encoded[i],
                 event.confidence,
-            ])
-        
+            ]
+            for i, event in enumerate(events)
+        ]
         return np.array(features)
     
     def fit(self, events: List[ViolenceEvent]) -> "ClusterAnalyzer":
-        """
-        Fit clustering model on event data.
-        
-        Args:
-            events: List of ViolenceEvent instances
-            
-        Returns:
-            self for method chaining
-        """
         if len(events) < self.n_clusters:
             raise ValueError(f"Need at least {self.n_clusters} events for {self.n_clusters} clusters")
         
@@ -89,32 +64,20 @@ class ClusterAnalyzer:
         self.features = self._prepare_features(events)
         features_scaled = self.scaler.fit_transform(self.features)
         
-        self.kmeans = KMeans(
-            n_clusters=self.n_clusters,
-            random_state=self.random_state,
-            n_init=10,
-        )
+        self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=self.random_state, n_init=10)
         self.labels = self.kmeans.fit_predict(features_scaled)
         self.is_fitted = True
         return self
     
-    def _check_fitted(self) -> None:
-        """Raise error if not fitted."""
-        if not self.is_fitted:
-            raise ValueError("Analyzer not fitted. Call fit() first.")
-    
     def get_cluster_labels(self) -> np.ndarray:
-        """Get cluster label for each event."""
         self._check_fitted()
         return self.labels
     
     def get_cluster_sizes(self) -> Dict[int, int]:
-        """Get number of events in each cluster."""
         self._check_fitted()
         return dict(Counter(self.labels))
     
     def _analyze_cluster(self, cluster_id: int) -> Dict[str, Any]:
-        """Analyze a single cluster to describe its pattern."""
         cluster_mask = self.labels == cluster_id
         cluster_events = [e for e, m in zip(self.events, cluster_mask) if m]
         
@@ -154,18 +117,10 @@ class ClusterAnalyzer:
         }
     
     def _generate_description(self, analysis: Dict[str, Any]) -> str:
-        """Generate human-readable description for a cluster."""
         parts = []
         
         hour = analysis['avg_hour']
-        if hour < 6:
-            time_desc = "late night"
-        elif hour < 12:
-            time_desc = "morning"
-        elif hour < 18:
-            time_desc = "afternoon"
-        else:
-            time_desc = "evening/night"
+        time_desc = get_time_description(hour)
         parts.append(f"{time_desc} hours")
         
         if analysis['weekend_pct'] > 60:
@@ -183,12 +138,6 @@ class ClusterAnalyzer:
         return ", ".join(parts)
     
     def get_cluster_insights(self) -> List[Dict[str, Any]]:
-        """
-        Get insights for all discovered clusters.
-        
-        Returns:
-            List of cluster insight dicts with analysis and description
-        """
         self._check_fitted()
         
         insights = []
@@ -197,15 +146,11 @@ class ClusterAnalyzer:
             analysis['description'] = self._generate_description(analysis)
             insights.append(analysis)
         
-        # Sort by size (largest first)
         insights.sort(key=lambda x: x['size'], reverse=True)
-        
         return insights
     
     def get_summary(self) -> Dict[str, Any]:
-        """Get clustering summary for API."""
         self._check_fitted()
-        
         insights = self.get_cluster_insights()
         
         return {
@@ -213,62 +158,30 @@ class ClusterAnalyzer:
             "n_clusters": self.n_clusters,
             "total_events": len(self.events),
             "cluster_sizes": self.get_cluster_sizes(),
-            "inertia": round(self.kmeans.inertia_, 2),  # Within-cluster sum of squares
+            "inertia": round(self.kmeans.inertia_, 2),
             "patterns": insights,
         }
     
     def predict_cluster(self, hour: int, day_of_week: int, camera: str, confidence: float = 0.8) -> Dict[str, Any]:
-        """
-        Predict which cluster a hypothetical event would belong to.
-        
-        Args:
-            hour: Hour of day (0-23)
-            day_of_week: Day of week (0=Monday, 6=Sunday)
-            camera: Camera name
-            confidence: Confidence score (default 0.8)
-            
-        Returns:
-            Dict with cluster_id, cluster_info, and risk_level
-        """
         self._check_fitted()
         
-        # Encode camera
         try:
             camera_encoded = self.camera_encoder.transform([camera])[0]
         except ValueError:
-            # Unknown camera, use most common
             camera_encoded = 0
         
-        # Build feature vector
         is_weekend = 1 if day_of_week >= 5 else 0
-        
-        if 6 <= hour < 12:
-            period = 0  # Morning
-        elif 12 <= hour < 18:
-            period = 1  # Afternoon
-        elif 18 <= hour < 22:
-            period = 2  # Evening
-        else:
-            period = 3  # Night
+        period = PERIOD_MAP[DAYS[day_of_week % 7]]
         
         features = np.array([[hour, day_of_week, is_weekend, period, camera_encoded, confidence]])
         features_scaled = self.scaler.transform(features)
         
-        # Predict cluster
         cluster_id = self.kmeans.predict(features_scaled)[0]
-        
-        # Get cluster info
         cluster_info = self._analyze_cluster(cluster_id)
         cluster_info['description'] = self._generate_description(cluster_info)
         
-        # Determine risk level
         high_sev_pct = cluster_info.get('high_severity_pct', 0)
-        if high_sev_pct >= 70:
-            risk_level = "HIGH"
-        elif high_sev_pct >= 40:
-            risk_level = "MEDIUM"
-        else:
-            risk_level = "LOW"
+        risk_level = "HIGH" if high_sev_pct >= 70 else "MEDIUM" if high_sev_pct >= 40 else "LOW"
         
         return {
             "cluster_id": int(cluster_id),
@@ -304,7 +217,7 @@ class ClusterAnalyzer:
             # Predict for this hour
             prediction = self.predict_cluster(future_hour, future_day, camera)
             
-            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            day_names = DAYS
             
             forecasts.append({
                 "hours_from_now": h,

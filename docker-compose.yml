@@ -73,19 +73,10 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       RTSP_BASE_URL: rtsp://rtsp-server:8554
-      RTSP_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_ENABLED: "true"
-      APP_ENV: ${APP_ENV:-development}
-      DEBUG: ${DEBUG:-false}
-      # Enable file logging inside container (writes to /app/logs)
-      LOG_TO_FILE: ${LOG_TO_FILE:-true}
-      HOST: 0.0.0.0
-      PORT: 8000
       MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
-      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
 
     ports:
       - "8000:8000"
@@ -119,15 +110,10 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_FRAME_TOPIC: frames
-      KAFKA_CONSUMER_GROUP: inference
       REDIS_URL: redis://redis:6379/0
-      INFERENCE_BATCH_SIZE: 4
-      INFERENCE_BATCH_TIMEOUT_MS: 5000
-      ALERT_COOLDOWN_SECONDS: 30
       MODEL_PATH: /app/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
-      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+      ALERT_COOLDOWN_SECONDS: 30
     volumes:
       - ./ai_service:/app
       - ./ai_service/logs:/app/logs
@@ -143,14 +129,6 @@ services:
     command: sh -c "sleep 10 && python inference/inference_consumer_service.py"
     networks:
       - app-network
-    # Optional: Uncomment for GPU support
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   # RTSP Server (MediaMTX)
   rtsp-server:
@@ -242,7 +220,6 @@ services:
     networks:
       - app-network
 
-  # ==================== HDFS (Hadoop Distributed File System) ====================
   # Namenode - Master node that manages file system namespace
   hdfs-namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
@@ -277,6 +254,31 @@ services:
     depends_on:
       hdfs-namenode:
         condition: service_healthy
+    networks:
+      - app-network
+
+  # Analytics Consumer (HDFS Archiver)
+  # Consumes inference results from Kafka and uploads to HDFS
+  analytics-consumer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: violence-detection-analytics-consumer
+    env_file:
+      - ./backend/.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RESULT_TOPIC: inference-results
+      HDFS_NAMENODE_URL: http://hdfs-namenode:9870
+    volumes:
+      - ./backend:/app
+    depends_on:
+      kafka:
+        condition: service_healthy
+      hdfs-namenode:
+        condition: service_healthy
+    command: python src/infrastructure/kafka/analytics_consumer.py
     networks:
       - app-network
 
