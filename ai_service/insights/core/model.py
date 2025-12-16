@@ -5,13 +5,15 @@ Combines K-means Clustering, FP-Growth Association Rules, and Random Forest Pred
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import joblib
 import os
+import logging
 
 from .schema import ViolenceEvent
-from ..data import ViolenceEventGenerator
 from ..algorithms import ClusterAnalyzer, AssociationRuleAnalyzer, RiskPredictor
+
+logger = logging.getLogger(__name__)
 
 
 class InsightsModel:
@@ -74,23 +76,6 @@ class InsightsModel:
         self.is_fitted = True
         self.fit_time = datetime.now()
         return self
-    
-    def fit_from_mock(self, n_events: int = 500, days: int = 60) -> "InsightsModel":
-        """
-        Train using mock data (for demo/testing).
-        
-        Args:
-            n_events: Number of mock events to generate
-            days: Number of days to span
-            
-        Returns:
-            self for method chaining
-        """
-        generator = ViolenceEventGenerator(seed=42)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
-        events = generator.generate(n_events=n_events, start_date=start_date, end_date=end_date)
-        return self.fit(events)
     
     def _check_fitted(self) -> None:
         if not self.is_fitted:

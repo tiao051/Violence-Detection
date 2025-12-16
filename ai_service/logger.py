@@ -34,7 +34,7 @@ def setup_logging(log_level: str = None) -> logging.Logger:
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     
-    # File handler - only warnings and above
+    # File handler - capture INFO and above for investigation, but avoid debug spam
     try:
         os.makedirs("logs", exist_ok=True)
         file_handler = RotatingFileHandler(
@@ -42,7 +42,7 @@ def setup_logging(log_level: str = None) -> logging.Logger:
             maxBytes=10_000_000,  # 10MB
             backupCount=5
         )
-        file_handler.setLevel(logging.WARNING)
+        file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(console_formatter)
         root_logger.addHandler(file_handler)
     except Exception:

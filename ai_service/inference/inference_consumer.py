@@ -143,7 +143,7 @@ class InferenceConsumer:
                         request_timeout_ms=10000,
                     )
                     await self.consumer.start()
-                    logger.info("Successfully connected to Kafka Consumer")
+                    logger.debug("Successfully connected to Kafka Consumer")
                     
                     # Initialize Producer
                     self.producer = AIOKafkaProducer(
@@ -151,7 +151,7 @@ class InferenceConsumer:
                         value_serializer=lambda v: json.dumps(v).encode('utf-8')
                     )
                     await self.producer.start()
-                    logger.info("Successfully connected to Kafka Producer")
+                    logger.debug("Successfully connected to Kafka Producer")
                     break
                 except Exception as e:
                     retry_count += 1
@@ -423,7 +423,7 @@ class InferenceConsumer:
                 maxlen=100,  # Keep last 100 detections per camera
             )
             
-            logger.info(
+            logger.debug(
                 f"[{camera_id}] Detection published: "
                 f"violence={detection['violence']}, "
                 f"confidence={detection['confidence']:.2f}, "

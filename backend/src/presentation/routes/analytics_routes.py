@@ -5,6 +5,9 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import os
 import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 ai_service_paths = [
     '/app/ai_service',
@@ -14,7 +17,12 @@ for path in ai_service_paths:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
 
-from insights import InsightsModel, ViolenceEvent
+try:
+    from insights import InsightsModel, ViolenceEvent
+except ImportError as e:
+    logger.error(f"Failed to import ai_service modules: {e}", exc_info=True)
+    raise
+
 import pandas as pd
 import threading
 

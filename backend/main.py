@@ -6,24 +6,31 @@ Clean Architecture setup with dependency injection
 import logging
 import time
 from contextlib import asynccontextmanager
+import sys
+import traceback
 
-import redis.asyncio as redis
-import json
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from src.core.config import settings
+# Setup logging FIRST - before any other imports
+# This ensures import-time errors are logged
 from src.core.logger import setup_logging
-from src.infrastructure.rtsp import CameraWorker
-from src.infrastructure.kafka import get_kafka_producer
-from src.presentation.routes import auth_router
-from src.presentation.routes.websocket_routes import router as websocket_router
-from src.presentation.routes.analytics_routes import router as analytics_router
-from src.infrastructure.firebase.setup import initialize_firebase
-from src.application.event_processor import get_event_processor
-
-# Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+try:
+    import redis.asyncio as redis
+    import json
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from src.core.config import settings
+    from src.infrastructure.rtsp import CameraWorker
+    from src.infrastructure.kafka import get_kafka_producer
+    from src.presentation.routes import auth_router
+    from src.presentation.routes.websocket_routes import router as websocket_router
+    from src.presentation.routes.analytics_routes import router as analytics_router
+    from src.infrastructure.firebase.setup import initialize_firebase
+    from src.application.event_processor import get_event_processor
+except Exception as e:
+    logger.error(f"Failed to import required modules: {e}", exc_info=True)
+    sys.exit(1)
 
 # Global state
 redis_client: redis.Redis = None
@@ -167,7 +174,7 @@ async def lookup_event(camera_id: str, timestamp: float):
     global redis_client
     
     # Use logger instead of print
-    logger.info(f"Lookup request for {camera_id} at {timestamp}")
+    logger.debug(f"Lookup request for {camera_id} at {timestamp}")
     
     try:
         if not redis_client:
@@ -183,24 +190,24 @@ async def lookup_event(camera_id: str, timestamp: float):
         
         timeline_key = f"events:timeline:{camera_id}"
         
-        logger.info(f"Searching Redis key: {timeline_key} between {min_ts} and {max_ts}")
+        logger.debug(f"Searching Redis key: {timeline_key} between {min_ts} and {max_ts}")
         
         # zrangebyscore returns list of members (bytes)
         results = await redis_client.zrangebyscore(timeline_key, min_ts, max_ts)
         
-        logger.info(f"Found {len(results)} results in Redis")
+        logger.debug(f"Found {len(results)} results in Redis")
         
         if results:
             # Return the most recent match in the window
             # results are sorted by score (timestamp), so last one is newest
             data = json.loads(results[-1])
-            logger.info(f"Returning video_url: {data.get('video_url')}")
+            logger.debug(f"Returning video_url: {data.get('video_url')}")
             # Ensure we return the ID as well so frontend can update if needed
             if "id" not in data:
                 data["id"] = "lookup_found"
             return data
             
-        logger.info("No matching event found")
+        logger.debug("No matching event found")
         return {"id": "lookup_failed", "video_url": None}
     except Exception as e:
         logger.error(f"Error looking up event: {e}")

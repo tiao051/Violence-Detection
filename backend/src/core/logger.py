@@ -30,33 +30,30 @@ def setup_logging() -> None:
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
-    # File handler (optional) — enable when explicitly requested or in production
-    if settings.log_to_file or settings.app_env == "production":
-        try:
-            # Ensure logs directory exists
-            os.makedirs("logs", exist_ok=True)
-
-            file_handler = RotatingFileHandler(
-                "logs/app.log",
-                maxBytes=10_000_000,  # 10MB
-                backupCount=5
-            )
-            # Capture INFO logs in file so we can see startup/shutdown events
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(formatter)
-            root_logger.addHandler(file_handler)
-        except Exception as e:
-            pass  # Silently fail for file handler
+    # File handler - always enabled for debugging and monitoring
+    # Separate from console to capture persistent log history
+    try:
+        os.makedirs("logs", exist_ok=True)
+        file_handler = RotatingFileHandler(
+            "logs/app.log",
+            maxBytes=10_000_000,  # 10MB
+            backupCount=5
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+    except Exception as e:
+        root_logger.warning(f"Failed to setup file logging: {e}")
     
-    # Silence third-party libraries completely
+    # Silence third-party libraries
     logging.getLogger("httpx").setLevel(logging.ERROR)
     logging.getLogger("asyncio").setLevel(logging.ERROR)
     logging.getLogger("redis").setLevel(logging.ERROR)
     logging.getLogger("aiokafka").setLevel(logging.ERROR)
     
-    # Allow Uvicorn/FastAPI info logs to show up
+    # Control verbose libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)  # Reduce access logs
     logging.getLogger("uvicorn").setLevel(logging.INFO)
-    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
     logging.getLogger("fastapi").setLevel(logging.INFO)
 

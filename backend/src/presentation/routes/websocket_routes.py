@@ -21,11 +21,11 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.add(websocket)
-        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+        logger.debug(f"WebSocket connected. Total connections: {len(self.active_connections)}")
 
     async def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
-        logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+        logger.debug(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
 
     async def send_personal(self, websocket: WebSocket, data: Dict[str, Any]):
         try:
@@ -109,7 +109,7 @@ async def websocket_threat_alerts(websocket: WebSocket):
                 await asyncio.sleep(0.01)
 
         except WebSocketDisconnect:
-            logger.info("Client disconnected normally")
+            logger.debug("Client disconnected normally")
         except Exception as e:
             logger.error(f"Error in pub/sub loop: {e}")
         finally:
@@ -117,7 +117,7 @@ async def websocket_threat_alerts(websocket: WebSocket):
             await pubsub.close()
 
     except WebSocketDisconnect:
-        logger.info("Client disconnected")
+        logger.debug("Client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
