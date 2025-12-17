@@ -71,15 +71,26 @@ async def startup(app: FastAPI) -> None:
         await redis_client.ping()
         app.state.redis_client = redis_client
 
-        # 3. Connect Kafka producer
+        # 3. Initialize InsightsModel (for Analytics)
+        # Load or train at startup (not on-demand) for fast request responses
+        try:
+            from src.presentation.routes.analytics_routes import init_insights_model
+            logger.info("Initializing InsightsModel...")
+            init_insights_model()
+            logger.info("InsightsModel loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize InsightsModel: {e}")
+            # Continue - analytics endpoint will handle gracefully
+
+        # 4. Connect Kafka producer
         kafka_producer = get_kafka_producer()
         await kafka_producer.connect()
 
-        # 4. Start Event Processor (Background Worker)
+        # 5. Start Event Processor (Background Worker)
         event_processor = get_event_processor(redis_client)
         await event_processor.start()
 
-        # 5. Start Camera Workers
+        # 6. Start Camera Workers
         if settings.rtsp_enabled:
             for cam_id in settings.rtsp_cameras:
                 # Construct stream URL

@@ -9,7 +9,7 @@ from collections import Counter
 import numpy as np
 
 from . import BaseAnalyzer
-from ..time_utils import DAYS, PERIOD_MAP, get_time_description
+from ..time_utils import DAYS, PERIOD_MAP, categorize_hour
 from insights.core.schema import ViolenceEvent
 
 from sklearn.cluster import KMeans
@@ -120,7 +120,7 @@ class ClusterAnalyzer(BaseAnalyzer):
         parts = []
         
         hour = analysis['avg_hour']
-        time_desc = get_time_description(hour)
+        time_desc = categorize_hour(hour)
         parts.append(f"{time_desc} hours")
         
         if analysis['weekend_pct'] > 60:

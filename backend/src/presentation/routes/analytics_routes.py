@@ -35,12 +35,15 @@ _cache: Dict[str, Any] = {}
 _cache_ready: bool = False
 _cache_lock = threading.Lock()
 
-def get_model() -> InsightsModel:
-    """Get or load the insights model."""
+def init_insights_model() -> None:
+    """
+    Initialize InsightsModel at startup.
+    Loads pre-trained model from pkl file.
+    Called from backend main.py during lifespan.startup().
+    """
     global _model, _model_loaded
     
-    if _model_loaded and _model is not None:
-        return _model
+    logger.info("Loading InsightsModel...")
     
     data_dir_options = [
         '/app/ai_service/insights/data',
@@ -57,29 +60,27 @@ def get_model() -> InsightsModel:
         raise FileNotFoundError("Could not find ai_service/insights/data directory")
     
     model_path = os.path.join(data_dir, 'trained_model.pkl')
-    csv_path = os.path.join(data_dir, 'analytics_events.csv')
     
-    if os.path.exists(model_path):
-        print(f"Loading model from {model_path}")
-        _model = InsightsModel.load(model_path)
-    else:
-        if not os.path.exists(csv_path):
-            raise FileNotFoundError(f"CSV not found: {csv_path}")
-        
-        print(f"Training model from {csv_path}...")
-        df = pd.read_csv(csv_path)
-        
-        events = []
-        for _, row in df.iterrows():
-            event = ViolenceEvent.from_dict(row.to_dict())
-            events.append(event)
-        
-        _model = InsightsModel()
-        _model.fit(events)
-        _model.save(model_path)
-        print(f"Model saved to {model_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Pre-trained model not found at {model_path}. "
+            "Please ensure trained_model.pkl exists in ai_service/insights/data/"
+        )
     
+    logger.info(f"Loading model from {model_path}")
+    _model = InsightsModel.load(model_path)
     _model_loaded = True
+
+def get_model() -> InsightsModel:
+    """
+    Get the loaded InsightsModel.
+    Assumes init_insights_model() has been called during startup.
+    """
+    global _model, _model_loaded
+    
+    if not _model_loaded or _model is None:
+        raise RuntimeError("InsightsModel not initialized. Call init_insights_model() first.")
+    
     return _model
 
 

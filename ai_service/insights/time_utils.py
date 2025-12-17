@@ -16,40 +16,25 @@ PERIOD_BOUNDARIES = {
 PERIOD_MAP = {"Morning": 0, "Afternoon": 1, "Evening": 2, "Night": 3}
 
 
-def get_time_period(hour: int) -> str:
-    """Convert hour to time period."""
-    if 6 <= hour < 12:
-        return "Morning"
-    elif 12 <= hour < 18:
-        return "Afternoon"
-    elif 18 <= hour < 22:
-        return "Evening"
-    else:
-        return "Night"
-
-
-def get_hour_bucket(hour: int) -> str:
-    """Get hour bucket label for categorization (for association analysis)."""
+def categorize_hour(hour: int) -> str:
+    """Categorize hour into time period (lowercase).
+    
+    Args:
+        hour: Hour (0-23)
+    
+    Returns:
+        Time period: "night", "morning", "afternoon", or "evening"
+    """
     if hour < 6:
-        return "hour_late_night"
-    elif hour < 12:
-        return "hour_morning"
-    elif hour < 18:
-        return "hour_afternoon"
-    else:
-        return "hour_evening"
-
-
-def get_time_description(hour: int) -> str:
-    """Get human-readable time description."""
-    if hour < 6:
-        return "late night"
+        return "night"
     elif hour < 12:
         return "morning"
     elif hour < 18:
         return "afternoon"
+    elif hour < 22:
+        return "evening"
     else:
-        return "evening/night"
+        return "night"
 
 
 def get_day_names() -> List[str]:

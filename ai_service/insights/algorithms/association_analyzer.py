@@ -9,7 +9,7 @@ Discovers patterns in violence events:
 from typing import List, Dict, Any, Optional
 import pandas as pd
 from . import BaseAnalyzer
-from ..time_utils import get_hour_bucket
+from ..time_utils import categorize_hour
 from insights.core.schema import ViolenceEvent
 
 from mlxtend.frequent_patterns import fpgrowth, association_rules
@@ -41,7 +41,7 @@ class AssociationRuleAnalyzer(BaseAnalyzer):
         items.append(f"day_{event.day_name}")
         items.append(f"period_{event.time_period}")
         items.append("is_weekend" if event.is_weekend else "is_weekday")
-        items.append(get_hour_bucket(event.hour))
+        items.append(f"hour_{categorize_hour(event.hour)}")
         items.append(f"camera_{event.camera_name.replace(' ', '_')}")
         items.append(f"severity_{event.severity}")
         

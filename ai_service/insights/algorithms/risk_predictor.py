@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import BaseAnalyzer
-from ..time_utils import DAYS, PERIODS, get_time_period
+from ..time_utils import DAYS, PERIODS, categorize_hour
 from insights.core.schema import ViolenceEvent
 
 from sklearn.ensemble import RandomForestClassifier
@@ -97,7 +97,7 @@ class RiskPredictor(BaseAnalyzer):
         
         day_of_week = DAYS.index(day)
         is_weekend = 1 if day_of_week >= 5 else 0
-        time_period = get_time_period(hour)
+        time_period = categorize_hour(hour).capitalize()
         
         features = np.array([[
             hour, day_of_week, is_weekend,

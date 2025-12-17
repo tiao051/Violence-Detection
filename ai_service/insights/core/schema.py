@@ -8,7 +8,7 @@ This schema matches the event_persistence.py structure in backend.
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict
-from ..time_utils import get_time_period, get_day_name, is_weekend
+from ..time_utils import categorize_hour, get_day_name, is_weekend
 
 
 @dataclass
@@ -45,7 +45,7 @@ class ViolenceEvent:
     
     @property
     def time_period(self) -> str:
-        return get_time_period(self.hour)
+        return categorize_hour(self.hour).capitalize()
     
     @property
     def severity(self) -> str:

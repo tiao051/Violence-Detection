@@ -14,11 +14,15 @@ def setup_logging() -> None:
     # Root logger - INFO by default to capture startup events
     # Use DEBUG=true in settings to enable verbose logging
     root_logger = logging.getLogger()
+    
+    # Avoid duplicate handlers (from Uvicorn reloader)
+    if root_logger.handlers:
+        print(f"[LOGGER] Clearing {len(root_logger.handlers)} existing handlers")
+        root_logger.handlers.clear()
+    
     root_logger.setLevel(logging.DEBUG if settings.debug else logging.INFO)
     
     # Format - minimal for production
-    # Use a custom formatter to ensure timezone is respected if needed, 
-    # but setting TZ env var in Docker is usually sufficient.
     formatter = logging.Formatter(
         fmt='%(asctime)s [%(levelname)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -29,21 +33,31 @@ def setup_logging() -> None:
     console_handler.setLevel(logging.DEBUG if settings.debug else logging.INFO)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
+    print("[LOGGER] Console handler added")
     
     # File handler - always enabled for debugging and monitoring
-    # Separate from console to capture persistent log history
     try:
-        os.makedirs("logs", exist_ok=True)
+        logs_dir = "logs"
+        os.makedirs(logs_dir, exist_ok=True)
+        print(f"[LOGGER] Logs directory ready: {os.path.abspath(logs_dir)}")
+        
+        log_file = os.path.join(logs_dir, "app.log")
         file_handler = RotatingFileHandler(
-            "logs/app.log",
+            log_file,
             maxBytes=10_000_000,  # 10MB
             backupCount=5
         )
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
+        print(f"[LOGGER] File handler added: {os.path.abspath(log_file)}")
     except Exception as e:
-        root_logger.warning(f"Failed to setup file logging: {e}")
+        print(f"[LOGGER] ERROR: Failed to setup file logging: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Verify handlers
+    print(f"[LOGGER] Root logger now has {len(root_logger.handlers)} handlers")
     
     # Silence third-party libraries
     logging.getLogger("httpx").setLevel(logging.ERROR)
@@ -52,7 +66,7 @@ def setup_logging() -> None:
     logging.getLogger("aiokafka").setLevel(logging.ERROR)
     
     # Control verbose libraries
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)  # Reduce access logs
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
     logging.getLogger("fastapi").setLevel(logging.INFO)
