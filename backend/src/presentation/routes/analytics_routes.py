@@ -25,14 +25,28 @@ except ImportError as e:
 
 import pandas as pd
 import threading
+import time
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 _model: Optional[InsightsModel] = None
 _model_loaded: bool = False
 
-_cache: Dict[str, Any] = {}
-_cache_ready: bool = False
+# Per-component cache state
+_cache_state: Dict[str, Optional[Any]] = {
+    "summary": None,
+    "patterns": None,
+    "rules": None,
+    "high_risk": None,
+    "full_report": None,
+}
+_computing_tasks: Dict[str, bool] = {
+    "summary": False,
+    "patterns": False,
+    "rules": False,
+    "high_risk": False,
+    "full_report": False,
+}
 _cache_lock = threading.Lock()
 
 def init_insights_model() -> None:
@@ -84,32 +98,91 @@ def get_model() -> InsightsModel:
     return _model
 
 
-def get_cached_results() -> Dict[str, Any]:
-    """Get or compute cached results for all analytics endpoints."""
-    global _cache, _cache_ready
-    
-    if _cache_ready:
-        return _cache
-    
-    with _cache_lock:
-        if _cache_ready:
-            return _cache
-        
-        print("Pre-computing analytics results...")
-        
+def _compute_summary() -> None:
+    """Compute summary in background."""
+    try:
+        logger.info("Computing summary...")
         model = get_model()
-        
-        _cache = {
-            "summary": model.get_summary(),
-            "patterns": model.get_patterns(),
-            "rules": model.get_rules(top_n=20),
-            "high_risk": model.get_high_risk_conditions(top_n=10),
-            "full_report": model.get_full_report(),
-        }
-        
-        _cache_ready = True
+        _cache_state["summary"] = model.get_summary()
+        logger.info("Summary computed")
+    except Exception as e:
+        logger.error(f"Error computing summary: {e}", exc_info=True)
+    finally:
+        _computing_tasks["summary"] = False
+
+
+def _compute_patterns() -> None:
+    """Compute patterns in background."""
+    try:
+        logger.info("Computing patterns...")
+        model = get_model()
+        _cache_state["patterns"] = model.get_patterns()
+        logger.info("Patterns computed")
+    except Exception as e:
+        logger.error(f"Error computing patterns: {e}", exc_info=True)
+    finally:
+        _computing_tasks["patterns"] = False
+
+
+def _compute_rules() -> None:
+    """Compute rules in background."""
+    try:
+        logger.info("Computing rules...")
+        model = get_model()
+        _cache_state["rules"] = model.get_rules(top_n=20)
+        logger.info("Rules computed")
+    except Exception as e:
+        logger.error(f"Error computing rules: {e}", exc_info=True)
+    finally:
+        _computing_tasks["rules"] = False
+
+
+def _compute_high_risk() -> None:
+    """Compute high risk conditions in background."""
+    try:
+        logger.info("Computing high risk conditions...")
+        model = get_model()
+        _cache_state["high_risk"] = model.get_high_risk_conditions(top_n=10)
+        logger.info("High risk conditions computed")
+    except Exception as e:
+        logger.error(f"Error computing high risk: {e}", exc_info=True)
+    finally:
+        _computing_tasks["high_risk"] = False
+
+
+def _compute_full_report() -> None:
+    """Compute full report in background."""
+    try:
+        logger.info("Computing full report...")
+        model = get_model()
+        _cache_state["full_report"] = model.get_full_report()
+        logger.info("Full report computed")
+    except Exception as e:
+        logger.error(f"Error computing full report: {e}", exc_info=True)
+    finally:
+        _computing_tasks["full_report"] = False
+
+
+def start_analytics_computation() -> None:
+    """Start all analytics computations in parallel (non-blocking)."""
+    global _computing_tasks
     
-    return _cache
+    tasks = [
+        ("summary", _compute_summary),
+        ("patterns", _compute_patterns),
+        ("rules", _compute_rules),
+        ("high_risk", _compute_high_risk),
+        ("full_report", _compute_full_report),
+    ]
+    
+    for task_name, task_func in tasks:
+        if not _computing_tasks[task_name] and _cache_state[task_name] is None:
+            _computing_tasks[task_name] = True
+            thread = threading.Thread(target=task_func, daemon=True)
+            thread.start()
+            logger.info(f"Started background task: {task_name}")
+    
+    logger.info("All analytics tasks started in parallel")
 
 
 # Request/Response models
@@ -132,44 +205,109 @@ class PredictResponse(BaseModel):
 
 
 # Endpoints
+@router.post("/compute")
+async def trigger_computation() -> Dict[str, str]:
+    """Trigger all analytics computations in parallel."""
+    try:
+        start_analytics_computation()
+        return {"status": "computation started", "message": "Check individual endpoints for results"}
+    except Exception as e:
+        logger.error(f"Error triggering computation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status")
+async def get_computation_status() -> Dict[str, str]:
+    """Get status of ongoing computations."""
+    return {
+        "summary": "done" if _cache_state["summary"] is not None else ("computing" if _computing_tasks["summary"] else "pending"),
+        "patterns": "done" if _cache_state["patterns"] is not None else ("computing" if _computing_tasks["patterns"] else "pending"),
+        "rules": "done" if _cache_state["rules"] is not None else ("computing" if _computing_tasks["rules"] else "pending"),
+        "high_risk": "done" if _cache_state["high_risk"] is not None else ("computing" if _computing_tasks["high_risk"] else "pending"),
+        "full_report": "done" if _cache_state["full_report"] is not None else ("computing" if _computing_tasks["full_report"] else "pending"),
+    }
+
+
 @router.get("/summary")
 async def get_summary() -> Dict[str, Any]:
-    """Get quick summary of insights."""
+    """Get quick summary of insights (returns 202 if still computing)."""
     try:
-        cache = get_cached_results()
-        return cache["summary"]
+        # Trigger computation if not started
+        start_analytics_computation()
+        
+        if _cache_state["summary"] is None:
+            raise HTTPException(
+                status_code=202,
+                detail="Summary still computing. Check /api/analytics/status for progress."
+            )
+        
+        return _cache_state["summary"]
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in get_summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/patterns")
 async def get_patterns() -> List[Dict[str, Any]]:
-    """Get K-means cluster patterns."""
+    """Get K-means cluster patterns (returns 202 if still computing)."""
     try:
-        cache = get_cached_results()
-        return cache["patterns"]
+        start_analytics_computation()
+        
+        if _cache_state["patterns"] is None:
+            raise HTTPException(
+                status_code=202,
+                detail="Patterns still computing. Check /api/analytics/status for progress."
+            )
+        
+        return _cache_state["patterns"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_patterns: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/rules")
 async def get_rules(top_n: int = 10) -> List[Dict[str, Any]]:
-    """Get FP-Growth association rules."""
+    """Get FP-Growth association rules (returns 202 if still computing)."""
     try:
-        cache = get_cached_results()
-        # Return cached rules, sliced to top_n
-        return cache["rules"][:top_n]
+        start_analytics_computation()
+        
+        if _cache_state["rules"] is None:
+            raise HTTPException(
+                status_code=202,
+                detail="Rules still computing. Check /api/analytics/status for progress."
+            )
+        
+        return _cache_state["rules"][:top_n]
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in get_rules: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/predictions")
 async def get_high_risk_conditions(top_n: int = 10) -> List[Dict[str, Any]]:
-    """Get high risk conditions from Random Forest."""
+    """Get high risk conditions from Random Forest (returns 202 if still computing)."""
     try:
-        cache = get_cached_results()
-        return cache["high_risk"][:top_n]
+        start_analytics_computation()
+        
+        if _cache_state["high_risk"] is None:
+            raise HTTPException(
+                status_code=202,
+                detail="High risk analysis still computing. Check /api/analytics/status for progress."
+            )
+        
+        return _cache_state["high_risk"][:top_n]
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in get_high_risk_conditions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -191,11 +329,21 @@ async def predict_risk(request: PredictRequest) -> Dict[str, Any]:
 
 @router.get("/full-report")
 async def get_full_report() -> Dict[str, Any]:
-    """Get comprehensive report from all 3 models."""
+    """Get comprehensive report from all 3 models (returns 202 if still computing)."""
     try:
-        cache = get_cached_results()
-        return cache["full_report"]
+        start_analytics_computation()
+        
+        if _cache_state["full_report"] is None:
+            raise HTTPException(
+                status_code=202,
+                detail="Full report still computing. Check /api/analytics/status for progress."
+            )
+        
+        return _cache_state["full_report"]
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in get_full_report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
