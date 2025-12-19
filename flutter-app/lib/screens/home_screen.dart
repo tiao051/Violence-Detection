@@ -8,7 +8,6 @@ import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
-import 'package:security_app/theme/app_theme.dart';
 
 /// Home screen that exposes the app's primary tabs (Cameras, Events).
 ///
@@ -29,9 +28,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Tabs are stateful widgets; therefore the list cannot be const.
   List<Widget> get _widgetOptions => [
-    const CameraTab(),
-    EventTab(key: ValueKey('event_tab_$_rebuildKey')), // Dynamic key forces rebuild
-  ];
+        const CameraTab(),
+        EventTab(
+            key: ValueKey(
+                'event_tab_$_rebuildKey')), // Dynamic key forces rebuild
+      ];
 
   // Lightweight service to handle FCM initialization.
   // We keep the service as a field so it can be reused or extended later.
@@ -107,29 +108,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
           ...unviewedEvents.map((event) => SimpleDialogOption(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Navigate and wait for return
-              await context.push('/event_detail', extra: event);
-              // Force EventTab rebuild when back
-              setState(() {
-                _rebuildKey++;
-              });
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.cameraName,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // Navigate and wait for return
+                  await context.push('/event_detail', extra: event);
+                  // Force EventTab rebuild when back
+                  setState(() {
+                    _rebuildKey++;
+                  });
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.cameraName,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      'ID: ${event.id}',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
                 ),
-                Text(
-                  'ID: ${event.id}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-          )),
+              )),
         ],
       ),
     );
@@ -140,9 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_selectedIndex == 0 ? 'Cameras' : 'Events'),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: kAppGradient),
-        ),
         actions: [
           // Debug button to test deep linking (only in debug mode)
           if (kDebugMode && _selectedIndex == 1) // Only show on Events tab
@@ -158,37 +157,37 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           // Settings button
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_outlined),
             onPressed: () {
               context.push('/settings');
             },
           ),
           // Profile button
           IconButton(
-            icon: const Icon(Icons.person),
+            icon: const Icon(Icons.person_outline),
             onPressed: () {
               context.push('/profile');
             },
           ),
         ],
       ),
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
-      ),
+      body: _widgetOptions.elementAt(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
-            icon: Icon(Icons.videocam),
+            icon: Icon(Icons.videocam_outlined),
+            activeIcon: Icon(Icons.videocam),
             label: 'Cameras',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.warning),
+            icon: Icon(Icons.notification_important_outlined),
+            activeIcon: Icon(Icons.notification_important),
             label: 'Events',
           ),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.deepPurple,
         onTap: _onItemTapped,
+        // Uses theme's bottomNavigationBarTheme (kAccentColor)
       ),
     );
   }
