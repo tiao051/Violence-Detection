@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/models/event_model.dart';
 import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
@@ -25,14 +26,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Check if mounted just in case
       if (mounted) {
         context.read<EventProvider>().markEventAsViewedInDb(widget.event.id);
       }
     });
-    
+
     _initializePlayer();
   }
 
@@ -85,9 +86,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   /// Handles the "Report false detection" button press.
   Future<void> _handleReport() async {
     final eventProvider = context.read<EventProvider>();
-    
+
     // SỬA LỖI 3: Dùng hàm reportEvent mới từ EventProvider
-    final success = await context.read<EventProvider>().reportEvent(widget.event.id);
+    final success =
+        await context.read<EventProvider>().reportEvent(widget.event.id);
 
     if (mounted) {
       if (success) {
@@ -100,14 +102,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
+            content: Text(
+                "Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +130,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Icon(
               event.viewed ? Icons.visibility_off : Icons.visibility,
-              color: event.viewed ? Colors.grey : Theme.of(context).colorScheme.primary,
+              color: event.viewed ? kTextMuted : kAccentColor,
             ),
           )
         ],
@@ -145,7 +147,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   if (_isLoadingVideo) {
                     return Center(
                       child: SpinKitFadingCircle(
-                        color: Theme.of(context).colorScheme.primary,
+                        color: kAccentColor,
                         size: 50.0,
                       ),
                     );
@@ -170,7 +172,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 }),
               ),
               const SizedBox(height: 16),
-
               Text(
                 "Camera: ${event.cameraName}",
                 style: Theme.of(context).textTheme.headlineSmall,
@@ -184,18 +185,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               Text(
                 "Status: ${event.status.toUpperCase()}",
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: event.status == 'reported_false' ? Colors.orange : null,
-                ),
+                      color: event.status == 'reported_false'
+                          ? Colors.orange
+                          : null,
+                    ),
               ),
-              
               const SizedBox(height: 32),
-
               Consumer<EventProvider>(
                 builder: (context, eventProvider, child) {
                   final isReporting = eventProvider.isReporting(event.id);
                   final hasReportError = eventProvider.reportError != null;
-                  final errorColor = Theme.of(context).colorScheme.error;
-                  
+
                   // Disable button if already reported
                   if (event.status == 'reported_false') {
                     return const Center(
@@ -210,15 +210,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
                   return Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          errorColor.withOpacity(0.8),
-                          errorColor,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
+                      color: kErrorColor,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                     child: Column(
                       children: [
@@ -232,28 +225,26 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             elevation: 0,
                           ),
                           onPressed: isDisabled ? null : _handleReport,
-                          icon: isReporting 
-                            ? const SizedBox(
-                                width: 20, 
-                                height: 20, 
-                                child: SpinKitFadingCircle(color: Colors.white, size: 20.0)
-                              ) 
-                            : const Icon(Icons.report_problem),
-                          label: Text(
-                            isReporting 
-                              ? "Sending..." 
-                              : hasReportError 
-                                ? "Report failed (Network error?)"
-                                : "Report false detection"
-                          ),
+                          icon: isReporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: SpinKitFadingCircle(
+                                      color: Colors.white, size: 20.0))
+                              : const Icon(Icons.report_problem_outlined),
+                          label: Text(isReporting
+                              ? "Sending..."
+                              : hasReportError
+                                  ? "Report failed"
+                                  : "Report false detection"),
                         ),
                         if (hasReportError)
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Text(
                               "Error: ${eventProvider.reportError}",
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.7),
                                 fontSize: 12,
                               ),
                               textAlign: TextAlign.center,
