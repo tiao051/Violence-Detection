@@ -19,6 +19,7 @@ for path in ai_service_paths:
 
 try:
     from insights import InsightsModel, ViolenceEvent
+    from insights.hotspot_analyzer import HotspotAnalyzer, analyze_hotspots_from_csv
 except ImportError as e:
     logger.error(f"Failed to import ai_service modules: {e}", exc_info=True)
     raise
@@ -357,5 +358,105 @@ async def get_forecast(camera: str, hours: int = 12) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# HOTSPOT ANALYSIS - Statistical Method (No ML Training Required)
+# ==============================================================================
+
+# Camera coordinates (real locations in Tan Phu/Tan Binh, HCMC)
+CAMERA_COORDINATES = {
+    "cam1": {"lat": 10.7912, "lng": 106.6294, "name": "Đường Lũy Bán Bích"},
+    "cam2": {"lat": 10.8024, "lng": 106.6401, "name": "Ngã ba Âu Cơ"},
+    "cam3": {"lat": 10.7935, "lng": 106.6512, "name": "Đường Tân Kỳ Tân Quý"},
+    "cam4": {"lat": 10.8103, "lng": 106.6287, "name": "Chợ Tân Phú"},
+    "cam5": {"lat": 10.7856, "lng": 106.6523, "name": "Công viên Đầm Sen"},
+}
+
+# English names for display
+CAMERA_NAME_MAP = {
+    "Đường Lũy Bán Bích": "Luy Ban Bich Street",
+    "Ngã ba Âu Cơ": "Au Co Junction",
+    "Đường Tân Kỳ Tân Quý": "Tan Ky Tan Quy Street",
+    "Chợ Tân Phú": "Tan Phu Market",
+    "Công viên Đầm Sen": "Dam Sen Park",
+}
+
+
+@router.get("/hotspots")
+async def get_hotspot_analysis() -> Dict[str, Any]:
+    """
+    Get hotspot analysis for all cameras using statistical methods.
+    
+    This endpoint uses a weighted scoring algorithm:
+    - Violence ratio (40%): Percentage of violence events
+    - Average confidence (30%): Mean confidence of violence detections
+    - Z-score (30%): How camera compares to others (statistical outlier detection)
+    
+    Classification thresholds:
+    - Hotspot: score >= 0.6
+    - Warning: score >= 0.4
+    - Safe: score < 0.4
+    
+    No ML model training required - works directly on event data.
+    """
+    try:
+        # Find CSV data file
+        data_dir_options = [
+            '/app/ai_service/insights/data',
+            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
+        ]
+        
+        csv_path = None
+        for path in data_dir_options:
+            potential_path = os.path.join(path, 'analytics_events.csv')
+            if os.path.exists(potential_path):
+                csv_path = potential_path
+                break
+        
+        if csv_path is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Event data CSV not found. Please ensure analytics_events.csv exists."
+            )
+        
+        # Perform analysis
+        analyzer = HotspotAnalyzer()
+        analyzer.load_from_csv(csv_path)
+        analyzer.analyze()
+        summary = analyzer.get_summary()
+        
+        # Enrich with coordinates and English names
+        for cam in summary.get("cameras", []):
+            cam_id = cam.get("camera_id", "")
+            if cam_id in CAMERA_COORDINATES:
+                cam["lat"] = CAMERA_COORDINATES[cam_id]["lat"]
+                cam["lng"] = CAMERA_COORDINATES[cam_id]["lng"]
+            
+            # Add English name
+            vn_name = cam.get("camera_name", "")
+            cam["camera_name_en"] = CAMERA_NAME_MAP.get(vn_name, vn_name)
+        
+        return {
+            "success": True,
+            "algorithm": "Weighted Hotspot Scoring",
+            "description": "Statistical analysis using violence ratio, confidence scores, and Z-score comparison",
+            "weights": {
+                "violence_ratio": 0.4,
+                "avg_confidence": 0.3,
+                "z_score": 0.3,
+            },
+            "thresholds": {
+                "hotspot": 0.6,
+                "warning": 0.4,
+            },
+            **summary,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_hotspot_analysis: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 

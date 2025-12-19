@@ -63,6 +63,10 @@
   color: #ef4444;
 }
 
+.stat-item.warning .stat-number {
+  color: #f59e0b;
+}
+
 .stat-item.safe .stat-number {
   color: #22c55e;
 }
@@ -72,6 +76,81 @@
   color: #888;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Algorithm Info */
+.algorithm-info {
+  padding: 12px 20px;
+  border-bottom: 1px solid #333;
+  background: #1a1a1a;
+}
+
+.algorithm-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 12px;
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.event-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #888;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #888;
+}
+
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #333;
+  border-top-color: #ffa500;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error State */
+.error-container {
+  padding: 20px;
+  text-align: center;
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.error-container button {
+  padding: 8px 16px;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #ccc;
+  cursor: pointer;
+}
+
+.error-container button:hover {
+  background: #444;
 }
 
 /* Controls */
@@ -140,17 +219,18 @@
   border-left-color: #ffa500;
 }
 
-.camera-item.violence {
-  border-left-color: transparent;
-}
-
-.camera-item.violence.selected,
-.camera-item.violence:hover {
+.camera-item.hotspot.selected,
+.camera-item.hotspot:hover {
   border-left-color: #ef4444;
 }
 
-.camera-item.nonviolence.selected,
-.camera-item.nonviolence:hover {
+.camera-item.warning.selected,
+.camera-item.warning:hover {
+  border-left-color: #f59e0b;
+}
+
+.camera-item.safe.selected,
+.camera-item.safe:hover {
   border-left-color: #22c55e;
 }
 
@@ -166,12 +246,17 @@
   background: #666;
 }
 
-.status-dot.violence {
+.status-dot.hotspot {
   background: #ef4444;
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
-.status-dot.nonviolence {
+.status-dot.warning {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.status-dot.safe {
   background: #22c55e;
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 }
@@ -200,10 +285,27 @@
   text-overflow: ellipsis;
 }
 
-.camera-confidence {
-  font-size: 13px;
+.camera-classification {
+  font-size: 10px;
   font-weight: 600;
-  color: #888;
+  padding: 3px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+
+.camera-classification.hotspot {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.camera-classification.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.camera-classification.safe {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
 }
 
 /* Legend */
@@ -236,8 +338,12 @@
   border-radius: 50%;
 }
 
-.legend-color.violence {
+.legend-color.hotspot {
   background: #ef4444;
+}
+
+.legend-color.warning {
+  background: #f59e0b;
 }
 
 .legend-color.safe {
