@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
 import Analytics from './components/Analytics'
+import MapDashboard from './components/MapDashboard'
 import { ThemeProvider, AlertProvider, AnalyticsProvider } from './contexts'
 import './App.css'
 
@@ -17,6 +18,8 @@ const App = () => {
         return <AlertHistory />;
       case 'analytics':
         return <Analytics />;
+      case 'map':
+        return <MapDashboard />;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:
