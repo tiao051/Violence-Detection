@@ -201,8 +201,14 @@ const AlertHistory: React.FC = () => {
                       alt="Snapshot" 
                     />
                     <div className="video-pending">
-                      <p>📹 Video processing...</p>
-                      <button onClick={checkVideoStatus} className="refresh-btn">Check Again</button>
+                      {selectedAlert.status === 'active' ? (
+                        <p>🔴 Event in progress...</p>
+                      ) : (
+                        <>
+                          <p>📹 Video processing...</p>
+                          <button onClick={checkVideoStatus} className="refresh-btn">Check Again</button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -221,6 +227,12 @@ const AlertHistory: React.FC = () => {
                 <div className="info-row">
                   <label>Confidence:</label>
                   <span className="danger-text">{(selectedAlert.violence_score * 100).toFixed(1)}%</span>
+                </div>
+                <div className="info-row">
+                  <label>Status:</label>
+                  <span className={`event-status ${selectedAlert.status || 'completed'}`}>
+                    {selectedAlert.status === 'active' ? '🔴 Active' : '✅ Completed'}
+                  </span>
                 </div>
                 <div className="info-row">
                   <label>ID:</label>

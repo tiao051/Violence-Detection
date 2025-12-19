@@ -15,11 +15,16 @@ logger = logging.getLogger(__name__)
 
 class EventProcessor:
     """
-    Background worker that processes threat alerts.
+    Firestore-First Event Processor.
     
-    1. Listens to Redis pub/sub 'threat_alerts'.
-    2. Debounces alerts (prevents duplicate events for same incident).
-    3. Triggers EventPersistenceService to save video and metadata.
+    1. First alert → CREATE event in Firestore immediately (status: active)
+    2. Higher confidence → UPDATE event in Firestore
+    3. Timeout (30s) → FINALIZE event (add video, status: completed)
+    
+    Redis pub/sub notifications:
+    - event_started: New event created
+    - event_updated: Event updated with better evidence
+    - event_completed: Event finalized with video
     """
 
     def __init__(self, redis_client: redis.Redis):
@@ -27,16 +32,15 @@ class EventProcessor:
         self.persistence_service = get_event_persistence_service()
         self.is_running = False
         
-        # Active recording sessions: {camera_id: {'start_time': float, 'last_seen': float, 'max_confidence': float}}
+        # Active recording sessions: {camera_id: {...}}
         self.active_events: Dict[str, Dict] = {}
         
         # Config
-        self.event_timeout_seconds = 30.0  # Wait 30s after last alert to close event (was 5.0)
-        self.min_event_duration = 1.0     # Ignore blips shorter than 1s
-        self.max_event_duration = 60.0    # Max duration for a single event (chunking)
-        self.pre_event_padding = 2.0      # Seconds to include before event
-        self.post_event_padding = 2.0     # Seconds to include after event
-        self.cooldown_seconds = 30.0      # Deduplication window - same as frontend (30s)
+        self.event_timeout_seconds = 5.0   # Wait 5s after last alert to close event (quick finalize)
+        self.min_event_duration = 1.0      # Ignore blips shorter than 1s
+        self.max_event_duration = 30.0     # Max 30s from first alert - then it's a new event
+        self.pre_event_padding = 2.0       # Seconds to include before event
+        self.post_event_padding = 2.0      # Seconds to include after event
 
     async def start(self) -> None:
         """Start the event processor background task."""
@@ -88,8 +92,9 @@ class EventProcessor:
             alert = json.loads(data)
 
             # Ignore system messages (like event_saved updates)
-            if alert.get('type') == 'event_saved':
-                logger.info(f"Ignored event_saved message for {alert.get('camera_id')}")
+            msg_type = alert.get('type')
+            if msg_type in ['event_started', 'event_updated', 'event_completed']:
+                logger.debug(f"Ignored own message: {msg_type}")
                 return
             
             camera_id = alert.get('camera_id')
@@ -98,52 +103,82 @@ class EventProcessor:
             if not camera_id:
                 return
 
-            # Detection MUST have timestamp - no fallback to server time
+            # Detection MUST have timestamp
             if 'timestamp' not in alert or alert['timestamp'] is None:
-                logger.error(f"[{camera_id}] Alert missing required 'timestamp' field. Alert: {alert}")
+                logger.error(f"[{camera_id}] Alert missing required 'timestamp' field")
                 return
             
             detection_timestamp = alert['timestamp']
             
-            # Logic: Debounce & Extend with Deduplication (same as frontend)
+            # FIRESTORE-FIRST LOGIC
             if camera_id not in self.active_events:
-                # START NEW EVENT - use detection timestamp
-                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, ts={detection_timestamp})")
-                self.active_events[camera_id] = {
-                    'start_time': detection_timestamp,  # Video timestamp
-                    'last_seen': detection_timestamp,   # Video timestamp
-                    'last_processed_at': time.time(),   # System timestamp (for timeout)
-                    'max_confidence': confidence,
-                    'first_alert': alert, # Keep first alert for metadata (timestamp)
-                    'best_alert': alert,  # Alert with highest confidence (for snapshot/evidence)
-                    'frames_temp_paths': [] # Collect all temp paths
-                }
-            else:
-                # EXTEND EXISTING EVENT - but check deduplication cooldown first
-                event = self.active_events[camera_id]
+                # === FIRST ALERT: CREATE EVENT IN FIRESTORE ===
+                event_id = await self.persistence_service.create_event(camera_id, alert)
                 
-                # Calculate duration based on VIDEO timestamps
+                if not event_id:
+                    logger.error(f"[{camera_id}] Failed to create event in Firestore")
+                    return
+                
+                logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, event_id={event_id})")
+                
+                self.active_events[camera_id] = {
+                    'event_id': event_id,  # Firestore document ID
+                    'start_time': detection_timestamp,
+                    'last_seen': detection_timestamp,
+                    'last_processed_at': time.time(),
+                    'max_confidence': confidence,
+                    'best_alert': alert,
+                    'frames_temp_paths': []
+                }
+                
+                # Publish event_started to frontend
+                await self._publish_event_notification('event_started', camera_id, {
+                    'event_id': event_id,
+                    'timestamp': detection_timestamp,
+                    'confidence': confidence,
+                    'snapshot': alert.get('snapshot', ''),
+                    'status': 'active'
+                })
+                
+            else:
+                # === SUBSEQUENT ALERT: MAYBE UPDATE EVENT ===
+                event = self.active_events[camera_id]
                 video_duration = detection_timestamp - event['start_time']
                 
-                # Only extend if within max duration window
-                if video_duration <= self.max_event_duration:
-                    logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp}, duration={video_duration:.1f}s)")
-                    event['last_seen'] = detection_timestamp  # Update video timestamp
-                    event['last_processed_at'] = time.time()  # Update system timestamp
-                    
-                    # Track best evidence (highest confidence) - same logic as frontend
-                    if confidence > event['max_confidence']:
-                        event['max_confidence'] = confidence
-                        event['best_alert'] = alert  # Update to alert with best snapshot
-                else:
-                    # Outside max duration - ignore this alert (let monitor close it)
-                    # Or we could force close here, but monitor loop handles it cleaner
-                    logger.debug(f"[{camera_id}] Alert suppressed (max duration exceeded: {video_duration:.1f}s > {self.max_event_duration}s)")
+                if video_duration > self.max_event_duration:
+                    logger.debug(f"[{camera_id}] Alert suppressed (max duration exceeded)")
                     return
+                
+                # Update timing
+                event['last_seen'] = detection_timestamp
+                event['last_processed_at'] = time.time()
+                
+                # Check if this alert has higher confidence
+                if confidence > event['max_confidence']:
+                    event['max_confidence'] = confidence
+                    event['best_alert'] = alert
+                    
+                    # Update Firestore with better evidence
+                    await self.persistence_service.update_event(
+                        event['event_id'],
+                        camera_id,
+                        alert
+                    )
+                    
+                    # Publish event_updated to frontend
+                    await self._publish_event_notification('event_updated', camera_id, {
+                        'event_id': event['event_id'],
+                        'timestamp': event['start_time'],  # Keep original timestamp
+                        'confidence': confidence,
+                        'snapshot': alert.get('snapshot', ''),
+                        'status': 'active'
+                    })
+                    
+                    logger.debug(f"[{camera_id}] Event updated with higher conf={confidence:.2f}")
             
             # Collect temp frames path if available
             frames_path = alert.get('frames_temp_path')
-            if frames_path:
+            if frames_path and camera_id in self.active_events:
                 self.active_events[camera_id]['frames_temp_paths'].append(frames_path)
                 
         except json.JSONDecodeError:
@@ -153,123 +188,101 @@ class EventProcessor:
 
     async def _event_monitor_loop(self) -> None:
         """
-        Background task to monitor and close finished events.
+        Background task to monitor and finalize events.
         Checks every 1s if any event has timed out.
         """
         while self.is_running:
             try:
-                now = time.time()
-                # Create list of keys to avoid runtime error during iteration
                 active_cameras = list(self.active_events.keys())
                 
                 for camera_id in active_cameras:
                     event = self.active_events[camera_id]
                     
-                    # Use system time for timeout check (Processing Timeout)
-                    # This handles the case where alerts stop coming (e.g. violence ended)
                     current_system_time = time.time()
                     last_processed_at = event.get('last_processed_at', current_system_time)
                     
                     is_timeout = (current_system_time - last_processed_at > self.event_timeout_seconds)
-                    
-                    # Duration is based on VIDEO timestamps (Content Duration)
-                    # This handles the case where video is long but processed quickly/slowly
                     video_duration = event['last_seen'] - event['start_time']
                     is_max_duration = (video_duration > self.max_event_duration)
 
-                    # Check timeout (No new alerts for X seconds) or Max Duration
                     if is_timeout or is_max_duration:
-                        # Event finished! Process it.
+                        # === FINALIZE EVENT ===
                         reason = f"Timeout ({current_system_time - last_processed_at:.1f}s)" if is_timeout else f"Max Duration ({video_duration:.1f}s)"
-                        logger.info(f"[{camera_id}] Event finished [{reason}]. Video Duration: {video_duration:.1f}s. Saving...")
+                        logger.info(f"[{camera_id}] Event finished [{reason}]. Finalizing...")
                         
-                        # Use best_alert (highest confidence) for evidence, but preserve first_alert's timestamp
-                        # This ensures Firestore gets the same best snapshot that frontend displays
-                        final_alert = event['best_alert'].copy()
-                        final_alert['timestamp'] = event['first_alert']['timestamp']  # Use original start time
-                        final_alert['confidence'] = event['max_confidence']  # Ensure max confidence
-                        
-                        # Calculate time window for video extraction
-                        # Start = First Alert - Padding
-                        # End = Last Alert + Padding
                         video_start_time = event['start_time'] - self.pre_event_padding
                         video_end_time = event['last_seen'] + self.post_event_padding
                         
-                        # Trigger persistence with time window
-                        result = await self.persistence_service.save_event(
-                            camera_id, 
-                            final_alert, 
-                            frames_temp_paths=event['frames_temp_paths'], # Pass list of paths
-                            start_timestamp=video_start_time,
-                            end_timestamp=video_end_time
+                        # Finalize in Firestore (add video, status: completed)
+                        result = await self.persistence_service.finalize_event(
+                            event['event_id'],
+                            camera_id,
+                            video_start_time,
+                            video_end_time
                         )
                         
                         if result:
-                            event_id = result['id']
-                            # Use Firebase URL instead of local path
                             video_url = result.get('firebase_video_url')
-                            logger.info(f"[{camera_id}] Event saved successfully: {event_id}")
-
-                            # Publish "Event Saved" message to update frontend
-                            if video_url:
-                                try:
-                                    # Store event data in Redis for quick lookup
-                                    event_data = {
-                                        "id": event_id,
-                                        "camera_id": camera_id,
-                                        "timestamp": event['start_time'],
-                                        "video_url": video_url,
-                                        "confidence": event['max_confidence']
-                                    }
-                                    await self.redis_client.setex(
-                                        f"event:{event_id}",
-                                        86400,  # 24h TTL
-                                        json.dumps(event_data)
-                                    )
-                                    
-                                    # Add to timeline ZSET for lookup by timestamp
-                                    timeline_key = f"events:timeline:{camera_id}"
-                                    event_summary = {
-                                        "id": event_id,
-                                        "video_url": video_url,
-                                        "timestamp": event['start_time']
-                                    }
-                                    # zadd expects mapping {member: score}
-                                    await self.redis_client.zadd(timeline_key, {json.dumps(event_summary): event['start_time']})
-                                    # Keep only last 100 events to prevent infinite growth
-                                    await self.redis_client.zremrangebyrank(timeline_key, 0, -101)
-
-                                    update_msg = {
-                                        "type": "event_saved",
-                                        "camera_id": camera_id,
-                                        "timestamp": event['start_time'], # Use start time to match alert
-                                        "event_id": event_id,
-                                        "video_url": video_url
-                                    }
-                                    
-                                    await self.redis_client.publish(
-                                        f"alerts:{camera_id}",
-                                        json.dumps(update_msg)
-                                    )
-                                    logger.info(f"[{camera_id}] Published event_saved update: {video_url}")
-                                except Exception as e:
-                                    logger.error(f"Failed to publish event update: {e}")
+                            logger.info(f"[{camera_id}] Event finalized: {event['event_id']}")
+                            
+                            # Publish event_completed to frontend
+                            await self._publish_event_notification('event_completed', camera_id, {
+                                'event_id': event['event_id'],
+                                'timestamp': event['start_time'],
+                                'confidence': event['max_confidence'],
+                                'video_url': video_url,
+                                'status': 'completed'
+                            })
+                            
+                            # Store in Redis for quick lookup
+                            try:
+                                event_data = {
+                                    "id": event['event_id'],
+                                    "camera_id": camera_id,
+                                    "timestamp": event['start_time'],
+                                    "video_url": video_url,
+                                    "confidence": event['max_confidence']
+                                }
+                                await self.redis_client.setex(
+                                    f"event:{event['event_id']}",
+                                    86400,
+                                    json.dumps(event_data)
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to cache event in Redis: {e}")
                         
                         # Remove from active list
                         del self.active_events[camera_id]
                         
                         # Cleanup temp frames
-                        for path in event['frames_temp_paths']:
+                        for path in event.get('frames_temp_paths', []):
                             if path and os.path.exists(path):
                                 try:
                                     shutil.rmtree(path)
-                                except: pass
+                                except:
+                                    pass
                 
                 await asyncio.sleep(1.0)
                 
             except Exception as e:
                 logger.error(f"Event monitor error: {e}")
                 await asyncio.sleep(1.0)
+
+    async def _publish_event_notification(self, event_type: str, camera_id: str, data: Dict) -> None:
+        """Publish event notification to Redis for frontend."""
+        try:
+            message = {
+                "type": event_type,
+                "camera_id": camera_id,
+                **data
+            }
+            await self.redis_client.publish(
+                f"alerts:{camera_id}",
+                json.dumps(message)
+            )
+            logger.debug(f"[{camera_id}] Published {event_type}")
+        except Exception as e:
+            logger.error(f"Failed to publish {event_type}: {e}")
 
 
 # Singleton instance

@@ -7,7 +7,7 @@ import tempfile
 import cv2
 import numpy as np
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from firebase_admin import storage, firestore
 from src.infrastructure.memory import get_frame_buffer
 from src.infrastructure.notifications.notification_service import get_notification_service
@@ -20,9 +20,10 @@ class EventPersistenceService:
     """
     Handles the persistence of violence events.
     
-    1. Generates video clip from FrameBuffer history.
-    2. Uploads video to Firebase Storage.
-    3. Saves event metadata to Cloud Firestore.
+    Firestore-First Design:
+    1. On first alert: CREATE event immediately (status: active)
+    2. On higher confidence: UPDATE event (best snapshot)
+    3. On timeout: FINALIZE event (add video, status: completed)
     """
 
     def __init__(self):
@@ -35,6 +36,155 @@ class EventPersistenceService:
             logger.error(f"Failed to get Firebase clients: {e}")
             self.db = None
             self.bucket = None
+
+    async def create_event(
+        self,
+        camera_id: str,
+        detection: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Create a new event in Firestore immediately when first alert arrives.
+        Returns event_id if successful.
+        """
+        if not self.db:
+            logger.error("Firestore client not initialized")
+            return None
+
+        try:
+            owner_uid = self._get_camera_owner(camera_id)
+            
+            if "timestamp" not in detection or detection["timestamp"] is None:
+                raise ValueError(f"Detection missing required 'timestamp' field")
+            
+            timestamp = datetime.fromtimestamp(detection["timestamp"], tz=timezone.utc)
+            
+            event_data = {
+                "userId": owner_uid,
+                "cameraId": camera_id,
+                "cameraName": self._get_camera_name(camera_id),
+                "timestamp": timestamp,
+                "videoUrl": "",  # Will be filled on finalize
+                "thumbnailUrl": "",
+                "confidence": detection.get("confidence", 0),
+                "imageBase64": detection.get("snapshot", ""),
+                "status": "active",  # NEW: Event is still ongoing
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP
+            }
+            
+            update_time, event_ref = self.db.collection('events').add(event_data)
+            logger.info(f"[{camera_id}] Created active event: {event_ref.id}")
+            
+            return event_ref.id
+            
+        except Exception as e:
+            logger.error(f"Failed to create event: {e}")
+            return None
+
+    async def update_event(
+        self,
+        event_id: str,
+        camera_id: str,
+        detection: Dict[str, Any]
+    ) -> bool:
+        """
+        Update existing event with better evidence (higher confidence snapshot).
+        """
+        if not self.db:
+            return False
+
+        try:
+            event_ref = self.db.collection('events').document(event_id)
+            
+            update_data = {
+                "confidence": detection.get("confidence", 0),
+                "imageBase64": detection.get("snapshot", ""),
+                "updatedAt": firestore.SERVER_TIMESTAMP
+            }
+            
+            event_ref.update(update_data)
+            logger.info(f"[{camera_id}] Updated event {event_id} with higher confidence: {detection.get('confidence'):.2f}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update event {event_id}: {e}")
+            return False
+
+    async def finalize_event(
+        self,
+        event_id: str,
+        camera_id: str,
+        start_timestamp: float,
+        end_timestamp: float
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Finalize event: generate video, upload, update Firestore status to completed.
+        Returns dict with video_url if successful.
+        """
+        if not self.db or not self.bucket:
+            logger.error("Firebase clients not initialized")
+            return None
+
+        try:
+            # 1. Get frames from buffer
+            all_frames = self.frame_buffer.get_video_frames(
+                camera_id,
+                start_timestamp=start_timestamp,
+                end_timestamp=end_timestamp
+            )
+            
+            if not all_frames:
+                logger.warning(f"No frames found for finalize: {camera_id}")
+                # Still mark as completed but without video
+                self.db.collection('events').document(event_id).update({
+                    "status": "completed",
+                    "updatedAt": firestore.SERVER_TIMESTAMP
+                })
+                return {"id": event_id, "firebase_video_url": None}
+            
+            logger.info(f"Retrieved {len(all_frames)} frames for video generation")
+
+            # 2. Generate video
+            temp_video_path = self._create_video_file(all_frames, camera_id)
+            if not temp_video_path:
+                return None
+
+            try:
+                # 3. Upload to Firebase Storage
+                video_url = self._upload_video(temp_video_path, camera_id)
+                
+                # 4. Update Firestore with video URL and status
+                event_ref = self.db.collection('events').document(event_id)
+                event_ref.update({
+                    "videoUrl": video_url or "",
+                    "status": "completed",
+                    "updatedAt": firestore.SERVER_TIMESTAMP
+                })
+                
+                logger.info(f"[{camera_id}] Event finalized: {event_id}")
+                
+                # 5. Send push notification
+                doc = event_ref.get()
+                if doc.exists:
+                    await self._send_push_notification(camera_id, event_id, doc.to_dict())
+                
+                return {
+                    'id': event_id,
+                    'firebase_video_url': video_url
+                }
+
+            finally:
+                # Cleanup temp file
+                if temp_video_path and os.path.exists(temp_video_path):
+                    try:
+                        os.remove(temp_video_path)
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.error(f"Failed to finalize event {event_id}: {e}")
+            return None
 
     async def save_event(
         self, 

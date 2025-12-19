@@ -1,6 +1,6 @@
 import React from "react";
 import CameraVideo from "./CameraVideo";
-import { useWebSocket } from "../../hooks/useWebSocket";
+import { useWebSocket, WebSocketMessage } from "../../hooks/useWebSocket";
 import { useAlerts } from "../../contexts";
 import "./VideoDashboard.css";
 
@@ -12,8 +12,8 @@ const VideoDashboard: React.FC = () => {
     `ws://localhost:8000/ws/threats`
   );
 
-  // Global Alert History Context
-  const { addAlert, updateAlert } = useAlerts();
+  // Global Alert History Context (Firestore-first)
+  const { addOrUpdateEvent } = useAlerts();
 
   // State for active alerts per camera (camera_id -> timestamp)
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
@@ -23,66 +23,92 @@ const VideoDashboard: React.FC = () => {
   // State for expanded camera
   const [expandedCamera, setExpandedCamera] = React.useState<string | null>(null);
 
-  // Process incoming messages
-  React.useEffect(() => {
-    if (messages.length > 0) {
-      const latestMsg = messages[messages.length - 1];
-      
-      if (latestMsg.type === 'alert' && latestMsg.violence && latestMsg.camera_id) {
-        // Validate that message has detection timestamp
-        if (!latestMsg.timestamp) {
-          console.warn('Alert message missing detection timestamp:', latestMsg);
-          return;
-        }
+  // Track processed message count to avoid reprocessing
+  const processedCountRef = React.useRef(0);
 
-        // 1. Add to Global History (Context) with detection timestamp
-        addAlert({
-          camera_id: latestMsg.camera_id,
-          violence_score: latestMsg.confidence || 0.9,
-          image_base64: latestMsg.snapshot,
-          timestamp: latestMsg.timestamp  // Detection timestamp from WebSocket
+  // Process incoming messages (Firestore-first design)
+  React.useEffect(() => {
+    if (messages.length <= processedCountRef.current) return;
+    
+    // Process only new messages
+    const newMessages = messages.slice(processedCountRef.current);
+    processedCountRef.current = messages.length;
+
+    newMessages.forEach((msg: WebSocketMessage) => {
+      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status } = msg;
+
+      // Handle Firestore-first event messages
+      if ((type === 'event_started' || type === 'event_updated' || type === 'event_completed') && event_id) {
+        // Update global alert history (synced with Firestore)
+        addOrUpdateEvent({
+          event_id,
+          camera_id,
+          timestamp,
+          confidence: confidence || 0,
+          snapshot,
+          video_url,
+          status: status || 'active'
         });
 
-        // 2. Update active alerts state (Visual Red Border)
+        // Visual feedback for active alerts
+        if (type === 'event_started' || type === 'event_updated') {
+          setActiveAlerts(prev => ({
+            ...prev,
+            [camera_id]: Date.now()
+          }));
+
+          if (snapshot) {
+            setAlertSnapshots(prev => ({
+              ...prev,
+              [camera_id]: snapshot
+            }));
+          }
+
+          // Auto-clear visual alert after 5 seconds
+          setTimeout(() => {
+            setActiveAlerts(prev => {
+              const newState = { ...prev };
+              if (Date.now() - newState[camera_id] > 4500) {
+                delete newState[camera_id];
+              }
+              return newState;
+            });
+            
+            setAlertSnapshots(prev => {
+              const newState = { ...prev };
+              delete newState[camera_id];
+              return newState;
+            });
+          }, 5000);
+        }
+      }
+      // Legacy support for raw 'alert' type (from AI service directly)
+      else if (type === 'alert' && msg.violence && camera_id) {
+        // Visual feedback only (no add to history - wait for event_started)
         setActiveAlerts(prev => ({
           ...prev,
-          [latestMsg.camera_id]: Date.now()
+          [camera_id]: Date.now()
         }));
 
-        // 3. Update snapshot if available
-        if (latestMsg.snapshot) {
+        if (snapshot) {
           setAlertSnapshots(prev => ({
             ...prev,
-            [latestMsg.camera_id]: latestMsg.snapshot
+            [camera_id]: snapshot
           }));
         }
 
-        // Auto-clear alert after 5 seconds
         setTimeout(() => {
           setActiveAlerts(prev => {
             const newState = { ...prev };
-            if (Date.now() - newState[latestMsg.camera_id] > 4500) {
-              delete newState[latestMsg.camera_id];
+            if (Date.now() - newState[camera_id] > 4500) {
+              delete newState[camera_id];
             }
             return newState;
           });
-          
-          setAlertSnapshots(prev => {
-             const newState = { ...prev };
-             if (Date.now() - activeAlerts[latestMsg.camera_id] > 4500) {
-                delete newState[latestMsg.camera_id];
-             }
-             return newState;
-          });
         }, 5000);
-      } else if (latestMsg.type === 'event_saved' && latestMsg.video_url) {
-        // Handle video saved event
-        updateAlert(latestMsg.camera_id, latestMsg.timestamp, {
-          video_url: latestMsg.video_url
-        });
       }
-    }
-  }, [messages]); // Only runs when new message arrives
+    });
+  }, [messages, addOrUpdateEvent]);
 
   const handleCameraClick = (cameraId: string) => {
     if (expandedCamera === cameraId) {

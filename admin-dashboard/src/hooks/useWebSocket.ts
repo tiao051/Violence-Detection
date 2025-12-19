@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface WebSocketMessage {
-  type: 'alert' | 'event_saved';
+  type: 'alert' | 'event_started' | 'event_updated' | 'event_completed';
   camera_id: string;
   timestamp: number;
   confidence?: number;
   video_url?: string;
   snapshot?: string;
   violence?: boolean;
+  event_id?: string;
+  status?: 'active' | 'completed';
 }
 
 interface WebSocketHookResult {
@@ -99,7 +101,9 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
       ws.onmessage = (event) => {
         try {
           const data: WebSocketMessage = JSON.parse(event.data);
-          if (data.type === 'alert' || data.type === 'event_saved') {
+          // Handle all event types from Firestore-first design
+          if (data.type === 'alert' || data.type === 'event_started' || 
+              data.type === 'event_updated' || data.type === 'event_completed') {
             setMessages(prev => [...prev, data]);
           }
         } catch (err) {
