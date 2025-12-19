@@ -2,6 +2,19 @@ import React from "react";
 import { useAnalytics } from "../../contexts";
 import "./Analytics.css";
 
+// Camera name mapping (Vietnamese to English)
+const CAMERA_NAME_MAP: Record<string, string> = {
+  'Ngã tư Lê Trọng Tấn': 'Le Trong Tan Intersection',
+  'Ngã tư Cộng Hòa': 'Cong Hoa Intersection',
+  'Ngã ba Âu Cơ': 'Au Co Junction',
+  'Ngã tư Hòa Bình': 'Hoa Binh Intersection',
+  'Ngã tư Tân Sơn Nhì': 'Tan Son Nhi Intersection',
+};
+
+const formatCameraName = (name: string): string => {
+  return CAMERA_NAME_MAP[name] || name;
+};
+
 // Mini loading spinner for sections
 const SectionLoader: React.FC<{ text?: string }> = ({ text = "Loading..." }) => (
   <div className="section-loading">
@@ -24,7 +37,7 @@ const getPatternInsight = (pattern: any): string => {
     ? "especially on weekends" 
     : "mainly on weekdays";
   
-  return `${timeAdvice} at ${pattern.top_camera}, ${dayAdvice}.`;
+  return `${timeAdvice} at ${formatCameraName(pattern.top_camera)}, ${dayAdvice}.`;
 };
 
 // Helper to format rule text for display
@@ -133,7 +146,7 @@ const Analytics: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="summary-cards">
-        {loading.summary ? (
+        {loading.summary || !summary ? (
           <div className="summary-card loading-card">
             <SectionLoader text="Loading summary..." />
           </div>
@@ -141,16 +154,16 @@ const Analytics: React.FC = () => {
           <>
             <div className="summary-card highlight">
               <div className="card-value">
-                {summary?.total_events?.toLocaleString() || 0}
+                {summary.total_events?.toLocaleString() || 0}
               </div>
               <div className="card-label">Total Events</div>
             </div>
             <div className="summary-card">
-              <div className="card-value">{summary?.patterns_discovered || 0}</div>
+              <div className="card-value">{summary.patterns_discovered || 0}</div>
               <div className="card-label">Patterns Discovered</div>
             </div>
             <div className="summary-card">
-              <div className="card-value">{summary?.rules_discovered || 0}</div>
+              <div className="card-value">{summary.rules_discovered || 0}</div>
               <div className="card-label">Association Rules</div>
             </div>
             <div className="summary-card success">
@@ -200,7 +213,7 @@ const Analytics: React.FC = () => {
                   </div>
                   <div className="detail-row">
                     <span>Top Location:</span>
-                    <span className="detail-value">{pattern.top_camera}</span>
+                    <span className="detail-value">{formatCameraName(pattern.top_camera)}</span>
                   </div>
                   <div className="detail-row">
                     <span>Weekend Events:</span>
@@ -292,12 +305,12 @@ const Analytics: React.FC = () => {
                       {cond.day} at {cond.hour?.toString().padStart(2, "0")}:00
                     </div>
                     <div className="risk-location">
-                      {cond.camera}
+                      {formatCameraName(cond.camera)}
                     </div>
                   </div>
                   <div className={`risk-level-badge ${cond.risk_level?.toLowerCase()}`}>
-                    {cond.risk_level === "HIGH" ? "High Risk" : 
-                     cond.risk_level === "MEDIUM" ? "Medium Risk" : "Low Risk"}
+                    {cond.risk_level?.toLowerCase() === "high" ? "High Risk" : 
+                     cond.risk_level?.toLowerCase() === "medium" ? "Medium Risk" : "Low Risk"}
                   </div>
                 </div>
               ))
@@ -316,7 +329,7 @@ const Analytics: React.FC = () => {
         <div className="quick-summary">
           {Array.isArray(patterns) && patterns.length > 0 && (
             <div className="summary-item">
-              <span>Priority Location: <strong>{patterns[0]?.top_camera}</strong></span>
+              <span>Priority Location: <strong>{formatCameraName(patterns[0]?.top_camera)}</strong></span>
             </div>
           )}
           {Array.isArray(patterns) && patterns.length > 0 && (
@@ -326,7 +339,7 @@ const Analytics: React.FC = () => {
           )}
           {Array.isArray(highRisk) && highRisk.length > 0 && (
             <div className="summary-item warning">
-              <span><strong>{highRisk.filter(r => r.risk_level === "HIGH").length}</strong> high-risk periods require monitoring</span>
+              <span><strong>{highRisk.filter(r => r.risk_level?.toLowerCase() === "high").length}</strong> high-risk periods require monitoring</span>
             </div>
           )}
         </div>

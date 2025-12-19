@@ -152,12 +152,21 @@ class RiskPredictor(BaseAnalyzer):
                 for camera in self.cameras:
                     pred = self.predict(hour, day, camera)
                     high_prob = pred['probabilities'].get('High', 0)
+                    
+                    # Calculate risk_level based on high_prob, not model prediction
+                    if high_prob >= 0.7:
+                        risk_level = "HIGH"
+                    elif high_prob >= 0.4:
+                        risk_level = "MEDIUM"
+                    else:
+                        risk_level = "LOW"
+                    
                     results.append({
                         "hour": hour,
                         "day": day,
                         "camera": camera,
                         "high_prob": high_prob,
-                        "risk_level": pred['risk_level'],
+                        "risk_level": risk_level,
                     })
         
         results.sort(key=lambda x: x['high_prob'], reverse=True)
