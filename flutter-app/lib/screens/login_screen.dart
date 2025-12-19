@@ -170,15 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      gradient: kAccentGradient,
+                      color: kAccentColor,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: kAccentColor.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
                     ),
                     child: const Icon(
                       Icons.shield_outlined,
@@ -265,15 +258,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     return Container(
                       height: 56,
                       decoration: BoxDecoration(
-                        gradient: kAccentGradient,
+                        color: kAccentColor,
                         borderRadius: BorderRadius.circular(AppRadius.md),
-                        boxShadow: [
-                          BoxShadow(
-                            color: kAccentColor.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
                       ),
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
