@@ -45,7 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pop(context);
               onConfirm();
             },
-            child: Text('Confirm', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text('Confirm',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -63,7 +64,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Cache cleared successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: kSuccessColor,
           ),
         );
       },
@@ -89,9 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: kAppGradient),
-        ),
       ),
       body: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, child) {
@@ -112,7 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '${settingsProvider.alertSensitivity}%',
                 value: settingsProvider.alertSensitivity.toDouble(),
                 onChanged: (value) {
-                  settingsProvider.updateSetting('alertSensitivity', value.toInt());
+                  settingsProvider.updateSetting(
+                      'alertSensitivity', value.toInt());
                 },
                 min: 0,
                 max: 100,
@@ -148,10 +147,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '${settingsProvider.refreshRateSeconds}s',
                 value: settingsProvider.refreshRateSeconds.toString(),
                 items: ['1', '5', '10', '30'],
-                itemLabels: ['1 second', '5 seconds', '10 seconds', '30 seconds'],
+                itemLabels: [
+                  '1 second',
+                  '5 seconds',
+                  '10 seconds',
+                  '30 seconds'
+                ],
                 onChanged: (value) {
                   if (value != null) {
-                    settingsProvider.updateSetting('refreshRateSeconds', int.parse(value));
+                    settingsProvider.updateSetting(
+                        'refreshRateSeconds', int.parse(value));
                   }
                 },
               ),
@@ -186,19 +191,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildActionTile(
                 title: 'Terms & Conditions',
                 onTap: () {
-                  _showInfoDialog('Terms & Conditions', 'App terms and conditions go here.');
+                  _showInfoDialog('Terms & Conditions',
+                      'App terms and conditions go here.');
                 },
               ),
               _buildActionTile(
                 title: 'Privacy Policy',
                 onTap: () {
-                  _showInfoDialog('Privacy Policy', 'Our privacy policy goes here.');
+                  _showInfoDialog(
+                      'Privacy Policy', 'Our privacy policy goes here.');
                 },
               ),
               _buildActionTile(
                 title: 'About Us',
                 onTap: () {
-                  _showInfoDialog('About Us', 'Security app for violence detection v1.0.0');
+                  _showInfoDialog(
+                      'About Us', 'Security app for violence detection v1.0.0');
                 },
               ),
               const Divider(),
@@ -215,7 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Clear Cache'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
+                        backgroundColor: kWarningColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -226,7 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.logout),
                       label: const Text('Logout'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.error,
+                        backgroundColor: kErrorColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -249,9 +257,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
-        ),
+              color: kAccentColor,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
       ),
     );
   }
@@ -287,7 +296,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+          Text(title,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(fontWeight: FontWeight.w500)),
           Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
           Slider(
             value: value,
@@ -315,7 +328,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+          Text(title,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(fontWeight: FontWeight.w500)),
           DropdownButton<String>(
             value: value,
             isExpanded: true,

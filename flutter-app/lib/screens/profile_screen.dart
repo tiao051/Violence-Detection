@@ -132,15 +132,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: kAppGradient,
+                color: kAccentColor,
               ),
               child: profile.photoUrl != null
                   ? CircleAvatar(
+                      radius: 50,
                       backgroundImage: NetworkImage(profile.photoUrl!),
                     )
-                  : CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      child: const Icon(Icons.person, size: 50, color: Colors.white),
+                  : const CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.transparent,
+                      child: Icon(Icons.person, size: 50, color: Colors.white),
                     ),
             ),
             const SizedBox(height: 16),
@@ -178,7 +180,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     textAlign: TextAlign.center,
                     decoration: InputDecoration(
                       hintText: 'Enter new name',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -194,22 +197,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: const Icon(Icons.check, size: 18),
                         label: const Text('Save'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: kSuccessColor,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                         ),
                         onPressed: () async {
                           final newName = _nameEditController.text.trim();
                           if (newName.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Name cannot be empty')),
+                              const SnackBar(
+                                  content: Text('Name cannot be empty')),
                             );
                             return;
                           }
 
                           try {
                             // Call profile provider to update name
-                            await context.read<ProfileProvider>().updateDisplayName(newName);
+                            await context
+                                .read<ProfileProvider>()
+                                .updateDisplayName(newName);
 
                             if (mounted) {
                               setState(() {
@@ -218,7 +225,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Display name updated successfully!'),
+                                  content: Text(
+                                      'Display name updated successfully!'),
                                   backgroundColor: Colors.green,
                                 ),
                               );
@@ -240,9 +248,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: const Icon(Icons.close, size: 18),
                         label: const Text('Cancel'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey,
+                          backgroundColor: kSurfaceLight,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                         ),
                         onPressed: () {
                           setState(() {
@@ -260,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               profile.email,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey,
+                    color: kTextSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -290,11 +299,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           onTap: () {
             setState(() {
               _isEditingName = true;
-              _nameEditController.text = context.read<ProfileProvider>().profile?.displayName ?? 'User';
+              _nameEditController.text =
+                  context.read<ProfileProvider>().profile?.displayName ??
+                      'User';
             });
             // Scroll to top to see the edit field
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tap on your name above to edit it')),
+              const SnackBar(
+                  content: Text('Tap on your name above to edit it')),
             );
           },
         ),
@@ -340,7 +352,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Terms of Service feature coming soon')),
+              const SnackBar(
+                  content: Text('Terms of Service feature coming soon')),
             );
           },
         ),
@@ -350,7 +363,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Privacy Policy feature coming soon')),
+              const SnackBar(
+                  content: Text('Privacy Policy feature coming soon')),
             );
           },
         ),
@@ -374,7 +388,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: double.infinity,
           child: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: kErrorColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
@@ -404,7 +418,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              
+
               // Logout - AuthProvider handles clearing auth state
               await context.read<AuthProvider>().logout();
 
