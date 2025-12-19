@@ -110,10 +110,10 @@ const AlertHistory: React.FC = () => {
           <label>Camera:</label>
           <select value={cameraFilter} onChange={e => setCameraFilter(e.target.value)}>
             <option value="all">All Cameras</option>
-            <option value="cam1">Camera 1</option>
-            <option value="cam2">Camera 2</option>
-            <option value="cam3">Camera 3</option>
-            <option value="cam4">Camera 4</option>
+            <option value="cam1">Le Trong Tan Intersection</option>
+            <option value="cam2">Cong Hoa Intersection</option>
+            <option value="cam3">Au Co Junction</option>
+            <option value="cam4">Hoa Binh Intersection</option>
           </select>
         </div>
       </div>
@@ -231,7 +231,7 @@ const AlertHistory: React.FC = () => {
                 <div className="info-row">
                   <label>Status:</label>
                   <span className={`event-status ${selectedAlert.status || 'completed'}`}>
-                    {selectedAlert.status === 'active' ? '🔴 Active' : '✅ Completed'}
+                    {selectedAlert.status === 'active' ? 'Active' : 'Completed'}
                   </span>
                 </div>
                 <div className="info-row">

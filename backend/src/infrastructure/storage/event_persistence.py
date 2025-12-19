@@ -380,11 +380,11 @@ class EventPersistenceService:
 
     def _get_camera_name(self, camera_id: str) -> str:
         names = {
-            "cam1": "Front Gate",
-            "cam2": "Back Yard",
-            "cam3": "Front Door",
-            "cam4": "Living Room",
-            "cam5": "Garage"
+            "cam1": "Ngã tư Lê Trọng Tấn",
+            "cam2": "Ngã tư Cộng Hòa",
+            "cam3": "Ngã ba Âu Cơ",
+            "cam4": "Ngã tư Hòa Bình",
+            "cam5": "Ngã tư Tân Sơn Nhì"
         }
         return names.get(camera_id, f"Camera {camera_id}")
 

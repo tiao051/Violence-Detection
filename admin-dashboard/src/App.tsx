@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
 import Analytics from './components/Analytics'
-import { ThemeProvider, AlertProvider } from './contexts'
+import { ThemeProvider, AlertProvider, AnalyticsProvider } from './contexts'
 import './App.css'
 
 const App = () => {
@@ -27,20 +27,22 @@ const App = () => {
   return (
     <ThemeProvider>
       <AlertProvider>
-        <div className="app-container">
-          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-          <div className="main-content">
-            <Header />
-            <main className="content-area">
-              {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
-              <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
-                <VideoDashboard />
-              </div>
-              {/* Other tabs render normally */}
-              {activeTab !== 'live' && renderOtherContent()}
-            </main>
+        <AnalyticsProvider>
+          <div className="app-container">
+            <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+            <div className="main-content">
+              <Header />
+              <main className="content-area">
+                {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
+                <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
+                  <VideoDashboard />
+                </div>
+                {/* Other tabs render normally */}
+                {activeTab !== 'live' && renderOtherContent()}
+              </main>
+            </div>
           </div>
-        </div>
+        </AnalyticsProvider>
       </AlertProvider>
     </ThemeProvider>
   )
