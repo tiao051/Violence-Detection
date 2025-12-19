@@ -3,12 +3,12 @@ Inference consumer that listens to Kafka and processes frames.
 
 Architecture:
 - Consumes frames from Kafka (partitioned by camera_id)
-- Maintains per-camera buffers for temporal continuity
-- Performs batch inference on GPU
-- Publishes detection results to Redis
+- Distributes inference across Spark cluster for parallel processing
+- Publishes detection results to Kafka (for HDFS archiving)
+- Publishes alerts to Redis
 - Uses alert deduplication to prevent spam
 
-Data flow: Kafka → inference_consumer → [model] → Redis alerts → event_processor
+Data flow: Kafka → InferenceConsumer → [SparkInferenceWorker] → Kafka + Redis
 """
 
 import asyncio
@@ -19,13 +19,14 @@ import time
 import base64
 from typing import Dict, List, Optional
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import cv2
 import msgpack
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 import redis.asyncio as redis
+
+from .spark_worker import SparkInferenceWorker
 
 logger = logging.getLogger(__name__)
 
@@ -42,45 +43,58 @@ class FrameMessage:
 
 class InferenceConsumer:
     """
-    Consumes frames from Kafka, performs inference, publishes results to Redis.
+    Consumes frames from Kafka, performs distributed inference via Spark, publishes results.
     
     Key features:
     - Per-camera buffers (maintains temporal ordering from Kafka partitioning)
-    - Batch processing (default 4 frames per batch for GPU efficiency)
+    - Distributed batch inference via SparkInferenceWorker (parallel processing)
+    - Publishes ALL results to Kafka (for HDFS archiving)
+    - Publishes high-confidence alerts to Redis
     - Alert deduplication (max 1 alert per camera per 60s)
     - Graceful error handling and metrics
-    - Async I/O (non-blocking)
+    - Async I/O (non-blocking Kafka)
     """
     
     def __init__(
         self,
-        model,  # ViolenceDetectionModel instance
+        model,  # ViolenceDetectionModel instance (optional if using Spark)
         kafka_bootstrap_servers: str = None,
         kafka_topic: str = None,
         kafka_group_id: str = None,
         redis_url: str = None,
         batch_size: int = None,
         batch_timeout_ms: int = None,
+        use_spark: bool = True,
+        n_spark_workers: int = 4,
+        model_path: str = None,
     ):
         """
         Initialize inference consumer.
         
         Args:
-            model: ViolenceDetectionModel instance
-            kafka_bootstrap_servers: Kafka broker address (from KAFKA_BOOTSTRAP_SERVERS env, required)
-            kafka_topic: Topic to consume frames from (from KAFKA_FRAME_TOPIC env, required)
-            kafka_group_id: Kafka consumer group (from KAFKA_CONSUMER_GROUP env, required)
-            redis_url: Redis connection URL (from REDIS_URL env, required)
-            batch_size: Frames to accumulate before inference (from INFERENCE_BATCH_SIZE env, required)
-            batch_timeout_ms: Max wait for batch (from INFERENCE_BATCH_TIMEOUT_MS env, required)
+            model: ViolenceDetectionModel instance (for non-Spark fallback)
+            kafka_bootstrap_servers: Kafka broker address (from KAFKA_BOOTSTRAP_SERVERS env)
+            kafka_topic: Topic to consume frames from (from KAFKA_FRAME_TOPIC env)
+            kafka_group_id: Kafka consumer group (from KAFKA_CONSUMER_GROUP env)
+            redis_url: Redis connection URL (from REDIS_URL env)
+            batch_size: Frames to accumulate before inference (from INFERENCE_BATCH_SIZE env)
+            batch_timeout_ms: Max wait for batch (from INFERENCE_BATCH_TIMEOUT_MS env)
+            use_spark: Use SparkInferenceWorker for distributed inference
+            n_spark_workers: Number of Spark workers (from N_SPARK_WORKERS env)
+            model_path: Path to model (from MODEL_PATH env)
         """
-        # Load from environment - all required, fail if missing
+        # Load from environment
         self.kafka_bootstrap_servers = kafka_bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
         self.kafka_topic = kafka_topic or os.getenv("KAFKA_FRAME_TOPIC")
         self.kafka_group_id = kafka_group_id or os.getenv("KAFKA_CONSUMER_GROUP")
         self.redis_url = redis_url or os.getenv("REDIS_URL")
         self.batch_size = batch_size or int(os.getenv("INFERENCE_BATCH_SIZE", "") or 0)
         self.batch_timeout_ms = batch_timeout_ms or int(os.getenv("INFERENCE_BATCH_TIMEOUT_MS", "") or 0)
+        
+        # Spark config
+        self.use_spark = use_spark
+        self.n_spark_workers = n_spark_workers or int(os.getenv("N_SPARK_WORKERS", "4"))
+        self.model_path = model_path or os.getenv("MODEL_PATH")
         
         # Validate all required config
         if not self.kafka_bootstrap_servers:
@@ -95,8 +109,24 @@ class InferenceConsumer:
             raise ValueError("INFERENCE_BATCH_SIZE env variable not set or invalid")
         if self.batch_timeout_ms <= 0:
             raise ValueError("INFERENCE_BATCH_TIMEOUT_MS env variable not set or invalid")
+        if self.use_spark and not self.model_path:
+            raise ValueError("MODEL_PATH env variable required for Spark inference")
         
-        self.model = model
+        self.model = model  # Fallback model
+        
+        # Spark worker
+        self.spark_worker: Optional[SparkInferenceWorker] = None
+        if self.use_spark:
+            logger.info(f"Using SparkInferenceWorker with {self.n_spark_workers} workers")
+            self.spark_worker = SparkInferenceWorker(
+                n_workers=self.n_spark_workers,
+                batch_size=self.batch_size,
+                model_path=self.model_path,
+                device=os.getenv("INFERENCE_DEVICE", "cpu"),
+                kafka_servers=self.kafka_bootstrap_servers,
+                redis_url=self.redis_url,
+                alert_confidence_threshold=float(os.getenv("VIOLENCE_CONFIDENCE_THRESHOLD", "0.85")),
+            )
         
         # State
         self.is_running = False
@@ -115,17 +145,17 @@ class InferenceConsumer:
         self.alerts_sent = 0
         self.start_time = time.time()
         
-        # ThreadPoolExecutor for CPU-bound inference
-        # Prevents blocking event loop so Kafka heartbeats can continue
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
-        
         # Queue for decoupling Kafka consumer and Inference worker
-        # Maxsize 100 to prevent memory overflow if inference is slow
         self.frame_queue = asyncio.Queue(maxsize=100)
     
     async def start(self) -> None:
-        """Start consuming from Kafka."""
+        """Start consuming from Kafka and initialize Spark worker if needed."""
         try:
+            # Initialize Spark worker if using Spark
+            if self.use_spark and self.spark_worker:
+                logger.info("Starting SparkInferenceWorker...")
+                self.spark_worker.start()
+            
             # Connect to Kafka with retry logic
             retry_count = 0
             max_retries = 10
@@ -172,10 +202,12 @@ class InferenceConsumer:
         
         except Exception as e:
             logger.error(f"Failed to start consumer: {e}")
+            if self.spark_worker:
+                self.spark_worker.stop()
             raise
     
     async def stop(self) -> None:
-        """Stop consuming."""
+        """Stop consuming and cleanup Spark worker."""
         self.is_running = False
         
         if self.consumer:
@@ -186,12 +218,12 @@ class InferenceConsumer:
         
         if self.redis_client:
             await self.redis_client.close()
+        
+        if self.spark_worker:
+            self.spark_worker.stop()
     
     async def _kafka_reader_task(self) -> None:
-        """
-        Task 1: Consumes frames from Kafka and puts them into the internal queue.
-        This task is lightweight and ensures we don't block Kafka consumption.
-        """
+        """Consume frames from Kafka and queue them for inference."""
         try:
             async for msg in self.consumer:
                 if not self.is_running:
@@ -221,10 +253,7 @@ class InferenceConsumer:
             logger.error(f"Kafka reader task error: {e}")
 
     async def _inference_worker_task(self) -> None:
-        """
-        Task 2: Takes frames from queue, batches them, and runs inference.
-        This task handles the heavy lifting (AI model) without blocking the reader.
-        """
+        """Batch frames and run inference via Spark or fallback model."""
         while self.is_running:
             try:
                 # Get frame from queue
@@ -247,39 +276,22 @@ class InferenceConsumer:
                 await asyncio.sleep(0.1)
     
     def _parse_message(self, key: str, value: bytes) -> Optional[FrameMessage]:
-        """
-        Parse Kafka message into FrameMessage.
-        
-        Expected format (MessagePack binary):
-        {
-            'camera_id': str,
-            'frame_id': str,
-            'timestamp': float,
-            'frame_seq': int,
-            'jpeg': bytes (raw JPEG binary, no Base16 encoding),
-            'frame_shape': [height, width, channels]
-        }
-        """
+        """Parse MessagePack frame message from Kafka."""
         try:
-            # Unpack MessagePack binary format
             msg_dict = msgpack.unpackb(value, raw=False)
-            
             camera_id = key or msg_dict.get('camera_id')
             frame_id = msg_dict.get('frame_id')
             timestamp = msg_dict.get('timestamp')
             frame_seq = msg_dict.get('frame_seq')
             
-            # Timestamp is REQUIRED - use as is, no fallback to server time
             if timestamp is None:
                 logger.error(f"[{camera_id}] Frame {frame_id} missing required 'timestamp' field")
                 return None
             
-            # Get JPEG bytes directly (no hex decoding needed)
             jpeg_bytes = msg_dict.get('jpeg')
             if not jpeg_bytes:
                 logger.error(f"[{camera_id}] Missing JPEG data")
                 return None
-            
             frame = cv2.imdecode(np.frombuffer(jpeg_bytes, np.uint8), cv2.IMREAD_COLOR)
             
             if frame is None:
@@ -293,75 +305,97 @@ class InferenceConsumer:
                 frame_seq=frame_seq,
                 frame=frame,
             )
-        
         except Exception as e:
             logger.error(f"Failed to parse message: {e}")
             return None
     
+    async def _publish_result_to_kafka(self, camera_id: str, result_data: Dict) -> None:
+        """Publish inference result to Kafka for HDFS archiving."""
+        if not self.producer:
+            return
+        try:
+            await self.producer.send(self.kafka_result_topic, result_data)
+        except Exception as e:
+            logger.error(f"Failed to publish result: {e}")
+    
     async def _process_batch(self, camera_id: str) -> None:
         """
-        Process batch of frames for a camera.
+        Process batch of frames for a camera using Spark or traditional inference.
         
         Args:
             camera_id: Camera identifier
         """
-        frames = self.camera_buffers[camera_id][:self.batch_size]
+        frames_msg = self.camera_buffers[camera_id][:self.batch_size]
         
         try:
-            loop = asyncio.get_event_loop()
-            
-            for frame_msg in frames:
-                # Add frame to model buffer (run in thread to not block heartbeats)
-                await loop.run_in_executor(
-                    self._executor,
-                    self.model.add_frame,
-                    frame_msg.frame
+            if self.use_spark and self.spark_worker:
+                # Extract data from messages
+                frames = [msg.frame for msg in frames_msg]
+                frame_ids = [msg.frame_id for msg in frames_msg]
+                timestamps = [msg.timestamp for msg in frames_msg]
+
+                # Run Spark inference (blocking call, but distributed)
+                loop = asyncio.get_event_loop()
+                results = await loop.run_in_executor(
+                    None,
+                    self.spark_worker.infer_batch,
+                    frames,
+                    camera_id,
+                    frame_ids,
+                    timestamps
                 )
                 
-                # Try to get inference result (returns None if buffer not full)
-                # Run in thread pool to prevent blocking Kafka heartbeats
-                detection = await loop.run_in_executor(
-                    self._executor,
-                    self.model.predict,
-                    frame_msg.timestamp  # Pass frame timestamp for e2e latency
-                )
-                
-                if detection is None:
-                    # Model buffer not full yet, continue accumulating
-                    continue
-                
-                self.frames_processed += 1
-                
-                # Publish ALL results to Kafka for HDFS archiving
-                if self.producer:
-                    try:
-                        result_msg = {
-                            'camera_id': camera_id,
-                            'timestamp': frame_msg.timestamp,
-                            'violence': detection['violence'],
-                            'confidence': float(detection['confidence']),
-                            'label': 'violence' if detection['violence'] else 'nonviolence'
-                        }
-                        await self.producer.send(self.kafka_result_topic, result_msg)
-                    except Exception as e:
-                        logger.error(f"Failed to produce result to Kafka: {e}")
-                
-                # Only process alerts if violence is detected
-                if not detection['violence']:
-                    continue
-                
-                # Publish detection result to Redis
-                # frames_temp_path is None as we don't save frames to disk anymore
-                await self._publish_detection(camera_id, frame_msg, detection, None)
-                self.alerts_sent += 1
-                self.detections_made += 1
+                for i, spark_result in enumerate(results):
+                    self.frames_processed += 1
+                    detection = {
+                        'violence': spark_result.is_violence,
+                        'confidence': spark_result.confidence,
+                        'latency_ms': spark_result.processing_time_ms,
+                        'worker_id': spark_result.worker_id,
+                    }
+                    
+                    result_msg = {
+                        'camera_id': camera_id,
+                        'timestamp': spark_result.timestamp,
+                        'violence': spark_result.is_violence,
+                        'confidence': float(spark_result.confidence),
+                        'label': 'violence' if spark_result.is_violence else 'nonviolence'
+                    }
+                    await self._publish_result_to_kafka(camera_id, result_msg)
+                    
+                    if spark_result.is_violence:
+                        await self._publish_detection(camera_id, frames_msg[i], detection, None)
+                        self.alerts_sent += 1
+                        self.detections_made += 1
+                    
+            else:
+                loop = asyncio.get_event_loop()
+                for frame_msg in frames_msg:
+                    await loop.run_in_executor(None, self.model.add_frame, frame_msg.frame)
+                    detection = await loop.run_in_executor(None, self.model.predict, frame_msg.timestamp)
+                    
+                    if detection is None:
+                        continue
+                    
+                    self.frames_processed += 1
+                    result_msg = {
+                        'camera_id': camera_id,
+                        'timestamp': frame_msg.timestamp,
+                        'violence': detection['violence'],
+                        'confidence': float(detection['confidence']),
+                        'label': 'violence' if detection['violence'] else 'nonviolence'
+                    }
+                    await self._publish_result_to_kafka(camera_id, result_msg)
+                    
+                    if detection['violence']:
+                        await self._publish_detection(camera_id, frame_msg, detection, None)
+                        self.alerts_sent += 1
+                        self.detections_made += 1
         
         except Exception as e:
             logger.error(f"[{camera_id}] Batch processing error: {e}")
-        
         finally:
-            # Remove processed frames from buffer (sliding window)
-            self.camera_buffers[camera_id] = frames[self.batch_size:]
+            self.camera_buffers[camera_id] = frames_msg[self.batch_size:]
     
     async def _publish_detection(
         self,
@@ -370,23 +404,11 @@ class InferenceConsumer:
         detection: Dict,
         frames_temp_path: Optional[str] = None,
     ) -> None:
-        """
-        Publish detection result to Redis.
-        
-        Uses Redis pub/sub for real-time alerts and stores in streams.
-        
-        Args:
-            camera_id: Camera identifier
-            frame_msg: Frame message with metadata
-            detection: Detection result from model
-            frames_temp_path: Path to temp directory with batch frames (optional)
-        """
+        """Publish detection to Redis pub/sub and streams."""
         try:
-            # Encode frame to base64 for immediate visual feedback
             _, buffer = cv2.imencode('.jpg', frame_msg.frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
-
-            # Prepare alert message
+            
             alert_message = {
                 'camera_id': camera_id,
                 'frame_id': frame_msg.frame_id,
@@ -397,31 +419,13 @@ class InferenceConsumer:
                 'inference_latency_ms': float(detection.get('latency_ms', 0)),
                 'e2e_latency_ms': float(detection.get('e2e_latency_ms', 0)),
                 'frames_temp_path': frames_temp_path or '',
-                'snapshot': f"data:image/jpeg;base64,{frame_base64}" # Add snapshot
+                'snapshot': f"data:image/jpeg;base64,{frame_base64}"
             }
             
             alert_json = json.dumps(alert_message)
-            
-            # Publish via pub/sub (real-time, in-memory)
-            await self.redis_client.publish(
-                f"alerts:{camera_id}",
-                alert_json
-            )
-            
-            # Store latest detection (with TTL)
-            await self.redis_client.setex(
-                f"detection:latest:{camera_id}",
-                60, # Default TTL 60s
-                alert_json,
-            )
-            
-            # Append to stream (persistent log)
-            # Note: xadd requires string values, use alert_json
-            await self.redis_client.xadd(
-                f"detection:stream:{camera_id}",
-                {'detection': alert_json},
-                maxlen=100,  # Keep last 100 detections per camera
-            )
+            await self.redis_client.publish(f"alerts:{camera_id}", alert_json)
+            await self.redis_client.setex(f"detection:latest:{camera_id}", 60, alert_json)
+            await self.redis_client.xadd(f"detection:stream:{camera_id}", {'detection': alert_json}, maxlen=100)
             
             logger.debug(
                 f"[{camera_id}] Detection published: "

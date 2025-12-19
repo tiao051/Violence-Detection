@@ -1,15 +1,11 @@
 """
 Spark-based Distributed Inference Worker.
 
-Distributes violence detection inference across multiple Spark workers
-for parallel processing of video frames.
-
-Features:
+Distributes violence detection inference across Spark workers for parallel processing.
 - Distributed frame processing using PySpark RDD
 - Per-partition model loading (lazy initialization)
 - Automatic result aggregation with deduplication
 - Performance metrics collection
-- Integration with Kafka and Redis
 """
 
 import os
@@ -61,12 +57,7 @@ class InferenceResult:
 
 
 class SparkInferenceWorker:
-    """
-    Distributed inference worker using PySpark.
-    
-    Processes frames in parallel across multiple Spark workers.
-    Each worker loads the model once and reuses it for batches.
-    """
+    """Distributed inference worker using PySpark."""
     
     def __init__(
         self,
@@ -81,22 +72,7 @@ class SparkInferenceWorker:
         alert_confidence_threshold: float = 0.85,
         inference_timeout_sec: int = 30,
     ):
-        """
-        Initialize Spark inference worker.
-        
-        Args:
-            n_workers: Number of Spark workers to use
-            batch_size: Frames per batch
-            model_path: Path to trained model
-            device: 'cpu' or 'cuda'
-            kafka_servers: Kafka broker address
-            kafka_frame_topic: Topic to consume frames from
-            kafka_result_topic: Topic to publish results to
-            redis_url: Redis connection URL
-            alert_confidence_threshold: Threshold for publishing alerts
-            inference_timeout_sec: Timeout for inference operations
-        """
-        
+        """Initialize Spark inference worker."""
         self.n_workers = n_workers
         self.batch_size = batch_size
         self.model_path = model_path
@@ -108,13 +84,11 @@ class SparkInferenceWorker:
         self.alert_confidence_threshold = alert_confidence_threshold
         self.inference_timeout_sec = inference_timeout_sec
         
-        # Runtime state
         self.is_running = False
         self.spark: Optional[SparkSession] = None
-        self.sc = None  # SparkContext
+        self.sc = None
         self._executor = ThreadPoolExecutor(max_workers=1)
         
-        # Metrics
         self.metrics = {
             "frames_processed": 0,
             "total_processing_time_ms": 0,
@@ -138,9 +112,9 @@ class SparkInferenceWorker:
             self.sc = self.spark.sparkContext
             self.sc.setLogLevel("WARN")
             
-            # Configure parallelism
-            self.sc.defaultParallelism = self.n_workers
-            self.sc.defaultMinPartitions = self.n_workers
+            # Configure parallelism (read-only properties in newer Spark versions)
+            # self.sc.defaultParallelism = self.n_workers
+            # self.sc.defaultMinPartitions = self.n_workers
             
             self.is_running = True
             logger.info("SparkInferenceWorker started successfully")
@@ -217,7 +191,7 @@ class SparkInferenceWorker:
         ]
         
         # Distribute across workers
-        rdd = self.sc.parallelize(frame_data, numPartitions=self.n_workers)
+        rdd = self.sc.parallelize(frame_data, numSlices=self.n_workers)
         
         logger.info(
             f"Distributed {len(frames)} frames across {self.n_workers} workers "
@@ -254,10 +228,62 @@ class SparkInferenceWorker:
         # Distribute frames
         frame_rdd = self.distribute_frames(frames, frame_ids, camera_id, timestamps)
         
+        # Capture params for worker
+        model_path = self.model_path
+        device = self.device
+        
+        def worker_func(partition):
+            # Load model once per partition (lazy initialization)
+            from ai_service.inference.inference_model import ViolenceDetectionModel, InferenceConfig
+            
+            try:
+                config = InferenceConfig(
+                    model_path=model_path,
+                    device=device
+                )
+                model = ViolenceDetectionModel(config=config)
+                worker_id = os.environ.get("SPARK_EXECUTOR_ID", "unknown")
+                
+                for frame, frame_id, cam_id, timestamp in partition:
+                    try:
+                        # Run inference
+                        start_time = time.time()
+                        detection = model.detect(frame)  # Returns (is_violence, confidence)
+                        elapsed_ms = (time.time() - start_time) * 1000
+                        
+                        is_violence, confidence = detection
+                        
+                        yield InferenceResult(
+                            frame_id=frame_id,
+                            camera_id=cam_id,
+                            timestamp=timestamp,
+                            is_violence=is_violence,
+                            confidence=confidence,
+                            processing_time_ms=elapsed_ms,
+                            worker_id=worker_id
+                        )
+                        
+                    except Exception as e:
+                        logger.error(
+                            f"Error inferring frame {frame_id} on worker {worker_id}: {e}"
+                        )
+                        # Yield error result
+                        yield InferenceResult(
+                            frame_id=frame_id,
+                            camera_id=cam_id,
+                            timestamp=timestamp,
+                            is_violence=False,
+                            confidence=0.0,
+                            processing_time_ms=0.0,
+                            worker_id=worker_id
+                        )
+            
+            except Exception as e:
+                logger.error(f"Error loading model on worker: {e}", exc_info=True)
+                raise
+
         # Run inference on each partition
-        result_rdd = frame_rdd.mapPartitions(
-            lambda partition: self._infer_partition(partition, camera_id)
-        )
+        result_rdd = frame_rdd.mapPartitions(worker_func)
         
         # Collect results
         results = result_rdd.collect()
@@ -270,7 +296,8 @@ class SparkInferenceWorker:
         
         return aggregated
     
-    def _infer_partition(self, partition, camera_id: str):
+    @staticmethod
+    def run_inference_on_partition(partition, camera_id: str, model_path: str, device: str):
         """
         Inference function for a single partition (runs on worker).
         
@@ -280,6 +307,8 @@ class SparkInferenceWorker:
         Args:
             partition: Iterator of (frame, frame_id, camera_id, timestamp) tuples
             camera_id: Camera identifier
+            model_path: Path to model checkpoint
+            device: Device to run inference on
             
         Yields:
             InferenceResult objects
@@ -289,8 +318,8 @@ class SparkInferenceWorker:
         
         try:
             config = InferenceConfig(
-                model_path=self.model_path,
-                device=self.device
+                model_path=model_path,
+                device=device
             )
             model = ViolenceDetectionModel(config=config)
             worker_id = os.environ.get("SPARK_EXECUTOR_ID", "unknown")
@@ -332,7 +361,7 @@ class SparkInferenceWorker:
         except Exception as e:
             logger.error(f"Error loading model on worker: {e}", exc_info=True)
             raise
-    
+
     def aggregate_results(self, results: List[InferenceResult]) -> List[InferenceResult]:
         """
         Aggregate results from all workers, with deduplication.

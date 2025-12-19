@@ -99,7 +99,7 @@ services:
 
   # Inference Consumer (AI Model Service - SEPARATE PROCESS)
   # Runs independently to avoid GIL blocking the FastAPI backend
-  # Listens to Kafka, runs model inference, publishes to Redis
+  # Listens to Kafka, runs model inference (distributed via Spark), publishes to Redis
   inference:
     build:
       context: ./ai_service
@@ -110,13 +110,19 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_FRAME_TOPIC: frames
+      KAFKA_RESULT_TOPIC: inference-results
+      KAFKA_CONSUMER_GROUP: inference-group
       REDIS_URL: redis://redis:6379/0
       MODEL_PATH: /app/training/two-stage/checkpoints/best_model.pt
       INFERENCE_DEVICE: cpu
-      ALERT_COOLDOWN_SECONDS: 30
+      INFERENCE_BATCH_SIZE: 32
+      INFERENCE_BATCH_TIMEOUT_MS: 5000
+      N_SPARK_WORKERS: 4
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.85
     volumes:
-      - ./ai_service:/app
-      - ./ai_service/logs:/app/logs
+      - ./ai_service:/app/ai_service
+      - ./ai_service/logs:/app/ai_service/logs
       - /app/__pycache__
     depends_on:
       redis:
@@ -125,10 +131,11 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    # Add a small delay to ensure Kafka Group Coordinator is ready
-    command: sh -c "sleep 10 && python inference/inference_consumer_service.py"
+    # Wait for Kafka Group Coordinator to be ready
+    command: sh -c "sleep 15 && python -m ai_service.inference.inference_consumer_service"
     networks:
       - app-network
+    restart: on-failure
 
   # RTSP Server (MediaMTX)
   rtsp-server:

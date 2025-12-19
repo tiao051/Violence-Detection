@@ -36,16 +36,25 @@ def setup_logging(log_level: str = None) -> logging.Logger:
     
     # File handler - capture INFO and above for investigation, but avoid debug spam
     try:
-        os.makedirs("logs", exist_ok=True)
+        # Ensure logs directory exists (relative to project root /app)
+        log_dir = "ai_service/logs"
+        if not os.path.exists(log_dir):
+            # Fallback if running locally inside ai_service dir
+            if os.path.exists("logs"):
+                log_dir = "logs"
+            else:
+                os.makedirs(log_dir, exist_ok=True)
+                
         file_handler = RotatingFileHandler(
-            "logs/inference.log",
+            f"{log_dir}/inference.log",
             maxBytes=10_000_000,  # 10MB
             backupCount=5
         )
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(console_formatter)
         root_logger.addHandler(file_handler)
-    except Exception:
+    except Exception as e:
+        print(f"Failed to setup file logging: {e}")
         pass  # Silently fail if can't create log file
     
     # Silence noisy third-party libraries

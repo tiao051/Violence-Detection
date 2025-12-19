@@ -11,6 +11,7 @@ redis==5.0.1
 # Data Processing
 numpy==1.26.2
 opencv-python-headless==4.8.1.78
+pyspark==3.5.0
 
 # ML/Deep Learning
 torch==2.1.2
