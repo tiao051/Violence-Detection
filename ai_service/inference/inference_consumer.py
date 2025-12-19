@@ -137,6 +137,8 @@ class InferenceConsumer:
         
         # Per-camera buffers and state
         self.camera_buffers: Dict[str, List[FrameMessage]] = {}
+        self.camera_context: Dict[str, List[np.ndarray]] = {} # Store last 29 frames for context
+        self.context_size = 29 # Model needs 30 frames, so 29 context + 1 new
         
         # Metrics
         self.frames_consumed = 0
@@ -268,7 +270,10 @@ class InferenceConsumer:
                 
                 # Process batch if buffer size reached
                 if len(self.camera_buffers[camera_id]) >= self.batch_size:
-                    await self._process_batch(camera_id)
+                    if self.use_spark:
+                        await self._process_batch_spark(camera_id)
+                    else:
+                        await self._process_batch_local(camera_id)
                     
             except Exception as e:
                 logger.error(f"Inference worker task error: {e}")
@@ -318,84 +323,124 @@ class InferenceConsumer:
         except Exception as e:
             logger.error(f"Failed to publish result: {e}")
     
-    async def _process_batch(self, camera_id: str) -> None:
+    async def _process_batch_spark(self, trigger_camera_id: str) -> None:
         """
-        Process batch of frames for a camera using Spark or traditional inference.
+        Process batches from multiple cameras using Spark.
+        Collects available batches from all cameras to maximize parallelism.
+        """
+        # Identify target cameras (trigger camera + any others with data)
+        target_cameras = [trigger_camera_id]
+        for cam_id, buffer in self.camera_buffers.items():
+            if cam_id != trigger_camera_id and len(buffer) > 0:
+                 target_cameras.append(cam_id)
         
-        Args:
-            camera_id: Camera identifier
-        """
-        frames_msg = self.camera_buffers[camera_id][:self.batch_size]
+        spark_inputs = []
+        camera_batches = {} # Store batch info for result processing
         
         try:
-            if self.use_spark and self.spark_worker:
-                # Extract data from messages
-                frames = [msg.frame for msg in frames_msg]
-                frame_ids = [msg.frame_id for msg in frames_msg]
-                timestamps = [msg.timestamp for msg in frames_msg]
+            for cam_id in target_cameras:
+                # Extract frames (up to batch_size)
+                count = min(len(self.camera_buffers[cam_id]), self.batch_size)
+                current_batch = self.camera_buffers[cam_id][:count]
+                
+                # Update buffer (remove processed)
+                self.camera_buffers[cam_id] = self.camera_buffers[cam_id][count:]
+                
+                # Get context frames
+                context_frames = self.camera_context.get(cam_id, [])
+                
+                # Prepare full sequence (Context + New)
+                full_frames = context_frames + [msg.frame for msg in current_batch]
+                
+                # Update context for next time (keep last N frames)
+                new_context = full_frames[-self.context_size:] if len(full_frames) > self.context_size else full_frames
+                self.camera_context[cam_id] = new_context
+                
+                spark_inputs.append({
+                    'camera_id': cam_id,
+                    'frames': full_frames,
+                    'frame_ids': [msg.frame_id for msg in current_batch],
+                    'timestamps': [msg.timestamp for msg in current_batch],
+                    'context_length': len(context_frames)
+                })
+                
+                camera_batches[cam_id] = current_batch
 
-                # Run Spark inference (blocking call, but distributed)
+            # Run Spark inference
+            if self.spark_worker:
                 loop = asyncio.get_event_loop()
                 results = await loop.run_in_executor(
                     None,
-                    self.spark_worker.infer_batch,
-                    frames,
-                    camera_id,
-                    frame_ids,
-                    timestamps
+                    self.spark_worker.infer_multi_batch,
+                    spark_inputs
                 )
                 
-                for i, spark_result in enumerate(results):
-                    self.frames_processed += 1
-                    detection = {
-                        'violence': spark_result.is_violence,
-                        'confidence': spark_result.confidence,
-                        'latency_ms': spark_result.processing_time_ms,
-                        'worker_id': spark_result.worker_id,
-                    }
+                # Process results
+                # results is a list of InferenceResult objects from all cameras
+                for res in results:
+                    cam_id = res.camera_id
                     
-                    result_msg = {
-                        'camera_id': camera_id,
-                        'timestamp': spark_result.timestamp,
-                        'violence': spark_result.is_violence,
-                        'confidence': float(spark_result.confidence),
-                        'label': 'violence' if spark_result.is_violence else 'nonviolence'
-                    }
-                    await self._publish_result_to_kafka(camera_id, result_msg)
+                    # Find corresponding frame message
+                    batch_msgs = camera_batches.get(cam_id, [])
+                    frame_msg = next((m for m in batch_msgs if m.frame_id == res.frame_id), None)
                     
-                    if spark_result.is_violence:
-                        await self._publish_detection(camera_id, frames_msg[i], detection, None)
-                        self.alerts_sent += 1
-                        self.detections_made += 1
-                    
-            else:
-                loop = asyncio.get_event_loop()
-                for frame_msg in frames_msg:
-                    await loop.run_in_executor(None, self.model.add_frame, frame_msg.frame)
-                    detection = await loop.run_in_executor(None, self.model.predict, frame_msg.timestamp)
-                    
-                    if detection is None:
-                        continue
-                    
-                    self.frames_processed += 1
-                    result_msg = {
-                        'camera_id': camera_id,
-                        'timestamp': frame_msg.timestamp,
-                        'violence': detection['violence'],
-                        'confidence': float(detection['confidence']),
-                        'label': 'violence' if detection['violence'] else 'nonviolence'
-                    }
-                    await self._publish_result_to_kafka(camera_id, result_msg)
-                    
-                    if detection['violence']:
-                        await self._publish_detection(camera_id, frame_msg, detection, None)
-                        self.alerts_sent += 1
-                        self.detections_made += 1
-        
+                    if frame_msg:
+                        self.frames_processed += 1
+                        detection = {
+                            'violence': res.is_violence,
+                            'confidence': res.confidence,
+                            'latency_ms': res.processing_time_ms,
+                            'worker_id': res.worker_id,
+                        }
+                        
+                        result_msg = {
+                            'camera_id': cam_id,
+                            'timestamp': res.timestamp,
+                            'violence': res.is_violence,
+                            'confidence': float(res.confidence),
+                            'label': 'violence' if res.is_violence else 'nonviolence'
+                        }
+                        await self._publish_result_to_kafka(cam_id, result_msg)
+                        
+                        if res.is_violence:
+                            await self._publish_detection(cam_id, frame_msg, detection, None)
+                            self.alerts_sent += 1
+                            self.detections_made += 1
+
         except Exception as e:
-            logger.error(f"[{camera_id}] Batch processing error: {e}")
-        finally:
-            self.camera_buffers[camera_id] = frames_msg[self.batch_size:]
+            logger.error(f"Spark batch processing error: {e}")
+
+    async def _process_batch_local(self, camera_id: str) -> None:
+        """Process batch locally (single node)."""
+        frames_msg = self.camera_buffers[camera_id][:self.batch_size]
+        self.camera_buffers[camera_id] = self.camera_buffers[camera_id][self.batch_size:]
+        
+        try:
+            loop = asyncio.get_event_loop()
+            for frame_msg in frames_msg:
+                # Local model maintains its own state in self.model
+                await loop.run_in_executor(None, self.model.add_frame, frame_msg.frame)
+                detection = await loop.run_in_executor(None, self.model.predict, frame_msg.timestamp)
+                
+                if detection is None:
+                    continue
+                
+                self.frames_processed += 1
+                result_msg = {
+                    'camera_id': camera_id,
+                    'timestamp': frame_msg.timestamp,
+                    'violence': detection['violence'],
+                    'confidence': float(detection['confidence']),
+                    'label': 'violence' if detection['violence'] else 'nonviolence'
+                }
+                await self._publish_result_to_kafka(camera_id, result_msg)
+                
+                if detection['violence']:
+                    await self._publish_detection(camera_id, frame_msg, detection, None)
+                    self.alerts_sent += 1
+                    self.detections_made += 1
+        except Exception as e:
+            logger.error(f"[{camera_id}] Local batch processing error: {e}")
     
     async def _publish_detection(
         self,
@@ -426,8 +471,9 @@ class InferenceConsumer:
             await self.redis_client.publish(f"alerts:{camera_id}", alert_json)
             await self.redis_client.setex(f"detection:latest:{camera_id}", 60, alert_json)
             await self.redis_client.xadd(f"detection:stream:{camera_id}", {'detection': alert_json}, maxlen=100)
-            
-            logger.debug(
+
+            # Log at INFO so it appears in inference.log (file handler is INFO+)
+            logger.info(
                 f"[{camera_id}] Detection published: "
                 f"violence={detection['violence']}, "
                 f"confidence={detection['confidence']:.2f}, "

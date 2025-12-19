@@ -221,6 +221,10 @@ def get_frame_buffer() -> FrameBuffer:
     """
     global _frame_buffer
     if _frame_buffer is None:
-        # Default to 100 frames (approx 16s @ 6fps)
-        _frame_buffer = FrameBuffer(max_buffer_size=100)
+        # Increase buffer size to support long events
+        # 60s event + 30s timeout + padding = ~100s
+        # At 5 FPS -> 500 frames
+        # At 15 FPS -> 1500 frames
+        # Let's set to 1500 to be safe (approx 200MB per camera at 640x480)
+        _frame_buffer = FrameBuffer(max_buffer_size=1500)
     return _frame_buffer

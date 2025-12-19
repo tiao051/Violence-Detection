@@ -203,7 +203,10 @@ class EventPersistenceService:
             "timestamp": timestamp,
             "videoUrl": video_url,  # Firebase URL (may be empty)
             "thumbnailUrl": "", # TODO: Generate thumbnail
-            "confidence": detection.get("confidence")
+            "confidence": detection.get("confidence"),
+            # Store the snapshot image for frontend (same as alert history)
+            # detection['snapshot'] = "data:image/jpeg;base64,..." from inference_consumer
+            "imageBase64": detection.get("snapshot", "")  # Base64 encoded snapshot frame
         }
         
         # Add to 'events' collection

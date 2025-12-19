@@ -86,6 +86,12 @@ class EventProcessor:
                 data = data.decode('utf-8')
             
             alert = json.loads(data)
+
+            # Ignore system messages (like event_saved updates)
+            if alert.get('type') == 'event_saved':
+                logger.info(f"Ignored event_saved message for {alert.get('camera_id')}")
+                return
+            
             camera_id = alert.get('camera_id')
             confidence = alert.get('confidence', 0)
             
@@ -104,25 +110,35 @@ class EventProcessor:
                 # START NEW EVENT - use detection timestamp
                 logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, ts={detection_timestamp})")
                 self.active_events[camera_id] = {
-                    'start_time': detection_timestamp,  # Always from detection
-                    'last_seen': detection_timestamp,   # Always from detection, not server time
+                    'start_time': detection_timestamp,  # Video timestamp
+                    'last_seen': detection_timestamp,   # Video timestamp
+                    'last_processed_at': time.time(),   # System timestamp (for timeout)
                     'max_confidence': confidence,
-                    'first_alert': alert, # Keep first alert for metadata
+                    'first_alert': alert, # Keep first alert for metadata (timestamp)
+                    'best_alert': alert,  # Alert with highest confidence (for snapshot/evidence)
                     'frames_temp_paths': [] # Collect all temp paths
                 }
             else:
                 # EXTEND EXISTING EVENT - but check deduplication cooldown first
                 event = self.active_events[camera_id]
-                time_since_start = detection_timestamp - event['start_time']
                 
-                # Only extend if within cooldown window (deduplication window)
-                if time_since_start <= self.cooldown_seconds:
-                    logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp}, elapsed={time_since_start:.1f}s)")
-                    event['last_seen'] = detection_timestamp  # Update with detection timestamp
-                    event['max_confidence'] = max(event['max_confidence'], confidence)
+                # Calculate duration based on VIDEO timestamps
+                video_duration = detection_timestamp - event['start_time']
+                
+                # Only extend if within max duration window
+                if video_duration <= self.max_event_duration:
+                    logger.debug(f"[{camera_id}] Extending event (conf={confidence:.2f}, ts={detection_timestamp}, duration={video_duration:.1f}s)")
+                    event['last_seen'] = detection_timestamp  # Update video timestamp
+                    event['last_processed_at'] = time.time()  # Update system timestamp
+                    
+                    # Track best evidence (highest confidence) - same logic as frontend
+                    if confidence > event['max_confidence']:
+                        event['max_confidence'] = confidence
+                        event['best_alert'] = alert  # Update to alert with best snapshot
                 else:
-                    # Outside cooldown window - ignore this alert (deduplication)
-                    logger.debug(f"[{camera_id}] Alert suppressed by deduplication (outside {self.cooldown_seconds}s window, elapsed={time_since_start:.1f}s)")
+                    # Outside max duration - ignore this alert (let monitor close it)
+                    # Or we could force close here, but monitor loop handles it cleaner
+                    logger.debug(f"[{camera_id}] Alert suppressed (max duration exceeded: {video_duration:.1f}s > {self.max_event_duration}s)")
                     return
             
             # Collect temp frames path if available
@@ -149,20 +165,29 @@ class EventProcessor:
                 for camera_id in active_cameras:
                     event = self.active_events[camera_id]
                     
-                    now = time.time()
-                    duration = now - event['start_time']
-                    is_timeout = (now - event['last_seen'] > self.event_timeout_seconds)
-                    is_max_duration = (duration > self.max_event_duration)
+                    # Use system time for timeout check (Processing Timeout)
+                    # This handles the case where alerts stop coming (e.g. violence ended)
+                    current_system_time = time.time()
+                    last_processed_at = event.get('last_processed_at', current_system_time)
+                    
+                    is_timeout = (current_system_time - last_processed_at > self.event_timeout_seconds)
+                    
+                    # Duration is based on VIDEO timestamps (Content Duration)
+                    # This handles the case where video is long but processed quickly/slowly
+                    video_duration = event['last_seen'] - event['start_time']
+                    is_max_duration = (video_duration > self.max_event_duration)
 
                     # Check timeout (No new alerts for X seconds) or Max Duration
                     if is_timeout or is_max_duration:
                         # Event finished! Process it.
-                        reason = "Timeout" if is_timeout else "Max Duration"
-                        logger.info(f"[{camera_id}] Event finished ({reason}). Duration: {duration:.1f}s. Saving...")
+                        reason = f"Timeout ({current_system_time - last_processed_at:.1f}s)" if is_timeout else f"Max Duration ({video_duration:.1f}s)"
+                        logger.info(f"[{camera_id}] Event finished [{reason}]. Video Duration: {video_duration:.1f}s. Saving...")
                         
-                        # Use the first alert as template, but update confidence
-                        final_alert = event['first_alert'].copy()
-                        final_alert['confidence'] = event['max_confidence']
+                        # Use best_alert (highest confidence) for evidence, but preserve first_alert's timestamp
+                        # This ensures Firestore gets the same best snapshot that frontend displays
+                        final_alert = event['best_alert'].copy()
+                        final_alert['timestamp'] = event['first_alert']['timestamp']  # Use original start time
+                        final_alert['confidence'] = event['max_confidence']  # Ensure max confidence
                         
                         # Calculate time window for video extraction
                         # Start = First Alert - Padding

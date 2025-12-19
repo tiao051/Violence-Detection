@@ -32,7 +32,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [alerts]);
 
   const addAlert = (newAlertData: Omit<Alert, 'id' | 'is_reviewed'>) => {
-    const COOLDOWN_MS = 30000; // 30 seconds grouping window
+    const COOLDOWN_SECONDS = 30; // 30 seconds grouping window
     
     // Alert MUST include detection timestamp from backend
     if (typeof newAlertData.timestamp !== 'number') {
@@ -40,15 +40,12 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
-    // Convert detection timestamp from seconds to milliseconds
-    const detectionTimestampMs = newAlertData.timestamp * 1000;
-
     setAlerts(prev => {
       // Find if there's a recent alert for this camera (within cooldown window)
-      // Compare detection times, not with current time
+      // Compare detection times in SECONDS (all timestamps from backend are Unix time in seconds)
       const existingIndex = prev.findIndex(a => 
         a.camera_id === newAlertData.camera_id && 
-        (detectionTimestampMs - a.timestamp * 1000) < COOLDOWN_MS
+        (newAlertData.timestamp - a.timestamp) < COOLDOWN_SECONDS
       );
 
       if (existingIndex !== -1) {
@@ -85,10 +82,11 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const updateAlert = (cameraId: string, timestamp: number, updates: Partial<Alert>) => {
     setAlerts(prev => {
-      // Find alert that matches camera and is close in time (within 30s)
+      // Find alert that matches camera and is close in time (within 30 seconds)
+      // timestamp is in SECONDS (Unix time from backend)
       const index = prev.findIndex(a => 
         a.camera_id === cameraId && 
-        Math.abs(a.timestamp - timestamp) < 30000
+        Math.abs(a.timestamp - timestamp) < 30
       );
 
       if (index !== -1) {

@@ -200,6 +200,98 @@ class SparkInferenceWorker:
         
         return rdd
     
+    def infer_multi_batch(self, inputs: List[Dict]) -> List[InferenceResult]:
+        """
+        Run inference on multiple batches (one per camera) in parallel.
+        
+        Args:
+            inputs: List of dicts, each containing:
+                   - camera_id
+                   - frames (context + new)
+                   - frame_ids (new only)
+                   - timestamps (new only)
+                   - context_length (number of frames to skip output for)
+        
+        Returns:
+            List of InferenceResult objects (only for new frames)
+        """
+        if not self.is_running:
+            raise RuntimeError("Worker not started. Call start() first.")
+        
+        # Create RDD with 1 partition per input (camera batch)
+        # This ensures each camera's batch is processed by a single worker sequentially
+        rdd = self.sc.parallelize(inputs, numSlices=len(inputs))
+        
+        # Capture params
+        model_path = self.model_path
+        device = self.device
+        confidence_threshold = self.alert_confidence_threshold
+        
+        def worker_func(partition):
+            # Load model once per partition
+            from ai_service.inference.inference_model import ViolenceDetectionModel, InferenceConfig
+            
+            try:
+                config = InferenceConfig(
+                    model_path=model_path,
+                    device=device,
+                    confidence_threshold=confidence_threshold,
+                )
+                model = ViolenceDetectionModel(config=config)
+                worker_id = os.environ.get("SPARK_EXECUTOR_ID", "unknown")
+                
+                # Partition contains 1 item (the input dict)
+                for item in partition:
+                    cam_id = item['camera_id']
+                    frames = item['frames']
+                    target_frame_ids = item['frame_ids']
+                    target_timestamps = item['timestamps']
+                    context_len = item['context_length']
+                    
+                    # Process all frames to build state
+                    for i, frame in enumerate(frames):
+                        try:
+                            start_time = time.time()
+                            
+                            # Add frame to model buffer
+                            model.add_frame(frame)
+                            
+                            # Only predict and yield results for NEW frames (after context)
+                            if i >= context_len:
+                                # Calculate index in target arrays
+                                target_idx = i - context_len
+                                
+                                # Run prediction
+                                detection = model.predict()
+                                elapsed_ms = (time.time() - start_time) * 1000
+                                
+                                if detection:
+                                    yield InferenceResult(
+                                        frame_id=target_frame_ids[target_idx],
+                                        camera_id=cam_id,
+                                        timestamp=target_timestamps[target_idx],
+                                        is_violence=detection['violence'],
+                                        confidence=detection['confidence'],
+                                        processing_time_ms=elapsed_ms,
+                                        worker_id=worker_id
+                                    )
+                                    
+                        except Exception as e:
+                            logger.error(f"Error processing frame {i} on worker {worker_id}: {e}")
+            
+            except Exception as e:
+                logger.error(f"Error loading model on worker: {e}", exc_info=True)
+                raise
+
+        # Run inference
+        result_rdd = rdd.mapPartitions(worker_func)
+        results = result_rdd.collect()
+        
+        # Update metrics
+        self._update_metrics(results)
+        
+        return results
+
     def infer_batch(
         self,
         frames: List[np.ndarray],
@@ -231,6 +323,7 @@ class SparkInferenceWorker:
         # Capture params for worker
         model_path = self.model_path
         device = self.device
+        confidence_threshold = self.alert_confidence_threshold
         
         def worker_func(partition):
             # Load model once per partition (lazy initialization)
@@ -239,7 +332,8 @@ class SparkInferenceWorker:
             try:
                 config = InferenceConfig(
                     model_path=model_path,
-                    device=device
+                    device=device,
+                    confidence_threshold=confidence_threshold,
                 )
                 model = ViolenceDetectionModel(config=config)
                 worker_id = os.environ.get("SPARK_EXECUTOR_ID", "unknown")
@@ -317,9 +411,15 @@ class SparkInferenceWorker:
         from ai_service.inference.inference_model import ViolenceDetectionModel, InferenceConfig
         
         try:
+            # Keep Spark executor threshold consistent with the service configuration.
+            # If not set, fall back to InferenceConfig default.
+            threshold_env = os.environ.get("VIOLENCE_CONFIDENCE_THRESHOLD")
+            confidence_threshold = float(threshold_env) if threshold_env else None
+
             config = InferenceConfig(
                 model_path=model_path,
-                device=device
+                device=device,
+                confidence_threshold=confidence_threshold if confidence_threshold is not None else InferenceConfig.confidence_threshold,
             )
             model = ViolenceDetectionModel(config=config)
             worker_id = os.environ.get("SPARK_EXECUTOR_ID", "unknown")

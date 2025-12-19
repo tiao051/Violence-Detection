@@ -43,7 +43,12 @@ async def main():
         )
         
         model = ViolenceDetectionModel(config=config)
-        consumer = InferenceConsumer(model=model)
+        
+        # Check if Spark should be used (default: True)
+        use_spark = os.getenv('USE_SPARK', 'true').lower() == 'true'
+        logger.info(f"Inference Mode: {'Distributed (Spark)' if use_spark else 'Local (Single Node)'}")
+        
+        consumer = InferenceConsumer(model=model, use_spark=use_spark)
         await consumer.start()
         
         elapsed = time.time() - start_time

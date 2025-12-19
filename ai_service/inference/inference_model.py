@@ -370,6 +370,17 @@ class ViolenceDetectionModel:
                 'latency_ms': 0.0
             }
     
+    def detect(self, frame: np.ndarray) -> tuple[bool, float]:
+        """
+        Wrapper for add_frame + predict for stateless-like usage.
+        Note: This still requires a full buffer to return a result.
+        """
+        self.add_frame(frame)
+        result = self.predict()
+        if result:
+            return result['violence'], result['confidence']
+        return False, 0.0
+
     def reset_buffer(self) -> None:
         """Clear frame buffer."""
         self.frame_buffer.clear()

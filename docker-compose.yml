@@ -119,7 +119,7 @@ services:
       INFERENCE_BATCH_SIZE: 32
       INFERENCE_BATCH_TIMEOUT_MS: 5000
       N_SPARK_WORKERS: 4
-      VIOLENCE_CONFIDENCE_THRESHOLD: 0.85
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
     volumes:
       - ./ai_service:/app/ai_service
       - ./ai_service/logs:/app/ai_service/logs
