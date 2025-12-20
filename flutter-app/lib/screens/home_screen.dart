@@ -1,9 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:security_app/providers/auth_provider.dart';
-import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
@@ -61,9 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           } catch (e) {
             // Event not found in list, could be loading or not yet fetched
-            if (kDebugMode) {
-              print('Event $eventId not found in provider');
-            }
+            debugPrint('Event $eventId not found in provider');
           }
         }
       },
@@ -76,85 +71,12 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// Debug method to test notification deep linking.
-  ///
-  /// Shows a dialog with unviewed events that can be tapped to simulate
-  /// notification tap behavior. Only available in debug mode.
-  void _showTestNotificationDialog() {
-    final eventProvider = context.read<EventProvider>();
-    final unviewedEvents = eventProvider.unviewedEvents;
-
-    if (unviewedEvents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No unviewed events to test with'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('🧪 Test Notification'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              'Tap event to simulate notification:',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...unviewedEvents.map((event) => SimpleDialogOption(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  // Navigate and wait for return
-                  await context.push('/event_detail', extra: event);
-                  // Force EventTab rebuild when back
-                  setState(() {
-                    _rebuildKey++;
-                  });
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      event.cameraName,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    Text(
-                      'ID: ${event.id}',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_selectedIndex == 0 ? 'Cameras' : 'Events'),
         actions: [
-          // Debug button to test deep linking (only in debug mode)
-          if (kDebugMode && _selectedIndex == 1) // Only show on Events tab
-            Tooltip(
-              message: 'Test Notification Deep Link',
-              child: IconButton(
-                icon: const Icon(Icons.developer_mode),
-                onPressed: () {
-                  if (kDebugMode) print('DEBUG: Test button pressed');
-                  _showTestNotificationDialog();
-                },
-              ),
-            ),
           // Settings button
           IconButton(
             icon: const Icon(Icons.settings_outlined),
