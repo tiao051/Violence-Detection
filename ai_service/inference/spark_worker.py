@@ -100,6 +100,9 @@ class SparkInferenceWorker:
         logger.info(f"Starting SparkInferenceWorker with {self.n_workers} workers")
         
         try:
+            # Get event log directory from environment or use default
+            event_log_dir = os.environ.get("SPARK_EVENT_LOG_DIR", "/tmp/spark-events")
+            
             self.spark = SparkSession.builder \
                 .appName("ViolenceDetectionInference") \
                 .master(f"local[{self.n_workers}]") \
@@ -107,6 +110,13 @@ class SparkInferenceWorker:
                 .config("spark.executor.memory", "4g") \
                 .config("spark.driver.memory", "4g") \
                 .config("spark.python.worker.memory", "2g") \
+                .config("spark.ui.enabled", "true") \
+                .config("spark.ui.port", "4040") \
+                .config("spark.driver.bindAddress", "0.0.0.0") \
+                .config("spark.driver.host", "0.0.0.0") \
+                .config("spark.eventLog.enabled", "true") \
+                .config("spark.eventLog.dir", event_log_dir) \
+                .config("spark.history.fs.logDirectory", event_log_dir) \
                 .getOrCreate()
             
             self.sc = self.spark.sparkContext

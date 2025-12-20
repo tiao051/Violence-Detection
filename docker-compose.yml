@@ -107,6 +107,8 @@ services:
     container_name: violence-detection-inference
     env_file:
       - ./ai_service/.env
+    ports:
+      - "4040:4040"  # Spark Application UI (live monitoring)
     environment:
       TZ: Asia/Ho_Chi_Minh
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -120,10 +122,12 @@ services:
       INFERENCE_BATCH_TIMEOUT_MS: 5000
       N_SPARK_WORKERS: 4
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+      SPARK_EVENT_LOG_DIR: /tmp/spark-events
     volumes:
       - ./ai_service:/app/ai_service
       - ./ai_service/logs:/app/ai_service/logs
       - /app/__pycache__
+      - spark_logs:/tmp/spark-events
     depends_on:
       redis:
         condition: service_healthy
@@ -264,6 +268,33 @@ services:
     networks:
       - app-network
 
+  # ============================================================================
+  # SPARK HISTORY SERVER
+  # ============================================================================
+  spark-history:
+    image: bitnami/spark:3.5.0
+    container_name: spark-history-server
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+      - SPARK_HISTORY_OPTS=-Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
+    ports:
+      - "18080:18080"  # Spark History UI
+    volumes:
+      - spark_logs:/tmp/spark-events
+    command: >
+      bash -c "
+        mkdir -p /tmp/spark-events &&
+        /opt/bitnami/spark/sbin/start-history-server.sh
+      "
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # Analytics Consumer (HDFS Archiver)
   # Consumes inference results from Kafka and uploads to HDFS
   analytics-consumer:
@@ -297,3 +328,4 @@ volumes:
   redis_data:
   hdfs_namenode:
   hdfs_datanode:
+  spark_logs:
