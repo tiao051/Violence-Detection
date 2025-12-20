@@ -123,7 +123,8 @@ services:
       N_SPARK_WORKERS: 4
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
       SPARK_EVENT_LOG_DIR: /tmp/spark-events
-      SPARK_MASTER_URL: spark://spark-master:7077
+      # Use local mode instead of cluster (avoid Python version mismatch)
+      # SPARK_MASTER_URL: spark://spark-master:7077
     volumes:
       - ./ai_service:/app/ai_service
       - ./ai_service/logs:/app/ai_service/logs
@@ -136,13 +137,11 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-      spark-master:
-        condition: service_healthy
-    # Wait for Spark Master to be ready, then run inference
+    # Run inference with local Spark mode
     command: >
       sh -c "
         mkdir -p /tmp/spark-events &&
-        sleep 15 &&
+        sleep 10 &&
         python -m ai_service.inference.inference_consumer_service
       "
     networks:
