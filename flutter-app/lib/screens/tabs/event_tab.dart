@@ -17,7 +17,6 @@ class EventTab extends StatefulWidget {
 }
 
 class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
-
   @override
   void initState() {
     super.initState();
@@ -49,11 +48,11 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
     return Consumer<EventProvider>(
       builder: (context, eventProvider, child) {
         print('🎨 EventTab rebuild - unviewed: ${eventProvider.unviewedCount}');
-        
+
         if (eventProvider.isLoading) {
-          return Center(
+          return const Center(
             child: SpinKitFadingCircle(
-              color: Theme.of(context).colorScheme.primary,
+              color: kAccentColor,
               size: 50.0,
             ),
           );
@@ -86,34 +85,6 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
 
         return Column(
           children: [
-            // Unviewed events badge
-            if (eventProvider.unviewedCount > 0)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0,
-                        vertical: 6.0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.error,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${eventProvider.unviewedCount} unviewed',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             // Date filter chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -131,8 +102,7 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                     const SizedBox(width: 8),
                     FilterChip(
                       label: const Text('This Week'),
-                      selected:
-                          eventProvider.dateFilter == DateFilter.thisWeek,
+                      selected: eventProvider.dateFilter == DateFilter.thisWeek,
                       onSelected: (_) {
                         eventProvider.setDateFilter(DateFilter.thisWeek);
                       },
@@ -162,9 +132,9 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () => eventProvider.refreshEvents(),
-                color: Theme.of(context).colorScheme.primary,
+                color: kAccentColor,
                 strokeWidth: 3.0,
-                backgroundColor: Colors.transparent,
+                backgroundColor: kSurfaceColor,
                 child: filteredEvents.isEmpty
                     ? Center(
                         child: Text(
@@ -183,7 +153,10 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                             margin: const EdgeInsets.all(8.0),
                             // === SỬA LỖI 1: Thêm màu nền (tint) ===
                             color: !event.viewed
-                                ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withOpacity(0.05)
                                 : null,
                             child: ListTile(
                               leading: SizedBox(
@@ -200,26 +173,23 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                             if (loadingProgress == null)
                                               return child;
                                             return Container(
-                                              color: Colors.grey.shade800,
-                                              child: SpinKitFadingCircle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary,
-                                                size: 30.0,
+                                              color: kSurfaceColor,
+                                              child: const Center(
+                                                child: SpinKitFadingCircle(
+                                                  color: kAccentColor,
+                                                  size: 24.0,
+                                                ),
                                               ),
                                             );
                                           },
                                           errorBuilder:
                                               (context, error, stackTrace) {
-                                            // Fallback to gradient placeholder on error
                                             return Container(
-                                              decoration: const BoxDecoration(
-                                                  gradient: kAppGradient),
+                                              color: kSurfaceColor,
                                               child: Center(
                                                 child: Icon(
-                                                  Icons.videocam,
-                                                  color: Colors.white
-                                                      .withOpacity(0.7),
+                                                  Icons.videocam_outlined,
+                                                  color: kTextMuted,
                                                   size: 32,
                                                 ),
                                               ),
@@ -227,13 +197,11 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                           },
                                         )
                                       : Container(
-                                          decoration: const BoxDecoration(
-                                              gradient: kAppGradient),
+                                          color: kSurfaceColor,
                                           child: Center(
                                             child: Icon(
-                                              Icons.videocam,
-                                              color: Colors.white
-                                                  .withOpacity(0.7),
+                                              Icons.videocam_outlined,
+                                              color: kTextMuted,
                                               size: 32,
                                             ),
                                           ),
@@ -244,23 +212,47 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                               title: Text(
                                 'Detected at ${event.cameraName}',
                                 style: TextStyle(
-                                  fontWeight: !event.viewed 
-                                      ? FontWeight.bold 
+                                  fontWeight: !event.viewed
+                                      ? FontWeight.bold
                                       : FontWeight.normal,
                                 ),
                               ),
-                              subtitle: Text(formattedTime),
+                              subtitle: Row(
+                                children: [
+                                  Text(formattedTime),
+                                  if (event.status == 'reported_false') ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: kWarningColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Reported',
+                                        style: TextStyle(
+                                          color: kWarningColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               // === SỬA LỖI 3: Thêm "chấm chưa đọc" ===
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (!event.viewed)
                                     Padding(
-                                      padding: const EdgeInsets.only(right: 8.0),
+                                      padding:
+                                          const EdgeInsets.only(right: 8.0),
                                       child: Icon(
                                         Icons.circle,
-                                        size: 12,
-                                        color: Theme.of(context).colorScheme.primary,
+                                        size: 10,
+                                        color: kAccentColor,
                                       ),
                                     ),
                                   const Icon(Icons.chevron_right), // Mũi tên cũ

@@ -1,14 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:security_app/providers/auth_provider.dart';
-import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/providers/event_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
-import 'package:security_app/theme/app_theme.dart';
 
 /// Home screen that exposes the app's primary tabs (Cameras, Events).
 ///
@@ -29,9 +25,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Tabs are stateful widgets; therefore the list cannot be const.
   List<Widget> get _widgetOptions => [
-    const CameraTab(),
-    EventTab(key: ValueKey('event_tab_$_rebuildKey')), // Dynamic key forces rebuild
-  ];
+        const CameraTab(),
+        EventTab(
+            key: ValueKey(
+                'event_tab_$_rebuildKey')), // Dynamic key forces rebuild
+      ];
 
   // Lightweight service to handle FCM initialization.
   // We keep the service as a field so it can be reused or extended later.
@@ -60,9 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           } catch (e) {
             // Event not found in list, could be loading or not yet fetched
-            if (kDebugMode) {
-              print('Event $eventId not found in provider');
-            }
+            debugPrint('Event $eventId not found in provider');
           }
         }
       },
@@ -75,120 +71,80 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// Debug method to test notification deep linking.
-  ///
-  /// Shows a dialog with unviewed events that can be tapped to simulate
-  /// notification tap behavior. Only available in debug mode.
-  void _showTestNotificationDialog() {
-    final eventProvider = context.read<EventProvider>();
-    final unviewedEvents = eventProvider.unviewedEvents;
-
-    if (unviewedEvents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No unviewed events to test with'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('🧪 Test Notification'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              'Tap event to simulate notification:',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...unviewedEvents.map((event) => SimpleDialogOption(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Navigate and wait for return
-              await context.push('/event_detail', extra: event);
-              // Force EventTab rebuild when back
-              setState(() {
-                _rebuildKey++;
-              });
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.cameraName,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  'ID: ${event.id}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-          )),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_selectedIndex == 0 ? 'Cameras' : 'Events'),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: kAppGradient),
-        ),
         actions: [
-          // Debug button to test deep linking (only in debug mode)
-          if (kDebugMode && _selectedIndex == 1) // Only show on Events tab
-            Tooltip(
-              message: 'Test Notification Deep Link',
-              child: IconButton(
-                icon: const Icon(Icons.developer_mode),
-                onPressed: () {
-                  if (kDebugMode) print('DEBUG: Test button pressed');
-                  _showTestNotificationDialog();
-                },
-              ),
-            ),
           // Settings button
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_outlined),
             onPressed: () {
               context.push('/settings');
             },
           ),
           // Profile button
           IconButton(
-            icon: const Icon(Icons.person),
+            icon: const Icon(Icons.person_outline),
             onPressed: () {
               context.push('/profile');
             },
           ),
         ],
       ),
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.videocam),
-            label: 'Cameras',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.warning),
-            label: 'Events',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.deepPurple,
-        onTap: _onItemTapped,
+      body: _widgetOptions.elementAt(_selectedIndex),
+      bottomNavigationBar: Consumer<EventProvider>(
+        builder: (context, eventProvider, child) {
+          final unviewedCount = eventProvider.unviewedCount;
+
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              BottomNavigationBar(
+                items: <BottomNavigationBarItem>[
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.videocam_outlined),
+                    activeIcon: Icon(Icons.videocam),
+                    label: 'Cameras',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Badge(
+                      isLabelVisible: unviewedCount > 0,
+                      label: Text(
+                        unviewedCount > 99 ? '99+' : unviewedCount.toString(),
+                        style: const TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      child: const Icon(Icons.notification_important_outlined),
+                    ),
+                    activeIcon: Badge(
+                      isLabelVisible: unviewedCount > 0,
+                      label: Text(
+                        unviewedCount > 99 ? '99+' : unviewedCount.toString(),
+                        style: const TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      child: const Icon(Icons.notification_important),
+                    ),
+                    label: 'Events',
+                  ),
+                ],
+                currentIndex: _selectedIndex,
+                onTap: _onItemTapped,
+              ),
+              // Vertical divider in center
+              Positioned(
+                top: 12,
+                bottom: 12,
+                child: Container(
+                  width: 1,
+                  color: Colors.white.withOpacity(0.1),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

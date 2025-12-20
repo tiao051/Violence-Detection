@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 /// Reusable error widget with icon, message, and retry button
 /// Used when data fetch fails or video loading fails
@@ -28,7 +29,6 @@ class ErrorWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final errorColor = theme.colorScheme.error;
 
     return Center(
       child: SingleChildScrollView(
@@ -37,25 +37,18 @@ class ErrorWidget extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icon with gradient background
+              // Icon with solid background
               Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      errorColor.withOpacity(0.3),
-                      errorColor.withOpacity(0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: kErrorColor.withOpacity(0.15),
                 ),
                 child: Icon(
                   iconData ?? FontAwesomeIcons.exclamation,
-                  color: errorColor,
-                  size: 40,
+                  color: kErrorColor,
+                  size: 36,
                 ),
               ),
               const SizedBox(height: 20),
@@ -65,7 +58,7 @@ class ErrorWidget extends StatelessWidget {
                 title ?? "Oops!",
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+                  color: kTextPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -75,23 +68,16 @@ class ErrorWidget extends StatelessWidget {
                 errorMessage,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: kTextSecondary,
                 ),
               ),
               const SizedBox(height: 32),
 
-              // Retry button with gradient
+              // Retry button with solid color
               Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      errorColor.withOpacity(0.8),
-                      errorColor,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
+                  color: kErrorColor,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -113,7 +99,7 @@ class ErrorWidget extends StatelessWidget {
                 "Please check your internet connection\nand try again.",
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: kTextMuted,
                 ),
               ),
             ],

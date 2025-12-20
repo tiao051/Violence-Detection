@@ -94,7 +94,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Password changed successfully!'),
-            backgroundColor: Colors.green,
+            backgroundColor: kSuccessColor,
           ),
         );
       }
@@ -107,15 +107,15 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         if (errorMessage.startsWith('Exception: ')) {
           errorMessage = errorMessage.substring('Exception: '.length);
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
-            backgroundColor: Colors.red,
+            backgroundColor: kErrorColor,
             duration: const Duration(seconds: 4),
           ),
         );
-        
+
         // Clear error message after a short delay to prevent redirect issues
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
@@ -148,16 +148,21 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     ),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                      icon: Icon(_obscureCurrent
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setState(() => _obscureCurrent = !_obscureCurrent),
                     ),
                   ),
                   obscureText: _obscureCurrent,
-                  validator: (val) => val == null || val.isEmpty ? 'Current password is required' : null,
+                  validator: (val) => val == null || val.isEmpty
+                      ? 'Current password is required'
+                      : null,
                   enabled: !auth.isLoading, // Disable when loading
                 ),
                 const SizedBox(height: 16),
-                
+
                 // 2. New Password
                 TextFormField(
                   controller: _newPasswordController,
@@ -168,8 +173,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     ),
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                      icon: Icon(_obscureNew
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setState(() => _obscureNew = !_obscureNew),
                     ),
                   ),
                   obscureText: _obscureNew,
@@ -177,7 +185,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   enabled: !auth.isLoading, // Disable when loading
                 ),
                 const SizedBox(height: 16),
-                
+
                 // 3. Confirm New Password
                 TextFormField(
                   controller: _confirmPasswordController,
@@ -188,8 +196,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     ),
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                      icon: Icon(_obscureConfirm
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ),
                   obscureText: _obscureConfirm,
@@ -205,30 +216,27 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
               onPressed: auth.isLoading ? null : () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
-            
+
             // Save Button (Themed)
             if (auth.isLoading)
               const Padding(
                 padding: EdgeInsets.all(12.0),
                 child: SpinKitFadingCircle(
-                  color: kPrimaryColor, // Use kPrimaryColor from your theme
+                  color: kAccentColor,
                   size: 24.0,
                 ),
               )
             else
-              Container(
-                decoration: BoxDecoration(
-                  gradient: kAppGradient, // Use kAppGradient from your theme
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kSuccessColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  onPressed: _handleChangePassword,
-                  child: const Text('Save'),
                 ),
+                onPressed: _handleChangePassword,
+                child: const Text('Save'),
               ),
           ],
         );

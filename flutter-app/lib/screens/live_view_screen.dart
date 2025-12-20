@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';       // Import mới
+import 'package:media_kit/media_kit.dart'; // Import mới
 import 'package:media_kit_video/media_kit_video.dart'; // Import mới
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/services/camera_service.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 class LiveViewScreen extends StatefulWidget {
   final String cameraId;
@@ -27,7 +28,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     // 1. Khởi tạo Player
     _player = Player();
     _controller = VideoController(_player);
@@ -58,16 +59,15 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
           streamUrl,
           // QUAN TRỌNG: Ép MPV chạy RTSP qua TCP
           extras: {
-            'rtsp-transport': 'tcp', 
+            'rtsp-transport': 'tcp',
           },
         ),
         play: true, // Tự động phát
       );
-      
+
       if (mounted) {
         setState(() => _isLoading = false);
       }
-      
     } catch (e) {
       debugPrint('[LiveViewScreen] Error: $e');
       if (mounted) {
@@ -82,7 +82,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   @override
   void dispose() {
     // Giải phóng tài nguyên MediaKit
-    _player.dispose(); 
+    _player.dispose();
     super.dispose();
   }
 
@@ -95,7 +95,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
           // 1. Video Layer
           Center(
             child: _isLoading
-                ? const CircularProgressIndicator()
+                ? const CircularProgressIndicator(color: kAccentColor)
                 : _errorMessage != null
                     ? _buildErrorWidget()
                     : Video(controller: _controller), // Widget của MediaKit
@@ -107,23 +107,45 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
   Widget _buildErrorWidget() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error, color: Colors.red, size: 50),
-          const SizedBox(height: 10),
-          Text(_errorMessage ?? 'Unknown Error', textAlign: TextAlign.center),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _isLoading = true;
-                _errorMessage = null;
-              });
-              _initializeServices();
-            },
-            child: const Text('Retry'),
-          )
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: kErrorColor.withOpacity(0.15),
+              ),
+              child:
+                  const Icon(Icons.error_outline, color: kErrorColor, size: 32),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage ?? 'Unknown Error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: kTextSecondary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _errorMessage = null;
+                });
+                _initializeServices();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kAccentColor,
+                foregroundColor: Colors.white,
+              ),
+            )
+          ],
+        ),
       ),
     );
   }

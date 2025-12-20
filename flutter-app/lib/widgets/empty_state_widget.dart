@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:security_app/theme/app_theme.dart';
 
 /// Reusable widget to display empty state when no data is available
 /// Shows icon, title, subtitle, and optional action button
@@ -60,7 +61,7 @@ class EmptyStateWidget extends StatelessWidget {
                 title,
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+                  color: kTextPrimary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -70,7 +71,7 @@ class EmptyStateWidget extends StatelessWidget {
               Text(
                 subtitle,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: kTextSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -91,7 +92,7 @@ class EmptyStateWidget extends StatelessWidget {
                 Text(
                   "Pull down to refresh",
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: kTextMuted,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
