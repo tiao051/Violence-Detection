@@ -254,94 +254,105 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-              Consumer<EventProvider>(
-                builder: (context, eventProvider, child) {
-                  final isReporting = eventProvider.isReporting(event.id);
-                  final hasReportError = eventProvider.reportError != null;
-
-                  // Disable button if already reported
-                  if (event.status == 'reported_false') {
-                    return Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: kWarningColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                          border:
-                              Border.all(color: kWarningColor.withOpacity(0.3)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle_outline,
-                                color: kWarningColor, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'Reported as false detection',
-                              style: TextStyle(
-                                  color: kWarningColor,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  final isDisabled = isReporting || hasReportError;
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: kErrorColor,
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    child: Column(
-                      children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            disabledBackgroundColor: Colors.transparent,
-                            elevation: 0,
-                          ),
-                          onPressed: isDisabled ? null : _handleReport,
-                          icon: isReporting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: SpinKitFadingCircle(
-                                      color: Colors.white, size: 20.0))
-                              : const Icon(Icons.report_problem_outlined),
-                          label: Text(isReporting
-                              ? "Sending..."
-                              : hasReportError
-                                  ? "Report failed"
-                                  : "Report false detection"),
-                        ),
-                        if (hasReportError)
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              "Error: ${eventProvider.reportError}",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         ),
+      ),
+      // Report button fixed at bottom
+      bottomNavigationBar: Consumer<EventProvider>(
+        builder: (context, eventProvider, child) {
+          final isReporting = eventProvider.isReporting(event.id);
+          final hasReportError = eventProvider.reportError != null;
+
+          // Already reported - show confirmation badge
+          if (event.status == 'reported_false') {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kSurfaceColor,
+                border: Border(top: BorderSide(color: kSurfaceLight)),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: kWarningColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: kWarningColor.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        color: kWarningColor, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Reported as false detection',
+                      style: TextStyle(
+                        color: kWarningColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final isDisabled = isReporting || hasReportError;
+
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kSurfaceColor,
+              border: Border(top: BorderSide(color: kSurfaceLight)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kErrorColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: kErrorColor.withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                    ),
+                    onPressed: isDisabled ? null : _handleReport,
+                    icon: isReporting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: SpinKitFadingCircle(
+                                color: Colors.white, size: 20.0),
+                          )
+                        : const Icon(Icons.report_problem_outlined),
+                    label: Text(
+                      isReporting
+                          ? "Sending..."
+                          : hasReportError
+                              ? "Report failed"
+                              : "Report false detection",
+                    ),
+                  ),
+                ),
+                if (hasReportError)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      "Error: ${eventProvider.reportError}",
+                      style: const TextStyle(color: kErrorColor, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
