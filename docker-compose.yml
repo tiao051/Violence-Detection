@@ -108,7 +108,7 @@ services:
     env_file:
       - ./ai_service/.env
     ports:
-      - "4040:4040"  # Spark Application UI (live monitoring)
+      - "4040:4040"    # Spark Application UI (live monitoring)
     environment:
       TZ: Asia/Ho_Chi_Minh
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -135,8 +135,13 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    # Wait for Kafka Group Coordinator to be ready
-    command: sh -c "sleep 15 && python -m ai_service.inference.inference_consumer_service"
+    # Start Spark Master, Worker, History Server, then run inference
+    command: >
+      sh -c "
+        mkdir -p /tmp/spark-events &&
+        sleep 10 &&
+        python -m ai_service.inference.inference_consumer_service
+      "
     networks:
       - app-network
     restart: on-failure
@@ -269,10 +274,73 @@ services:
       - app-network
 
   # ============================================================================
-  # SPARK HISTORY SERVER
+  # SPARK CLUSTER (Master + Workers + History Server)
   # ============================================================================
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: spark-master
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - SPARK_NO_DAEMONIZE=true
+    ports:
+      - "8080:8080"   # Spark Master Web UI
+      - "7077:7077"   # Spark Master Port
+    volumes:
+      - spark_logs:/tmp/spark-events
+    command: /opt/spark/sbin/start-master.sh
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  spark-worker-1:
+    image: apache/spark:3.5.0
+    container_name: spark-worker-1
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_NO_DAEMONIZE=true
+    ports:
+      - "8081:8081"   # Spark Worker 1 Web UI
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - spark_logs:/tmp/spark-events
+    command: /opt/spark/sbin/start-worker.sh spark://spark-master:7077
+    networks:
+      - app-network
+
+  spark-worker-2:
+    image: apache/spark:3.5.0
+    container_name: spark-worker-2
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_NO_DAEMONIZE=true
+    ports:
+      - "8082:8081"   # Spark Worker 2 Web UI
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - spark_logs:/tmp/spark-events
+    command: /opt/spark/sbin/start-worker.sh spark://spark-master:7077
+    networks:
+      - app-network
+
   spark-history:
-    image: bitnami/spark:3.5.0
+    image: apache/spark:3.5.0
     container_name: spark-history-server
     environment:
       - SPARK_NO_DAEMONIZE=true
@@ -281,19 +349,12 @@ services:
       - "18080:18080"  # Spark History UI
     volumes:
       - spark_logs:/tmp/spark-events
-    command: >
-      bash -c "
-        mkdir -p /tmp/spark-events &&
-        /opt/bitnami/spark/sbin/start-history-server.sh
-      "
+    command: /opt/spark/sbin/start-history-server.sh
+    depends_on:
+      spark-master:
+        condition: service_healthy
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18080"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   # Analytics Consumer (HDFS Archiver)
   # Consumes inference results from Kafka and uploads to HDFS

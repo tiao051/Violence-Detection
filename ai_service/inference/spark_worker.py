@@ -103,13 +103,17 @@ class SparkInferenceWorker:
             # Get event log directory from environment or use default
             event_log_dir = os.environ.get("SPARK_EVENT_LOG_DIR", "/tmp/spark-events")
             
+            # Use local mode with N workers (threads)
+            spark_master = f"local[{self.n_workers}]"
+            logger.info(f"Spark master: {spark_master}")
+            
             self.spark = SparkSession.builder \
                 .appName("ViolenceDetectionInference") \
-                .master(f"local[{self.n_workers}]") \
+                .master(spark_master) \
                 .config("spark.dynamicAllocation.enabled", "false") \
-                .config("spark.executor.memory", "4g") \
-                .config("spark.driver.memory", "4g") \
-                .config("spark.python.worker.memory", "2g") \
+                .config("spark.executor.memory", "2g") \
+                .config("spark.driver.memory", "2g") \
+                .config("spark.python.worker.memory", "1g") \
                 .config("spark.ui.enabled", "true") \
                 .config("spark.ui.port", "4040") \
                 .config("spark.driver.bindAddress", "0.0.0.0") \
@@ -122,9 +126,10 @@ class SparkInferenceWorker:
             self.sc = self.spark.sparkContext
             self.sc.setLogLevel("WARN")
             
-            # Configure parallelism (read-only properties in newer Spark versions)
-            # self.sc.defaultParallelism = self.n_workers
-            # self.sc.defaultMinPartitions = self.n_workers
+            # Log Spark UI URL
+            logger.info("=" * 60)
+            logger.info("SPARK UI AVAILABLE AT: http://localhost:4040")
+            logger.info("=" * 60)
             
             self.is_running = True
             logger.info("SparkInferenceWorker started successfully")
