@@ -103,8 +103,8 @@ class SparkInferenceWorker:
             # Get event log directory from environment or use default
             event_log_dir = os.environ.get("SPARK_EVENT_LOG_DIR", "/tmp/spark-events")
             
-            # Use local mode with N workers (threads)
-            spark_master = f"local[{self.n_workers}]"
+            # Get Spark master from environment (cluster mode) or use local mode as fallback
+            spark_master = os.environ.get("SPARK_MASTER_URL", f"local[{self.n_workers}]")
             logger.info(f"Spark master: {spark_master}")
             
             self.spark = SparkSession.builder \
@@ -117,7 +117,7 @@ class SparkInferenceWorker:
                 .config("spark.ui.enabled", "true") \
                 .config("spark.ui.port", "4040") \
                 .config("spark.driver.bindAddress", "0.0.0.0") \
-                .config("spark.driver.host", "0.0.0.0") \
+                .config("spark.driver.host", "violence-detection-inference") \
                 .config("spark.eventLog.enabled", "true") \
                 .config("spark.eventLog.dir", event_log_dir) \
                 .config("spark.history.fs.logDirectory", event_log_dir) \

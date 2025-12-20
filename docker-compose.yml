@@ -123,6 +123,7 @@ services:
       N_SPARK_WORKERS: 4
       VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
       SPARK_EVENT_LOG_DIR: /tmp/spark-events
+      SPARK_MASTER_URL: spark://spark-master:7077
     volumes:
       - ./ai_service:/app/ai_service
       - ./ai_service/logs:/app/ai_service/logs
@@ -135,11 +136,13 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    # Start Spark Master, Worker, History Server, then run inference
+      spark-master:
+        condition: service_healthy
+    # Wait for Spark Master to be ready, then run inference
     command: >
       sh -c "
         mkdir -p /tmp/spark-events &&
-        sleep 10 &&
+        sleep 15 &&
         python -m ai_service.inference.inference_consumer_service
       "
     networks:
