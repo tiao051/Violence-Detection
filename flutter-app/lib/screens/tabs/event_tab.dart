@@ -173,12 +173,12 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                             if (loadingProgress == null)
                                               return child;
                                             return Container(
-                                              color: Colors.grey.shade800,
-                                              child: SpinKitFadingCircle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary,
-                                                size: 30.0,
+                                              color: kSurfaceColor,
+                                              child: const Center(
+                                                child: SpinKitFadingCircle(
+                                                  color: kAccentColor,
+                                                  size: 24.0,
+                                                ),
                                               ),
                                             );
                                           },
