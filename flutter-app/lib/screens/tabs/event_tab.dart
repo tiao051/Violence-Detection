@@ -50,9 +50,9 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
         print('🎨 EventTab rebuild - unviewed: ${eventProvider.unviewedCount}');
 
         if (eventProvider.isLoading) {
-          return Center(
+          return const Center(
             child: SpinKitFadingCircle(
-              color: Theme.of(context).colorScheme.primary,
+              color: kAccentColor,
               size: 50.0,
             ),
           );
@@ -132,9 +132,9 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () => eventProvider.refreshEvents(),
-                color: Theme.of(context).colorScheme.primary,
+                color: kAccentColor,
                 strokeWidth: 3.0,
-                backgroundColor: Colors.transparent,
+                backgroundColor: kSurfaceColor,
                 child: filteredEvents.isEmpty
                     ? Center(
                         child: Text(

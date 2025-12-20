@@ -186,9 +186,9 @@ class _CameraTabState extends State<CameraTab> {
                       .read<CameraProvider>()
                       .refreshCameras(accessToken: accessToken);
                 },
-                color: Theme.of(context).colorScheme.primary,
+                color: kAccentColor,
                 strokeWidth: 3.0,
-                backgroundColor: Colors.transparent,
+                backgroundColor: kSurfaceColor,
                 child: filteredCameras.isEmpty
                     ? Center(
                         child: Text(
