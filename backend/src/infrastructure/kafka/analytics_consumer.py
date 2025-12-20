@@ -190,14 +190,14 @@ class AnalyticsConsumer:
             logger.debug(f"Creating HDFS directory: {parent_dir}")
             
             mkdir_resp = requests.put(
-                f"{self.hdfs_url}/webhdfs/v1{parent_dir}?op=MKDIRS&permission=755"
+                f"{self.hdfs_url}/webhdfs/v1{parent_dir}?op=MKDIRS&permission=755&user.name=hdfs"
             )
             
             if mkdir_resp.status_code not in [200, 201, 409]:
                 logger.warning(f"Directory creation returned {mkdir_resp.status_code}")
             
             # Create file
-            url = f"{self.hdfs_url}/webhdfs/v1{hdfs_path}?op=CREATE&overwrite=true"
+            url = f"{self.hdfs_url}/webhdfs/v1{hdfs_path}?op=CREATE&overwrite=true&user.name=hdfs"
             logger.debug(f"Initiating HDFS upload to {hdfs_path}")
             
             resp = requests.put(url, allow_redirects=False)

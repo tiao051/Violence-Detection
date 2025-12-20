@@ -1,0 +1,459 @@
+name: violence-detection-prod
+
+services:
+  # ============================================================================
+  # ZOOKEEPER CLUSTER (3 nodes for quorum)
+  # ============================================================================
+  zookeeper-1:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper-1
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper-2:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper-2
+    environment:
+      ZOOKEEPER_SERVER_ID: 2
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper-3:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper-3
+    environment:
+      ZOOKEEPER_SERVER_ID: 3
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # KAFKA CLUSTER (3 brokers with replication)
+  # ============================================================================
+  kafka-1:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-1
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - app-network
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-2
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - app-network
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-3
+    depends_on:
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - app-network
+
+  # ============================================================================
+  # REDIS (with persistence)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: violence-detection-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # ============================================================================
+  # HDFS CLUSTER (1 NameNode + 3 DataNodes with replication=3)
+  # ============================================================================
+  hdfs-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-namenode
+    environment:
+      - CLUSTER_NAME=analytics-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=3
+      - HDFS_CONF_dfs_permissions_enabled=false
+      - HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false
+    volumes:
+      - hdfs_namenode:/hadoop/dfs/name
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  hdfs-datanode-1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode-1
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=3
+    volumes:
+      - hdfs_datanode_1:/hadoop/dfs/data
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  hdfs-datanode-2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode-2
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=3
+    volumes:
+      - hdfs_datanode_2:/hadoop/dfs/data
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  hdfs-datanode-3:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode-3
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+      - HDFS_CONF_dfs_replication=3
+    volumes:
+      - hdfs_datanode_3:/hadoop/dfs/data
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================================
+  # APPLICATION SERVICES
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: violence-detection-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      RTSP_BASE_URL: rtsp://rtsp-server:8554
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      MODEL_PATH: /app/ai_service/training/two-stage/checkpoints/best_model.pt
+      INFERENCE_DEVICE: cpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json
+      - ./ai_service:/app/ai_service
+      - /app/__pycache__
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  inference:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: violence-detection-inference
+    env_file:
+      - ./ai_service/.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_FRAME_TOPIC: frames
+      KAFKA_RESULT_TOPIC: inference-results
+      KAFKA_CONSUMER_GROUP: inference-group
+      REDIS_URL: redis://redis:6379/0
+      MODEL_PATH: /app/training/two-stage/checkpoints/best_model.pt
+      INFERENCE_DEVICE: cpu
+      INFERENCE_BATCH_SIZE: 32
+      INFERENCE_BATCH_TIMEOUT_MS: 5000
+      N_SPARK_WORKERS: 4
+      VIOLENCE_CONFIDENCE_THRESHOLD: 0.5
+    volumes:
+      - ./ai_service:/app/ai_service
+      - ./ai_service/logs:/app/ai_service/logs
+      - /app/__pycache__
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka-1:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: sh -c "sleep 15 && python -m ai_service.inference.inference_consumer_service"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  analytics-consumer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: violence-detection-analytics-consumer
+    env_file:
+      - ./backend/.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_RESULT_TOPIC: inference-results
+      HDFS_NAMENODE_URL: http://hdfs-namenode:9870
+    volumes:
+      - ./backend:/app
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      hdfs-namenode:
+        condition: service_healthy
+    command: python src/infrastructure/kafka/analytics_consumer.py
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # RTSP SERVER
+  # ============================================================================
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-server
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    environment:
+      MEDIAMTX_LOGLEVEL: info
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # CAMERAS (simulated)
+  # ============================================================================
+  camera-1:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-1
+    command: >
+      -re -stream_loop -1 -i /videos/violence_1.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam1
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  camera-2:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-2
+    command: >
+      -re -stream_loop -1 -i /videos/violence_4.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam2
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  camera-3:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-3
+    command: >
+      -re -stream_loop -1 -i /videos/violence_5.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam3
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  camera-4:
+    image: jrottenberg/ffmpeg:5.1-alpine
+    container_name: camera-4
+    command: >
+      -re -stream_loop -1 -i /videos/boxer.mp4
+      -s 640x480 -r 15
+      -c:v libx264 -preset ultrafast -tune zerolatency -bf 0 -g 30
+      -an -f rtsp -rtsp_transport tcp rtsp://rtsp-server:8554/cam4
+    volumes:
+      - ./ai_service/utils/test_data/inputs/videos:/videos
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ============================================================================
+  # FRONTEND
+  # ============================================================================
+  frontend:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    container_name: violence-detection-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./admin-dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+      - rtsp-server
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  hdfs_namenode:
+  hdfs_datanode_1:
+  hdfs_datanode_2:
+  hdfs_datanode_3:
