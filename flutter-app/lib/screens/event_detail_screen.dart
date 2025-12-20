@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/models/event_model.dart';
 import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/theme/app_theme.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:security_app/widgets/error_widget.dart' as error_widget;
@@ -25,14 +26,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Check if mounted just in case
       if (mounted) {
         context.read<EventProvider>().markEventAsViewedInDb(widget.event.id);
       }
     });
-    
+
     _initializePlayer();
   }
 
@@ -50,10 +51,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         allowMuting: true,
         showControlsOnInitialize: true,
         materialProgressColors: ChewieProgressColors(
-          playedColor: Theme.of(context).colorScheme.primary,
+          playedColor: kAccentColor,
           handleColor: Colors.white,
-          backgroundColor: Colors.grey.shade800,
-          bufferedColor: Colors.grey.shade600,
+          backgroundColor: kSurfaceColor,
+          bufferedColor: kTextMuted,
         ),
       );
 
@@ -85,29 +86,30 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   /// Handles the "Report false detection" button press.
   Future<void> _handleReport() async {
     final eventProvider = context.read<EventProvider>();
-    
+
     // SỬA LỖI 3: Dùng hàm reportEvent mới từ EventProvider
-    final success = await context.read<EventProvider>().reportEvent(widget.event.id);
+    final success =
+        await context.read<EventProvider>().reportEvent(widget.event.id);
 
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Report sent successfully!"),
-            backgroundColor: Colors.green,
+            backgroundColor: kSuccessColor,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
-            backgroundColor: Colors.red,
+            content: Text(
+                "Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
+            backgroundColor: kErrorColor,
           ),
         );
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +130,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Icon(
               event.viewed ? Icons.visibility_off : Icons.visibility,
-              color: event.viewed ? Colors.grey : Theme.of(context).colorScheme.primary,
+              color: event.viewed ? kTextMuted : kAccentColor,
             ),
           )
         ],
@@ -139,135 +141,247 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Builder(builder: (context) {
-                  if (_isLoadingVideo) {
-                    return Center(
-                      child: SpinKitFadingCircle(
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 50.0,
+              // Video player with rounded corners
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Builder(builder: (context) {
+                    if (_isLoadingVideo) {
+                      return Container(
+                        color: kSurfaceColor,
+                        child: const Center(
+                          child: SpinKitFadingCircle(
+                            color: kAccentColor,
+                            size: 50.0,
+                          ),
+                        ),
+                      );
+                    }
+                    if (_errorMessage != null) {
+                      return error_widget.ErrorWidget(
+                        errorMessage: _errorMessage ?? "Unable to load video",
+                        onRetry: () {
+                          setState(() {
+                            _isLoadingVideo = true;
+                            _errorMessage = null;
+                          });
+                          _initializePlayer();
+                        },
+                        iconData: Icons.play_circle_outline,
+                        title: "Video Not Available",
+                      );
+                    }
+                    return Chewie(
+                      controller: _chewieController,
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Alert Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kErrorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: kErrorColor.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: kErrorColor.withOpacity(0.15),
+                        shape: BoxShape.circle,
                       ),
-                    );
-                  }
-                  if (_errorMessage != null) {
-                    return error_widget.ErrorWidget(
-                      errorMessage: _errorMessage ?? "Unable to load video",
-                      onRetry: () {
-                        setState(() {
-                          _isLoadingVideo = true;
-                          _errorMessage = null;
-                        });
-                        _initializePlayer();
-                      },
-                      iconData: Icons.play_circle_outline,
-                      title: "Video Not Available",
-                    );
-                  }
-                  return Chewie(
-                    controller: _chewieController,
-                  );
-                }),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: kErrorColor, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Violence Detected',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: kTextPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            DateFormat('EEEE, dd MMMM yyyy • HH:mm:ss')
+                                .format(event.timestamp),
+                            style: const TextStyle(
+                                color: kTextSecondary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
-              Text(
-                "Camera: ${event.cameraName}",
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Time: ${DateFormat('HH:mm:ss - dd/MM/yyyy').format(event.timestamp)}",
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Status: ${event.status.toUpperCase()}",
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: event.status == 'reported_false' ? Colors.orange : null,
+              // Camera Info Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kSurfaceColor,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-              ),
-              
-              const SizedBox(height: 32),
-
-              Consumer<EventProvider>(
-                builder: (context, eventProvider, child) {
-                  final isReporting = eventProvider.isReporting(event.id);
-                  final hasReportError = eventProvider.reportError != null;
-                  final errorColor = Theme.of(context).colorScheme.error;
-                  
-                  // Disable button if already reported
-                  if (event.status == 'reported_false') {
-                    return const Center(
-                      child: Chip(
-                        label: Text('Reported as false'),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                  }
-
-                  final isDisabled = isReporting || hasReportError;
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          errorColor.withOpacity(0.8),
-                          errorColor,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
+                child: Column(
+                  children: [
+                    _buildInfoRow(
+                        Icons.videocam_outlined, 'Camera', event.cameraName),
+                    const Divider(height: 24, color: kSurfaceLight),
+                    _buildInfoRow(Icons.fingerprint, 'Event ID', event.id),
+                    const Divider(height: 24, color: kSurfaceLight),
+                    _buildInfoRow(
+                      Icons.info_outline,
+                      'Status',
+                      event.status == 'reported_false'
+                          ? 'Reported False'
+                          : 'New Alert',
+                      valueColor: event.status == 'reported_false'
+                          ? kWarningColor
+                          : kAccentColor,
                     ),
-                    child: Column(
-                      children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            disabledBackgroundColor: Colors.transparent,
-                            elevation: 0,
-                          ),
-                          onPressed: isDisabled ? null : _handleReport,
-                          icon: isReporting 
-                            ? const SizedBox(
-                                width: 20, 
-                                height: 20, 
-                                child: SpinKitFadingCircle(color: Colors.white, size: 20.0)
-                              ) 
-                            : const Icon(Icons.report_problem),
-                          label: Text(
-                            isReporting 
-                              ? "Sending..." 
-                              : hasReportError 
-                                ? "Report failed (Network error?)"
-                                : "Report false detection"
-                          ),
-                        ),
-                        if (hasReportError)
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              "Error: ${eventProvider.reportError}",
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
+      // Report button fixed at bottom
+      bottomNavigationBar: Consumer<EventProvider>(
+        builder: (context, eventProvider, child) {
+          final isReporting = eventProvider.isReporting(event.id);
+          final hasReportError = eventProvider.reportError != null;
+
+          // Already reported - show confirmation badge
+          if (event.status == 'reported_false') {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kSurfaceColor,
+                border: Border(top: BorderSide(color: kSurfaceLight)),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: kWarningColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: kWarningColor.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        color: kWarningColor, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Reported as false detection',
+                      style: TextStyle(
+                        color: kWarningColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final isDisabled = isReporting || hasReportError;
+
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kSurfaceColor,
+              border: Border(top: BorderSide(color: kSurfaceLight)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kErrorColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: kErrorColor.withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                    ),
+                    onPressed: isDisabled ? null : _handleReport,
+                    icon: isReporting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: SpinKitFadingCircle(
+                                color: Colors.white, size: 20.0),
+                          )
+                        : const Icon(Icons.report_problem_outlined),
+                    label: Text(
+                      isReporting
+                          ? "Sending..."
+                          : hasReportError
+                              ? "Report failed"
+                              : "Report false detection",
+                    ),
+                  ),
+                ),
+                if (hasReportError)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      "Error: ${eventProvider.reportError}",
+                      style: const TextStyle(color: kErrorColor, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Helper to build info row in the details card
+  Widget _buildInfoRow(IconData icon, String label, String value,
+      {Color? valueColor}) {
+    return Row(
+      children: [
+        Icon(icon, color: kTextMuted, size: 20),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(color: kTextMuted, fontSize: 14),
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? kTextPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
