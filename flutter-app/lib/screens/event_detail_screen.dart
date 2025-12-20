@@ -141,56 +141,120 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Builder(builder: (context) {
-                  if (_isLoadingVideo) {
-                    return Center(
-                      child: SpinKitFadingCircle(
-                        color: kAccentColor,
-                        size: 50.0,
+              // Video player with rounded corners
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Builder(builder: (context) {
+                    if (_isLoadingVideo) {
+                      return Container(
+                        color: kSurfaceColor,
+                        child: const Center(
+                          child: SpinKitFadingCircle(
+                            color: kAccentColor,
+                            size: 50.0,
+                          ),
+                        ),
+                      );
+                    }
+                    if (_errorMessage != null) {
+                      return error_widget.ErrorWidget(
+                        errorMessage: _errorMessage ?? "Unable to load video",
+                        onRetry: () {
+                          setState(() {
+                            _isLoadingVideo = true;
+                            _errorMessage = null;
+                          });
+                          _initializePlayer();
+                        },
+                        iconData: Icons.play_circle_outline,
+                        title: "Video Not Available",
+                      );
+                    }
+                    return Chewie(
+                      controller: _chewieController,
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Alert Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kErrorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: kErrorColor.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: kErrorColor.withOpacity(0.15),
+                        shape: BoxShape.circle,
                       ),
-                    );
-                  }
-                  if (_errorMessage != null) {
-                    return error_widget.ErrorWidget(
-                      errorMessage: _errorMessage ?? "Unable to load video",
-                      onRetry: () {
-                        setState(() {
-                          _isLoadingVideo = true;
-                          _errorMessage = null;
-                        });
-                        _initializePlayer();
-                      },
-                      iconData: Icons.play_circle_outline,
-                      title: "Video Not Available",
-                    );
-                  }
-                  return Chewie(
-                    controller: _chewieController,
-                  );
-                }),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: kErrorColor, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Violence Detected',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: kTextPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            DateFormat('EEEE, dd MMMM yyyy • HH:mm:ss')
+                                .format(event.timestamp),
+                            style: const TextStyle(
+                                color: kTextSecondary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
-              Text(
-                "Camera: ${event.cameraName}",
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Time: ${DateFormat('HH:mm:ss - dd/MM/yyyy').format(event.timestamp)}",
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Status: ${event.status.toUpperCase()}",
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: event.status == 'reported_false'
+
+              // Camera Info Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kSurfaceColor,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Column(
+                  children: [
+                    _buildInfoRow(
+                        Icons.videocam_outlined, 'Camera', event.cameraName),
+                    const Divider(height: 24, color: kSurfaceLight),
+                    _buildInfoRow(Icons.fingerprint, 'Event ID', event.id),
+                    const Divider(height: 24, color: kSurfaceLight),
+                    _buildInfoRow(
+                      Icons.info_outline,
+                      'Status',
+                      event.status == 'reported_false'
+                          ? 'Reported False'
+                          : 'New Alert',
+                      valueColor: event.status == 'reported_false'
                           ? kWarningColor
-                          : kTextSecondary,
+                          : kAccentColor,
                     ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               Consumer<EventProvider>(
                 builder: (context, eventProvider, child) {
                   final isReporting = eventProvider.isReporting(event.id);
@@ -279,6 +343,34 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Helper to build info row in the details card
+  Widget _buildInfoRow(IconData icon, String label, String value,
+      {Color? valueColor}) {
+    return Row(
+      children: [
+        Icon(icon, color: kTextMuted, size: 20),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(color: kTextMuted, fontSize: 14),
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? kTextPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
