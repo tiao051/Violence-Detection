@@ -85,44 +85,6 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
 
         return Column(
           children: [
-            // Unviewed events badge
-            if (eventProvider.unviewedCount > 0)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 10.0),
-                color: kErrorColor.withOpacity(0.1),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0,
-                        vertical: 6.0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kErrorColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.notifications_active,
-                              size: 14, color: Colors.white),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${eventProvider.unviewedCount} new alert${eventProvider.unviewedCount > 1 ? 's' : ''}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             // Date filter chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,

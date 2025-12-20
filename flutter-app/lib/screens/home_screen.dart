@@ -172,35 +172,57 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _widgetOptions.elementAt(_selectedIndex),
-      bottomNavigationBar: Stack(
-        alignment: Alignment.center,
-        children: [
-          BottomNavigationBar(
-            items: const <BottomNavigationBarItem>[
-              BottomNavigationBarItem(
-                icon: Icon(Icons.videocam_outlined),
-                activeIcon: Icon(Icons.videocam),
-                label: 'Cameras',
+      bottomNavigationBar: Consumer<EventProvider>(
+        builder: (context, eventProvider, child) {
+          final unviewedCount = eventProvider.unviewedCount;
+
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              BottomNavigationBar(
+                items: <BottomNavigationBarItem>[
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.videocam_outlined),
+                    activeIcon: Icon(Icons.videocam),
+                    label: 'Cameras',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Badge(
+                      isLabelVisible: unviewedCount > 0,
+                      label: Text(
+                        unviewedCount > 99 ? '99+' : unviewedCount.toString(),
+                        style: const TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      child: const Icon(Icons.notification_important_outlined),
+                    ),
+                    activeIcon: Badge(
+                      isLabelVisible: unviewedCount > 0,
+                      label: Text(
+                        unviewedCount > 99 ? '99+' : unviewedCount.toString(),
+                        style: const TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      child: const Icon(Icons.notification_important),
+                    ),
+                    label: 'Events',
+                  ),
+                ],
+                currentIndex: _selectedIndex,
+                onTap: _onItemTapped,
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.notification_important_outlined),
-                activeIcon: Icon(Icons.notification_important),
-                label: 'Events',
+              // Vertical divider in center
+              Positioned(
+                top: 12,
+                bottom: 12,
+                child: Container(
+                  width: 1,
+                  color: Colors.white.withOpacity(0.1),
+                ),
               ),
             ],
-            currentIndex: _selectedIndex,
-            onTap: _onItemTapped,
-          ),
-          // Vertical divider in center
-          Positioned(
-            top: 12,
-            bottom: 12,
-            child: Container(
-              width: 1,
-              color: Colors.white.withOpacity(0.1),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
