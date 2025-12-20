@@ -58,47 +58,16 @@ class CameraModel(BaseModel):
     stream_url: str
 
 
-# Demo camera data (matching docker-compose camera definitions)
-DEMO_CAMERAS = {
-    "cam1": {
-        "id": "cam1",
-        "name": "Camera 1 - Entrance",
-        "location": "Front Gate",
-        "stream_url": "rtsp://rtsp-server:8554/cam1",
-    },
-    "cam2": {
-        "id": "cam2", 
-        "name": "Camera 2 - Lobby",
-        "location": "Main Lobby",
-        "stream_url": "rtsp://rtsp-server:8554/cam2",
-    },
-    "cam3": {
-        "id": "cam3",
-        "name": "Camera 3 - Parking",
-        "location": "Parking Lot",
-        "stream_url": "rtsp://rtsp-server:8554/cam3",
-    },
-    "cam4": {
-        "id": "cam4",
-        "name": "Camera 4 - Backyard",
-        "location": "Back Area",
-        "stream_url": "rtsp://rtsp-server:8554/cam4",
-    },
-}
-
-
 def _get_user_owned_cameras(user_id: str) -> list[str]:
-    """Get list of camera IDs owned by user.
-    
-    For demo purposes, all users own all cameras.
-    In production, query Firestore for cameras where owner_uid == user_id.
-    """
-    return list(DEMO_CAMERAS.keys())
+    """Get list of camera IDs owned by user."""
+    # TODO: Query Firestore for cameras where owner_uid == user_id
+    return []
 
 
 def _get_camera_by_id(camera_id: str) -> Optional[Dict[str, Any]]:
     """Get camera details by ID."""
-    return DEMO_CAMERAS.get(camera_id)
+    # TODO: Query Firestore for camera details
+    return None
 
 
 def _create_access_token(user_id: str, email: str, owner_cameras: list[str]) -> tuple[str, int]:
