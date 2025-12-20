@@ -367,20 +367,20 @@ async def get_forecast(camera: str, hours: int = 12) -> Dict[str, Any]:
 
 # Camera coordinates (real locations in Tan Phu/Tan Binh, HCMC)
 CAMERA_COORDINATES = {
-    "cam1": {"lat": 10.7912, "lng": 106.6294, "name": "Đường Lũy Bán Bích"},
-    "cam2": {"lat": 10.8024, "lng": 106.6401, "name": "Ngã ba Âu Cơ"},
-    "cam3": {"lat": 10.7935, "lng": 106.6512, "name": "Đường Tân Kỳ Tân Quý"},
-    "cam4": {"lat": 10.8103, "lng": 106.6287, "name": "Chợ Tân Phú"},
-    "cam5": {"lat": 10.7856, "lng": 106.6523, "name": "Công viên Đầm Sen"},
+    "cam1": {"lat": 10.7912, "lng": 106.6294, "name": "Luy Ban Bich Street"},
+    "cam2": {"lat": 10.8024, "lng": 106.6401, "name": "Au Co Junction"},
+    "cam3": {"lat": 10.7935, "lng": 106.6512, "name": "Tan Ky Tan Quy Street"},
+    "cam4": {"lat": 10.8103, "lng": 106.6287, "name": "Tan Phu Market"},
+    "cam5": {"lat": 10.7856, "lng": 106.6523, "name": "Dam Sen Park"},
 }
 
-# English names for display
+# English names for display (kept for backwards compatibility)
 CAMERA_NAME_MAP = {
-    "Đường Lũy Bán Bích": "Luy Ban Bich Street",
-    "Ngã ba Âu Cơ": "Au Co Junction",
-    "Đường Tân Kỳ Tân Quý": "Tan Ky Tan Quy Street",
-    "Chợ Tân Phú": "Tan Phu Market",
-    "Công viên Đầm Sen": "Dam Sen Park",
+    "Luy Ban Bich Street": "Luy Ban Bich Street",
+    "Au Co Junction": "Au Co Junction",
+    "Tan Ky Tan Quy Street": "Tan Ky Tan Quy Street",
+    "Tan Phu Market": "Tan Phu Market",
+    "Dam Sen Park": "Dam Sen Park",
 }
 
 

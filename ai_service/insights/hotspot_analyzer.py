@@ -10,7 +10,6 @@ Analyzes camera locations to identify hotspots based on:
 
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 import math
 from collections import defaultdict
 import csv
@@ -46,12 +45,8 @@ class HotspotAnalyzer:
     WEIGHT_CONFIDENCE = 0.30
     WEIGHT_ZSCORE = 0.30
     
-    # Classification thresholds
     HOTSPOT_THRESHOLD = 0.6
     WARNING_THRESHOLD = 0.4
-    
-    # Time decay factor (events older than this get less weight)
-    TIME_DECAY_DAYS = 30
     
     def __init__(self):
         self.camera_stats: Dict[str, CameraStats] = {}
@@ -258,26 +253,3 @@ def analyze_hotspots_from_csv(csv_path: str) -> Dict[str, Any]:
     analyzer.load_from_csv(csv_path)
     analyzer.analyze()
     return analyzer.get_summary()
-
-
-if __name__ == "__main__":
-    # Test with sample data
-    import os
-    
-    csv_path = os.path.join(os.path.dirname(__file__), "data", "analytics_events.csv")
-    
-    if os.path.exists(csv_path):
-        result = analyze_hotspots_from_csv(csv_path)
-        print(f"\n{'='*60}")
-        print("HOTSPOT ANALYSIS RESULTS")
-        print(f"{'='*60}")
-        print(f"Total Cameras: {result['total_cameras']}")
-        print(f"Hotspots: {result['hotspots']}")
-        print(f"Warnings: {result['warnings']}")
-        print(f"Safe Zones: {result['safe_zones']}")
-        print(f"\nCamera Details:")
-        for cam in result['cameras']:
-            status_icon = "🔴" if cam['classification'] == 'hotspot' else "🟡" if cam['classification'] == 'warning' else "🟢"
-            print(f"  {status_icon} {cam['camera_name']}: score={cam['hotspot_score']:.2f}, violence_ratio={cam['violence_ratio']:.1%}")
-    else:
-        print(f"CSV file not found: {csv_path}")

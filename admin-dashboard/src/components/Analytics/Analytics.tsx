@@ -2,13 +2,13 @@ import React from "react";
 import { useAnalytics } from "../../contexts";
 import "./Analytics.css";
 
-// Camera name mapping (Vietnamese to English)
+// Camera name mapping (for backwards compatibility - now all names are in English)
 const CAMERA_NAME_MAP: Record<string, string> = {
-  'Ngã tư Lê Trọng Tấn': 'Le Trong Tan Intersection',
-  'Ngã tư Cộng Hòa': 'Cong Hoa Intersection',
-  'Ngã ba Âu Cơ': 'Au Co Junction',
-  'Ngã tư Hòa Bình': 'Hoa Binh Intersection',
-  'Ngã tư Tân Sơn Nhì': 'Tan Son Nhi Intersection',
+  'Le Trong Tan Intersection': 'Le Trong Tan Intersection',
+  'Au Co T-junction': 'Au Co T-junction',
+  'Tan Ky Tan Quy T-junction': 'Tan Ky Tan Quy T-junction',
+  '77 Alley Tan Ky Tan Quy': '77 Alley Tan Ky Tan Quy',
+  'Ho Dac Duy Intersection': 'Ho Dac Duy Intersection',
 };
 
 const formatCameraName = (name: string): string => {
@@ -272,11 +272,6 @@ const Analytics: React.FC = () => {
                 </div>
               );
             })}
-            {Array.isArray(rules) && rules.length > 5 && (
-              <p className="more-rules">
-                + {rules.length - 5} more rules
-              </p>
-            )}
           </div>
         )}
       </section>

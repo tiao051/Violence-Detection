@@ -12,7 +12,6 @@
   color: #fff;
 }
 
-/* Loading State */
 .analytics-loading,
 .analytics-error {
   display: flex;
@@ -46,7 +45,6 @@
   margin-top: 8px;
 }
 
-/* Section Loading - Progressive/Lazy Loading */
 .section-loading {
   display: flex;
   align-items: center;
@@ -81,7 +79,6 @@
   margin-bottom: 8px;
 }
 
-/* Summary Cards */
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -117,7 +114,6 @@
   letter-spacing: 1px;
 }
 
-/* Sections */
 .analytics-section {
   background: #1e1e1e;
   border: 1px solid #333;
@@ -136,7 +132,6 @@
   gap: 8px;
 }
 
-/* Patterns Grid */
 .patterns-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -207,7 +202,6 @@
   font-weight: 600;
 }
 
-/* Rules Table */
 .rules-table-container {
   overflow-x: auto;
 }
@@ -242,7 +236,6 @@
   color: #ccc;
 }
 
-/* Risk List */
 .risk-list {
   display: flex;
   flex-direction: column;
@@ -314,9 +307,6 @@
   color: #4caf50;
 }
 
-/* ===== NEW STYLES FOR USER-FRIENDLY ANALYTICS ===== */
-
-/* Header */
 .analytics-header {
   display: flex;
   justify-content: space-between;
@@ -358,7 +348,6 @@
   cursor: not-allowed;
 }
 
-/* Card Icons */
 .summary-card.highlight {
   border-color: #ffa500;
   background: linear-gradient(145deg, #2e2a1e, #1a1a1a);
@@ -368,7 +357,6 @@
   color: #4caf50;
 }
 
-/* Section Header */
 .section-header {
   margin-bottom: 20px;
 }
@@ -383,7 +371,6 @@
   margin: 0;
 }
 
-/* Pattern Insight Box */
 .pattern-insight {
   background: rgba(255, 165, 0, 0.1);
   border: 1px solid rgba(255, 165, 0, 0.3);
@@ -404,7 +391,6 @@
   color: #ff6b6b;
 }
 
-/* Rules Cards - New Design */
 .rules-cards {
   display: flex;
   flex-direction: column;
@@ -500,7 +486,6 @@
   margin-top: 8px;
 }
 
-/* Risk Items - Enhanced */
 .risk-item {
   display: flex;
   align-items: center;
@@ -580,7 +565,6 @@
   margin: 0;
 }
 
-/* Quick Summary Section */
 .summary-section {
   background: linear-gradient(145deg, #252520, #1e1e1e);
   border-color: #444;
@@ -607,7 +591,6 @@
   border: 1px solid rgba(255, 107, 107, 0.2);
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .analytics-container {
     padding: 16px;

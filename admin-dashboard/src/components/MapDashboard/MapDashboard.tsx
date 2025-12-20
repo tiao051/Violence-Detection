@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import * as turf from "@turf/turf";
 import "./MapDashboard.css";
-
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
 
 interface CameraLocation {
   cameraId: string;
@@ -22,6 +19,23 @@ interface CameraLocation {
   totalEvents: number;
   violenceEvents: number;
   zScore: number;
+}
+
+interface School {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  type: string;
+  distance?: number;
+}
+
+interface SuggestedLocation {
+  lat: number;
+  lng: number;
+  reason: string;
+  betweenCameras: [string, string];
+  gapDistance: number;
 }
 
 interface HotspotApiResponse {
@@ -71,33 +85,119 @@ interface MapStats {
   algorithm: string;
 }
 
-// ============================================================================
-// DEFAULT COORDINATES (Fallback if API doesn't return coordinates)
-// ============================================================================
-
 const CAMERA_COORDINATES: Record<string, { lat: number; lng: number }> = {
-  cam1: { lat: 10.7912, lng: 106.6294 },
-  cam2: { lat: 10.8024, lng: 106.6401 },
-  cam3: { lat: 10.7935, lng: 106.6512 },
-  cam4: { lat: 10.8103, lng: 106.6287 },
-  cam5: { lat: 10.7856, lng: 106.6523 },
+  cam1: { lat: 10.806367, lng: 106.627457 },
+  cam2: { lat: 10.801751, lng: 106.636715 },
+  cam3: { lat: 10.803524, lng: 106.632650 },
+  cam4: { lat: 10.803633, lng: 106.634296 },
+  cam5: { lat: 10.805748, lng: 106.633514 },
 };
 
-// Map center (Tan Phu District center)
 const MAP_CENTER: [number, number] = [10.7950, 106.6400];
 const DEFAULT_ZOOM = 14;
-const COVERAGE_RADIUS = 200; // meters
+const COVERAGE_RADIUS = 200;
+const SCHOOL_SEARCH_RADIUS = 1000;
+const VIOLENCE_NEAR_SCHOOL_THRESHOLD = 0.3;
+const GAP_ANALYSIS_THRESHOLD = 0.8;
 
-// API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+const fetchNearbySchools = async (lat: number, lng: number, radiusMeters: number = SCHOOL_SEARCH_RADIUS): Promise<School[]> => {
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="school"](around:${radiusMeters},${lat},${lng});
+      node["amenity"="college"](around:${radiusMeters},${lat},${lng});
+      node["amenity"="university"](around:${radiusMeters},${lat},${lng});
+      node["amenity"="kindergarten"](around:${radiusMeters},${lat},${lng});
+      way["amenity"="school"](around:${radiusMeters},${lat},${lng});
+      way["amenity"="college"](around:${radiusMeters},${lat},${lng});
+      way["amenity"="university"](around:${radiusMeters},${lat},${lng});
+    );
+    out center;
+  `;
 
-/**
- * Fetch hotspot analysis from API
- */
+  try {
+    const response = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      body: `data=${encodeURIComponent(query)}`,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Overpass API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return data.elements.map((el: any) => ({
+      id: el.id.toString(),
+      name: el.tags?.name || el.tags?.["name:vi"] || "Unknown School",
+      lat: el.lat || el.center?.lat,
+      lng: el.lon || el.center?.lon,
+      type: el.tags?.amenity || "school",
+    })).filter((s: School) => s.lat && s.lng);
+  } catch (error) {
+    console.error("Failed to fetch schools:", error);
+    return [];
+  }
+};
+
+const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const from = turf.point([lng1, lat1]);
+  const to = turf.point([lng2, lat2]);
+  return turf.distance(from, to, { units: "kilometers" });
+};
+
+const findNearestSchool = (camera: CameraLocation, schools: School[]): School | null => {
+  if (schools.length === 0) return null;
+
+  let nearest: School | null = null;
+  let minDistance = Infinity;
+
+  schools.forEach((school) => {
+    const distance = calculateDistance(camera.lat, camera.lng, school.lat, school.lng);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = { ...school, distance };
+    }
+  });
+
+  return nearest;
+};
+
+const analyzeGaps = (cameras: CameraLocation[]): SuggestedLocation[] => {
+  const riskyCameras = cameras.filter((c) => c.classification === "hotspot" || c.classification === "warning");
+  const suggestions: SuggestedLocation[] = [];
+
+  for (let i = 0; i < riskyCameras.length; i++) {
+    for (let j = i + 1; j < riskyCameras.length; j++) {
+      const cam1 = riskyCameras[i];
+      const cam2 = riskyCameras[j];
+      const distance = calculateDistance(cam1.lat, cam1.lng, cam2.lat, cam2.lng);
+
+      if (distance > GAP_ANALYSIS_THRESHOLD) {
+        const point1 = turf.point([cam1.lng, cam1.lat]);
+        const point2 = turf.point([cam2.lng, cam2.lat]);
+        const midpoint = turf.midpoint(point1, point2);
+        const [lng, lat] = midpoint.geometry.coordinates;
+
+        suggestions.push({
+          lat,
+          lng,
+          reason: `Gap of ${distance.toFixed(2)}km between risk zones`,
+          betweenCameras: [cam1.cameraNameEn, cam2.cameraNameEn],
+          gapDistance: distance,
+        });
+      }
+    }
+  }
+
+  return suggestions;
+};
+
 const fetchHotspotData = async (): Promise<HotspotApiResponse | null> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/analytics/hotspots`);
@@ -111,9 +211,6 @@ const fetchHotspotData = async (): Promise<HotspotApiResponse | null> => {
   }
 };
 
-/**
- * Transform API response to CameraLocation array
- */
 const transformApiResponse = (data: HotspotApiResponse): CameraLocation[] => {
   return data.cameras.map((cam) => ({
     cameraId: cam.camera_id,
@@ -133,25 +230,19 @@ const transformApiResponse = (data: HotspotApiResponse): CameraLocation[] => {
   }));
 };
 
-/**
- * Get color based on classification
- */
 const getClassificationColor = (classification: string): string => {
   switch (classification) {
     case "hotspot":
-      return "#ef4444"; // Red
+      return "#ef4444";
     case "warning":
-      return "#f59e0b"; // Orange
+      return "#f59e0b";
     case "safe":
-      return "#22c55e"; // Green
+      return "#22c55e";
     default:
-      return "#6b7280"; // Gray
+      return "#6b7280";
   }
 };
 
-/**
- * Create custom marker icon based on classification
- */
 const createMarkerIcon = (classification: string): L.DivIcon => {
   const color = getClassificationColor(classification);
   const iconHtml = `
@@ -170,9 +261,40 @@ const createMarkerIcon = (classification: string): L.DivIcon => {
   });
 };
 
-/**
- * Get status label for display
- */
+const createSchoolIcon = (): L.DivIcon => {
+  const iconHtml = `
+    <div class="school-marker">
+      <svg viewBox="0 0 24 24" fill="#fbbf24" width="20" height="20">
+        <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
+      </svg>
+    </div>
+  `;
+  return L.divIcon({
+    html: iconHtml,
+    className: "school-marker-container",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+};
+
+const createSuggestionIcon = (): L.DivIcon => {
+  const iconHtml = `
+    <div class="suggestion-marker">
+      <svg viewBox="0 0 24 24" fill="white" width="18" height="18">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </div>
+  `;
+  return L.divIcon({
+    html: iconHtml,
+    className: "suggestion-marker-container",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
+  });
+};
+
 const getStatusLabel = (classification: string): string => {
   switch (classification) {
     case "hotspot":
@@ -186,33 +308,36 @@ const getStatusLabel = (classification: string): string => {
   }
 };
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
-
 const MapDashboard: React.FC = () => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const circlesRef = useRef<Map<string, L.Circle>>(new Map());
+  const schoolMarkersRef = useRef<L.Marker[]>([]);
+  const schoolLinesRef = useRef<L.Polyline[]>([]);
+  const suggestionMarkersRef = useRef<L.Marker[]>([]);
 
   const [cameras, setCameras] = useState<CameraLocation[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   const [stats, setStats] = useState<MapStats | null>(null);
   const [showCoverage, setShowCoverage] = useState(true);
+  const [showSchools, setShowSchools] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingSchools, setLoadingSchools] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [nearestSchool, setNearestSchool] = useState<School | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedLocation[]>([]);
+  const [alerts, setAlerts] = useState<string[]>([]);
 
-  /**
-   * Fetch data from API on mount
-   */
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
 
       const data = await fetchHotspotData();
-      
+
       if (data && data.success) {
         const transformed = transformApiResponse(data);
         setCameras(transformed);
@@ -225,60 +350,48 @@ const MapDashboard: React.FC = () => {
           violenceEvents: data.total_violence_events,
           algorithm: data.algorithm,
         });
+
+        const gaps = analyzeGaps(transformed);
+        setSuggestions(gaps);
       } else {
         setError("Failed to load hotspot data. Please try again later.");
       }
-      
+
       setLoading(false);
     };
 
     loadData();
   }, []);
 
-  /**
-   * Initialize and render the Leaflet map
-   */
   const renderMap = useCallback(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Initialize map
     const map = L.map(mapContainerRef.current, {
       center: MAP_CENTER,
       zoom: DEFAULT_ZOOM,
       zoomControl: false,
     });
 
-    // Add OpenStreetMap tiles
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
-    // Add zoom control to bottom-right
     L.control.zoom({ position: "bottomright" }).addTo(map);
-
-    // Add scale control
     L.control.scale({ position: "bottomleft", metric: true }).addTo(map);
 
     mapRef.current = map;
-
-    // Render markers after map is initialized
     renderMarkers(map, cameras);
   }, [cameras]);
 
-  /**
-   * Render markers and coverage circles on the map
-   */
   const renderMarkers = (map: L.Map, cameraList: CameraLocation[]) => {
-    // Clear existing markers and circles
     markersRef.current.forEach((marker) => marker.remove());
     circlesRef.current.forEach((circle) => circle.remove());
     markersRef.current.clear();
     circlesRef.current.clear();
 
     cameraList.forEach((camera) => {
-      // Create coverage circle (200m radius)
       const circleColor = getClassificationColor(camera.classification);
       const circle = L.circle([camera.lat, camera.lng], {
         radius: COVERAGE_RADIUS,
@@ -291,16 +404,14 @@ const MapDashboard: React.FC = () => {
 
       circlesRef.current.set(camera.cameraId, circle);
 
-      // Create marker
       const marker = L.marker([camera.lat, camera.lng], {
         icon: createMarkerIcon(camera.classification),
       }).addTo(map);
 
-      // Create popup content with detailed statistics
       const popupContent = `
         <div class="map-popup">
           <h3 class="popup-title">${camera.cameraNameEn}</h3>
-          <p class="popup-description">${camera.cameraName}</p>
+          <p class="popup-description">${camera.cameraDescription || camera.cameraNameEn}</p>
           <div class="popup-stats">
             <div class="popup-stat">
               <span class="stat-label">Status:</span>
@@ -315,72 +426,280 @@ const MapDashboard: React.FC = () => {
               <span class="stat-value">${(camera.violenceRatio * 100).toFixed(1)}%</span>
             </div>
             <div class="popup-stat">
-              <span class="stat-label">Avg Confidence:</span>
-              <span class="stat-value">${(camera.avgConfidence * 100).toFixed(1)}%</span>
-            </div>
-            <div class="popup-stat">
-              <span class="stat-label">Z-Score:</span>
-              <span class="stat-value">${camera.zScore.toFixed(2)}</span>
-            </div>
-            <div class="popup-stat">
               <span class="stat-label">Total Events:</span>
               <span class="stat-value">${camera.totalEvents}</span>
             </div>
-            <div class="popup-stat">
-              <span class="stat-label">Violence Events:</span>
-              <span class="stat-value">${camera.violenceEvents}</span>
-            </div>
-            <div class="popup-stat">
-              <span class="stat-label">Coverage:</span>
-              <span class="stat-value">${COVERAGE_RADIUS}m radius</span>
-            </div>
           </div>
+          <div class="popup-hint">Click to find nearby schools</div>
         </div>
       `;
 
       marker.bindPopup(popupContent, {
-        maxWidth: 300,
+        maxWidth: 320,
         className: "custom-popup",
       });
 
-      // Handle marker click
-      marker.on("click", () => {
+      marker.on("click", async () => {
         setSelectedCamera(camera.cameraId);
+        handleCameraClick(camera);
       });
 
       markersRef.current.set(camera.cameraId, marker);
     });
   };
 
-  // Update markers when cameras data changes
+  const handleCameraClick = async (camera: CameraLocation) => {
+    if (!mapRef.current) return;
+
+    setLoadingSchools(true);
+    clearSchoolMarkers();
+
+    const nearbySchools = await fetchNearbySchools(camera.lat, camera.lng);
+    setSchools(nearbySchools);
+
+    if (nearbySchools.length > 0) {
+      const nearest = findNearestSchool(camera, nearbySchools);
+      setNearestSchool(nearest);
+
+      const newAlerts: string[] = [];
+      if (
+        camera.classification === "hotspot" &&
+        nearest &&
+        nearest.distance !== undefined &&
+        nearest.distance < VIOLENCE_NEAR_SCHOOL_THRESHOLD
+      ) {
+        newAlerts.push(
+          `⚠️ ALERT: Violence hotspot "${camera.cameraNameEn}" is only ${(nearest.distance * 1000).toFixed(0)}m from "${nearest.name}"!`
+        );
+      }
+      setAlerts(newAlerts);
+
+      if (showSchools) {
+        renderSchoolMarkers(camera, nearbySchools, nearest);
+      }
+
+      updateCameraPopup(camera, nearest);
+    } else {
+      setNearestSchool(null);
+      setAlerts([]);
+    }
+
+    setLoadingSchools(false);
+  };
+
+  const renderSchoolMarkers = (
+    camera: CameraLocation,
+    schoolList: School[],
+    nearest: School | null
+  ) => {
+    if (!mapRef.current) return;
+
+    schoolList.forEach((school) => {
+      const marker = L.marker([school.lat, school.lng], {
+        icon: createSchoolIcon(),
+      }).addTo(mapRef.current!);
+
+      const distance = calculateDistance(camera.lat, camera.lng, school.lat, school.lng);
+      marker.bindPopup(`
+        <div class="school-popup">
+          <h4>🎓 ${school.name}</h4>
+          <p>Type: ${school.type}</p>
+          <p>Distance: ${(distance * 1000).toFixed(0)}m from camera</p>
+        </div>
+      `);
+
+      schoolMarkersRef.current.push(marker);
+    });
+
+    if (nearest) {
+      const line = L.polyline(
+        [
+          [camera.lat, camera.lng],
+          [nearest.lat, nearest.lng],
+        ],
+        {
+          color: camera.classification === "hotspot" ? "#ef4444" : "#3b82f6",
+          weight: 3,
+          opacity: 0.7,
+          dashArray: "10, 10",
+        }
+      ).addTo(mapRef.current);
+
+      schoolLinesRef.current.push(line);
+    }
+  };
+
+  const updateCameraPopup = (camera: CameraLocation, nearest: School | null) => {
+    const marker = markersRef.current.get(camera.cameraId);
+    if (!marker) return;
+
+    let schoolInfo = "";
+    let alertHtml = "";
+
+    if (nearest && nearest.distance !== undefined) {
+      const distanceM = (nearest.distance * 1000).toFixed(0);
+      schoolInfo = `
+        <div class="popup-school-info">
+          <span class="school-label">Nearest School:</span>
+          <span class="school-name">${nearest.name}</span>
+          <span class="school-distance">${distanceM}m away</span>
+        </div>
+      `;
+
+      if (camera.classification === "hotspot" && nearest.distance < VIOLENCE_NEAR_SCHOOL_THRESHOLD) {
+        alertHtml = `
+          <div class="popup-alert">
+            ⚠️ ALERT: Violence detected near school!
+          </div>
+        `;
+      }
+    }
+
+    const popupContent = `
+      <div class="map-popup">
+        <h3 class="popup-title">${camera.cameraNameEn}</h3>
+        <p class="popup-description">${camera.cameraName}</p>
+        ${alertHtml}
+        <div class="popup-stats">
+          <div class="popup-stat">
+            <span class="stat-label">Status:</span>
+            <span class="stat-value ${camera.classification}">${getStatusLabel(camera.classification)}</span>
+          </div>
+          <div class="popup-stat">
+            <span class="stat-label">Hotspot Score:</span>
+            <span class="stat-value">${(camera.hotspotScore * 100).toFixed(1)}%</span>
+          </div>
+          <div class="popup-stat">
+            <span class="stat-label">Violence Ratio:</span>
+            <span class="stat-value">${(camera.violenceRatio * 100).toFixed(1)}%</span>
+          </div>
+        </div>
+        ${schoolInfo}
+      </div>
+    `;
+
+    marker.setPopupContent(popupContent);
+  };
+
+  const clearSchoolMarkers = () => {
+    schoolMarkersRef.current.forEach((m) => m.remove());
+    schoolMarkersRef.current = [];
+    schoolLinesRef.current.forEach((l) => l.remove());
+    schoolLinesRef.current = [];
+  };
+
+  const renderSuggestionMarkers = () => {
+    if (!mapRef.current) return;
+
+    clearSuggestionMarkers();
+
+    suggestions.forEach((suggestion, index) => {
+      const marker = L.marker([suggestion.lat, suggestion.lng], {
+        icon: createSuggestionIcon(),
+      }).addTo(mapRef.current!);
+
+      marker.bindPopup(`
+        <div class="suggestion-popup">
+          <h4>📍 Suggested Camera Location #${index + 1}</h4>
+          <p>${suggestion.reason}</p>
+          <p><strong>Between:</strong> ${suggestion.betweenCameras.join(" ↔ ")}</p>
+          <p>Install a camera here to improve coverage of hotspot areas.</p>
+        </div>
+      `);
+
+      suggestionMarkersRef.current.push(marker);
+    });
+  };
+
+  const clearSuggestionMarkers = () => {
+    suggestionMarkersRef.current.forEach((m) => m.remove());
+    suggestionMarkersRef.current = [];
+  };
+
+  const toggleSchools = async () => {
+    const newState = !showSchools;
+    setShowSchools(newState);
+
+    if (!newState) {
+      clearSchoolMarkers();
+      return;
+    }
+
+    if (!selectedCamera) {
+      setLoadingSchools(true);
+      const centerSchools = await fetchNearbySchools(MAP_CENTER[0], MAP_CENTER[1], 2000);
+      setSchools(centerSchools);
+      
+      if (centerSchools.length > 0 && mapRef.current) {
+        const virtualCamera: CameraLocation = {
+          cameraId: 'center',
+          cameraName: 'Map Center',
+          cameraNameEn: 'Map Center',
+          cameraDescription: '',
+          lat: MAP_CENTER[0],
+          lng: MAP_CENTER[1],
+          classification: 'safe',
+          riskLevel: 'LOW',
+          violenceRatio: 0,
+          avgConfidence: 0,
+          hotspotScore: 0,
+          totalEvents: 0,
+          violenceEvents: 0,
+          zScore: 0
+        };
+        renderSchoolMarkers(virtualCamera, centerSchools, null);
+      }
+      setLoadingSchools(false);
+      return;
+    }
+
+    const camera = cameras.find((c) => c.cameraId === selectedCamera);
+    if (camera && schools.length > 0) {
+      renderSchoolMarkers(camera, schools, nearestSchool);
+    } else if (camera) {
+      setLoadingSchools(true);
+      const nearbySchools = await fetchNearbySchools(camera.lat, camera.lng);
+      setSchools(nearbySchools);
+      if (nearbySchools.length > 0) {
+        const nearest = findNearestSchool(camera, nearbySchools);
+        setNearestSchool(nearest);
+        renderSchoolMarkers(camera, nearbySchools, nearest);
+      }
+      setLoadingSchools(false);
+    }
+  };
+
+  const toggleSuggestions = () => {
+    const newState = !showSuggestions;
+    setShowSuggestions(newState);
+
+    if (newState) {
+      renderSuggestionMarkers();
+    } else {
+      clearSuggestionMarkers();
+    }
+  };
+
   useEffect(() => {
     if (mapRef.current && cameras.length > 0) {
       renderMarkers(mapRef.current, cameras);
     }
   }, [cameras]);
 
-  /**
-   * Pan map to selected camera
-   */
   const panToCamera = (cameraId: string) => {
     const camera = cameras.find((c) => c.cameraId === cameraId);
     if (!camera || !mapRef.current) return;
 
     setSelectedCamera(cameraId);
-    mapRef.current.flyTo([camera.lat, camera.lng], 16, {
-      duration: 0.8,
-    });
+    mapRef.current.flyTo([camera.lat, camera.lng], 16, { duration: 0.8 });
 
-    // Open popup
     const marker = markersRef.current.get(cameraId);
     if (marker) {
       marker.openPopup();
+      handleCameraClick(camera);
     }
   };
 
-  /**
-   * Toggle coverage circles visibility
-   */
   const toggleCoverage = () => {
     setShowCoverage(!showCoverage);
     circlesRef.current.forEach((circle) => {
@@ -392,21 +711,18 @@ const MapDashboard: React.FC = () => {
     });
   };
 
-  /**
-   * Reset map view to default
-   */
   const resetView = () => {
     if (mapRef.current) {
       mapRef.current.flyTo(MAP_CENTER, DEFAULT_ZOOM, { duration: 0.5 });
       setSelectedCamera(null);
+      clearSchoolMarkers();
+      setAlerts([]);
     }
   };
 
-  // Initialize map on mount
   useEffect(() => {
     renderMap();
 
-    // Cleanup on unmount
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -417,14 +733,22 @@ const MapDashboard: React.FC = () => {
 
   return (
     <div className="map-dashboard">
-      {/* Sidebar */}
       <aside className="map-sidebar">
         <div className="sidebar-header">
           <h2>Hotspot Analysis</h2>
-          <p className="sidebar-subtitle">Statistical Weighted Scoring</p>
+          <p className="sidebar-subtitle">GIS Spatial Intelligence</p>
         </div>
 
-        {/* Loading State */}
+        {alerts.length > 0 && (
+          <div className="alerts-container">
+            {alerts.map((alert, index) => (
+              <div key={index} className="alert-item">
+                {alert}
+              </div>
+            ))}
+          </div>
+        )}
+
         {loading && (
           <div className="loading-container">
             <div className="loading-spinner"></div>
@@ -432,7 +756,6 @@ const MapDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Error State */}
         {error && !loading && (
           <div className="error-container">
             <p className="error-message">{error}</p>
@@ -440,7 +763,6 @@ const MapDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Stats Summary */}
         {!loading && !error && stats && (
           <>
             <div className="stats-summary">
@@ -458,20 +780,19 @@ const MapDashboard: React.FC = () => {
               </div>
               <div className="stat-item safe">
                 <span className="stat-number">{stats.safeZones}</span>
-                <span className="stat-label">Safe Zones</span>
+                <span className="stat-label">Safe</span>
               </div>
             </div>
 
-            {/* Algorithm Info */}
             <div className="algorithm-info">
               <span className="algorithm-badge">{stats.algorithm}</span>
-              <div className="event-stats">
-                <span>Total Events: {stats.totalEvents}</span>
-                <span>Violence: {stats.violenceEvents}</span>
-              </div>
+              {suggestions.length > 0 && (
+                <span className="suggestion-badge">
+                  {suggestions.length} gap{suggestions.length > 1 ? "s" : ""} detected
+                </span>
+              )}
             </div>
 
-            {/* Controls */}
             <div className="sidebar-controls">
               <button
                 className={`control-btn ${showCoverage ? "active" : ""}`}
@@ -479,12 +800,40 @@ const MapDashboard: React.FC = () => {
               >
                 {showCoverage ? "Hide Coverage" : "Show Coverage"}
               </button>
+              <button
+                className={`control-btn ${showSchools ? "active" : ""}`}
+                onClick={toggleSchools}
+                disabled={loadingSchools}
+              >
+                {loadingSchools ? "Loading..." : showSchools ? "Hide Schools" : "Show Schools"}
+              </button>
+            </div>
+
+            <div className="sidebar-controls">
+              <button
+                className={`control-btn suggestion ${showSuggestions ? "active" : ""}`}
+                onClick={toggleSuggestions}
+                disabled={suggestions.length === 0}
+              >
+                {showSuggestions ? "Hide Suggestions" : "Show Suggestions"}
+              </button>
               <button className="control-btn" onClick={resetView}>
                 Reset View
               </button>
             </div>
 
-            {/* Camera List */}
+            {nearestSchool && selectedCamera && (
+              <div className="nearest-school-info">
+                <h4>🎓 Nearest School</h4>
+                <p className="school-name">{nearestSchool.name}</p>
+                <p className="school-distance">
+                  {nearestSchool.distance !== undefined
+                    ? `${(nearestSchool.distance * 1000).toFixed(0)}m away`
+                    : "Distance unknown"}
+                </p>
+              </div>
+            )}
+
             <div className="camera-list">
               <h3>All Cameras</h3>
               {cameras.map((camera) => (
@@ -502,7 +851,7 @@ const MapDashboard: React.FC = () => {
                   <div className="camera-info">
                     <span className="camera-name">{camera.cameraNameEn}</span>
                     <span className="camera-desc">
-                      Score: {(camera.hotspotScore * 100).toFixed(0)}% | 
+                      Score: {(camera.hotspotScore * 100).toFixed(0)}% |
                       Violence: {(camera.violenceRatio * 100).toFixed(0)}%
                     </span>
                   </div>
@@ -513,31 +862,35 @@ const MapDashboard: React.FC = () => {
               ))}
             </div>
 
-            {/* Legend */}
             <div className="map-legend">
               <h3>Legend</h3>
-              <div className="legend-item">
-                <span className="legend-color hotspot" />
-                <span>Hotspot (Score ≥ 60%)</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-color warning" />
-                <span>Warning (Score 40-60%)</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-color safe" />
-                <span>Safe Zone (Score &lt; 40%)</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-circle" />
-                <span>200m Coverage Area</span>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <span className="legend-color hotspot" />
+                  <span>Hotspot</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color warning" />
+                  <span>Warning</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color safe" />
+                  <span>Safe</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color school" />
+                  <span>School</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color suggestion" />
+                  <span>Suggested</span>
+                </div>
               </div>
             </div>
           </>
         )}
       </aside>
 
-      {/* Map Container */}
       <div className="map-container" ref={mapContainerRef} />
     </div>
   );
