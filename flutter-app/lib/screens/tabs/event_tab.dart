@@ -217,7 +217,30 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                       : FontWeight.normal,
                                 ),
                               ),
-                              subtitle: Text(formattedTime),
+                              subtitle: Row(
+                                children: [
+                                  Text(formattedTime),
+                                  if (event.status == 'reported_false') ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: kWarningColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Reported',
+                                        style: TextStyle(
+                                          color: kWarningColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               // === SỬA LỖI 3: Thêm "chấm chưa đọc" ===
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
