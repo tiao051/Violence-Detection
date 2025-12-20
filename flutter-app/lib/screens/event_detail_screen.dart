@@ -51,10 +51,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         allowMuting: true,
         showControlsOnInitialize: true,
         materialProgressColors: ChewieProgressColors(
-          playedColor: Theme.of(context).colorScheme.primary,
+          playedColor: kAccentColor,
           handleColor: Colors.white,
-          backgroundColor: Colors.grey.shade800,
-          bufferedColor: Colors.grey.shade600,
+          backgroundColor: kSurfaceColor,
+          bufferedColor: kTextMuted,
         ),
       );
 
@@ -96,7 +96,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Report sent successfully!"),
-            backgroundColor: Colors.green,
+            backgroundColor: kSuccessColor,
           ),
         );
       } else {
@@ -104,7 +104,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           SnackBar(
             content: Text(
                 "Error: ${context.read<EventProvider>().reportError ?? 'Unknown'}"),
-            backgroundColor: Colors.red,
+            backgroundColor: kErrorColor,
           ),
         );
       }
@@ -186,8 +186,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 "Status: ${event.status.toUpperCase()}",
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: event.status == 'reported_false'
-                          ? Colors.orange
-                          : null,
+                          ? kWarningColor
+                          : kTextSecondary,
                     ),
               ),
               const SizedBox(height: 32),
@@ -198,10 +198,30 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
                   // Disable button if already reported
                   if (event.status == 'reported_false') {
-                    return const Center(
-                      child: Chip(
-                        label: Text('Reported as false'),
-                        backgroundColor: Colors.orange,
+                    return Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: kWarningColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border:
+                              Border.all(color: kWarningColor.withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_outline,
+                                color: kWarningColor, size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Reported as false detection',
+                              style: TextStyle(
+                                  color: kWarningColor,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
