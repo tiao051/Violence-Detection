@@ -29,6 +29,8 @@ class ConnectionManager:
 
     async def send_personal(self, websocket: WebSocket, data: Dict[str, Any]):
         try:
+            if websocket.client_state == WebSocketState.DISCONNECTED:
+                return
             await websocket.send_json(data)
         except RuntimeError as e:
             # WebSocket is already closed or connection lost
@@ -37,8 +39,9 @@ class ConnectionManager:
             else:
                 logger.debug(f"Error sending personal message (client likely disconnected): {e}")
         except Exception as e:
-            # Suppress common disconnect errors
-            if "1000" in str(e) or "1001" in str(e):
+            err_str = str(e)
+            # Suppress common disconnect errors (1000=normal, 1001=going away, 1012=service restart)
+            if any(code in err_str for code in ["1000", "1001", "1012", "no close frame"]):
                 pass
             else:
                 logger.warning(f"Error sending personal message: {e}")
