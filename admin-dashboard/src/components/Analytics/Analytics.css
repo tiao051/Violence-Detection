@@ -348,6 +348,49 @@
   cursor: not-allowed;
 }
 
+/* Spark HDFS button */
+.spark-btn {
+  background: linear-gradient(135deg, #ff6b35, #f7931e) !important;
+  color: #fff !important;
+}
+
+.spark-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.4);
+}
+
+/* Spark status messages */
+.spark-message {
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: slideDown 0.3s ease;
+}
+
+.spark-message.success {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  color: #81c784;
+}
+
+.spark-message.error {
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ff8a80;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .summary-card.highlight {
   border-color: #ffa500;
   background: linear-gradient(145deg, #2e2a1e, #1a1a1a);

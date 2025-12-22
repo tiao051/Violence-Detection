@@ -25,18 +25,18 @@ const SectionLoader: React.FC<{ text?: string }> = ({ text = "Loading..." }) => 
 
 // Helper to generate actionable insight from pattern
 const getPatternInsight = (pattern: any): string => {
-  const timeAdvice = pattern.top_period === "Night" 
-    ? "Increase night patrol" 
+  const timeAdvice = pattern.top_period === "Night"
+    ? "Increase night patrol"
     : pattern.top_period === "Evening"
-    ? "Focus on evening hours" 
-    : pattern.top_period === "Morning"
-    ? "Monitor morning rush hours"
-    : "Monitor peak afternoon hours";
-  
-  const dayAdvice = pattern.weekend_pct > 50 
-    ? "especially on weekends" 
+      ? "Focus on evening hours"
+      : pattern.top_period === "Morning"
+        ? "Monitor morning rush hours"
+        : "Monitor peak afternoon hours";
+
+  const dayAdvice = pattern.weekend_pct > 50
+    ? "especially on weekends"
     : "mainly on weekdays";
-  
+
   return `${timeAdvice} at ${formatCameraName(pattern.top_camera)}, ${dayAdvice}.`;
 };
 
@@ -67,10 +67,10 @@ const formatRuleText = (text: string): string => {
 const translateRule = (rule: any): { condition: string; result: string; meaning: string } => {
   const antecedent = rule.antecedent_str || "";
   const consequent = rule.consequent_str || "";
-  
+
   const condition = formatRuleText(antecedent);
   const result = formatRuleText(consequent);
-  
+
   // Generate actionable meaning
   const confidence = Math.round(rule.confidence * 100);
   let meaning = "";
@@ -81,13 +81,18 @@ const translateRule = (rule: any): { condition: string; result: string; meaning:
   } else {
     meaning = `Moderate correlation (${confidence}%)`;
   }
-  
+
   return { condition, result, meaning };
 };
 
 const Analytics: React.FC = () => {
   const { data, loading, error, lastFetched, refresh } = useAnalytics();
   const { summary, patterns, rules, highRisk } = data;
+
+  // Spark insights state
+  const [sparkLoading, setSparkLoading] = React.useState(false);
+  const [sparkError, setSparkError] = React.useState<string | null>(null);
+  const [sparkSuccess, setSparkSuccess] = React.useState(false);
 
   const formatLastFetched = () => {
     if (!lastFetched) return null;
@@ -96,6 +101,33 @@ const Analytics: React.FC = () => {
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
     return new Date(lastFetched).toLocaleTimeString();
+  };
+
+  // Trigger Spark recalculation from HDFS
+  const recalculateFromHDFS = async () => {
+    setSparkLoading(true);
+    setSparkError(null);
+    setSparkSuccess(false);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/analytics/insights?refresh=true');
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Failed to recalculate');
+      }
+
+      setSparkSuccess(true);
+      // Also refresh the regular analytics data
+      refresh();
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSparkSuccess(false), 5000);
+    } catch (err: any) {
+      setSparkError(err.message || 'Failed to connect to Spark');
+    } finally {
+      setSparkLoading(false);
+    }
   };
 
   const isAllLoading = loading.summary && loading.patterns && loading.rules && loading.highRisk;
@@ -134,15 +166,28 @@ const Analytics: React.FC = () => {
           {lastFetched && (
             <span className="last-fetched">Updated: {formatLastFetched()}</span>
           )}
-          <button 
-            className="refresh-btn" 
-            onClick={refresh} 
-            disabled={isAnyLoading}
+          <button
+            className="refresh-btn spark-btn"
+            onClick={recalculateFromHDFS}
+            disabled={sparkLoading}
+            title="Run full analysis on all historical data"
           >
-            {isAnyLoading ? 'Loading...' : 'Refresh'}
+            {sparkLoading ? 'Analyzing...' : 'Run Full Analysis'}
           </button>
         </div>
       </div>
+
+      {/* Spark Status Messages */}
+      {sparkSuccess && (
+        <div className="spark-message success">
+          Spark insights recalculated successfully!
+        </div>
+      )}
+      {sparkError && (
+        <div className="spark-message error">
+          Error: {sparkError}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="summary-cards">
@@ -198,12 +243,12 @@ const Analytics: React.FC = () => {
                     {pattern.size?.toLocaleString()} events ({pattern.percentage}%)
                   </span>
                 </div>
-                
+
                 {/* Actionable insight */}
                 <div className="pattern-insight">
                   <strong>Recommendation:</strong> {getPatternInsight(pattern)}
                 </div>
-                
+
                 <div className="pattern-details">
                   <div className="detail-row">
                     <span>Peak Time:</span>
@@ -218,8 +263,8 @@ const Analytics: React.FC = () => {
                   <div className="detail-row">
                     <span>Weekend Events:</span>
                     <span className="detail-value">
-                      {pattern.weekend_pct > 50 ? `${pattern.weekend_pct}% (mostly weekends)` : 
-                       pattern.weekend_pct > 0 ? `${pattern.weekend_pct}%` : "0% (weekdays only)"}
+                      {pattern.weekend_pct > 50 ? `${pattern.weekend_pct}% (mostly weekends)` :
+                        pattern.weekend_pct > 0 ? `${pattern.weekend_pct}%` : "0% (weekdays only)"}
                     </span>
                   </div>
                   <div className="detail-row">
@@ -263,8 +308,8 @@ const Analytics: React.FC = () => {
                   </div>
                   <div className="rule-strength">
                     <div className="strength-bar">
-                      <div 
-                        className="strength-fill" 
+                      <div
+                        className="strength-fill"
                         style={{ width: `${rule.confidence * 100}%` }}
                       />
                     </div>
@@ -304,8 +349,8 @@ const Analytics: React.FC = () => {
                     </div>
                   </div>
                   <div className={`risk-level-badge ${cond.risk_level?.toLowerCase()}`}>
-                    {cond.risk_level?.toLowerCase() === "high" ? "High Risk" : 
-                     cond.risk_level?.toLowerCase() === "medium" ? "Medium Risk" : "Low Risk"}
+                    {cond.risk_level?.toLowerCase() === "high" ? "High Risk" :
+                      cond.risk_level?.toLowerCase() === "medium" ? "Medium Risk" : "Low Risk"}
                   </div>
                 </div>
               ))

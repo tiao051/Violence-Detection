@@ -550,3 +550,136 @@ async def get_hotspot_analysis() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==============================================================================
+# SPARK INSIGHTS - Trend Analysis & Anomaly Detection
+# ==============================================================================
+
+# Import Spark insights (optional - may not be available)
+try:
+    from insights.spark.spark_insights_job import get_spark_insights
+    SPARK_INSIGHTS_AVAILABLE = True
+except ImportError:
+    SPARK_INSIGHTS_AVAILABLE = False
+    logger.warning("SparkInsightsJob not available - insights endpoints disabled")
+
+
+@router.get("/insights")
+async def get_full_insights(refresh: bool = False) -> Dict[str, Any]:
+    """
+    Get comprehensive insights from Spark processing.
+    
+    Includes:
+    - Weekly trends (this week vs last week per camera)
+    - Monthly trends (this month vs last month per camera)
+    - Anomaly detection (cameras with unusual activity)
+    - Patrol schedule recommendations
+    - Camera statistics
+    
+    Results are cached for 24 hours unless refresh=true.
+    """
+    if not SPARK_INSIGHTS_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Spark insights not available. Module not installed."
+        )
+    
+    try:
+        insights = get_spark_insights(force_refresh=refresh)
+        return insights
+    except Exception as e:
+        logger.error(f"Error getting insights: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trends")
+async def get_trends() -> Dict[str, Any]:
+    """
+    Get trend analysis comparing current vs previous periods.
+    
+    Returns:
+    - Weekly: This week vs last week
+    - Monthly: This month vs last month
+    """
+    if not SPARK_INSIGHTS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Insights not available")
+    
+    try:
+        insights = get_spark_insights(force_refresh=False)
+        
+        if not insights.get("success"):
+            raise HTTPException(status_code=500, detail=insights.get("error", "Unknown error"))
+        
+        return {
+            "weekly": insights.get("weekly_trends", []),
+            "monthly": insights.get("monthly_trends", []),
+            "computed_at": insights.get("computed_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting trends: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/anomalies")
+async def get_anomalies() -> Dict[str, Any]:
+    """
+    Get cameras with unusual activity detected via Z-score analysis.
+    
+    Returns list of cameras flagged as anomalies with severity levels:
+    - critical: Z-score >= 2.5
+    - warning: Z-score >= 1.5
+    - normal: Z-score < 1.5
+    """
+    if not SPARK_INSIGHTS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Insights not available")
+    
+    try:
+        insights = get_spark_insights(force_refresh=False)
+        
+        if not insights.get("success"):
+            raise HTTPException(status_code=500, detail=insights.get("error", "Unknown error"))
+        
+        anomalies = insights.get("anomalies", [])
+        
+        return {
+            "anomalies": anomalies,
+            "critical_count": len([a for a in anomalies if a.get("severity") == "critical"]),
+            "warning_count": len([a for a in anomalies if a.get("severity") == "warning"]),
+            "computed_at": insights.get("computed_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting anomalies: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/patrol-schedule")
+async def get_patrol_schedule() -> Dict[str, Any]:
+    """
+    Get recommended patrol schedule based on historical patterns.
+    
+    Returns time slots prioritized by expected incident rate.
+    """
+    if not SPARK_INSIGHTS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Insights not available")
+    
+    try:
+        insights = get_spark_insights(force_refresh=False)
+        
+        if not insights.get("success"):
+            raise HTTPException(status_code=500, detail=insights.get("error", "Unknown error"))
+        
+        schedule = insights.get("patrol_schedule", [])
+        
+        return {
+            "schedule": schedule,
+            "high_priority_count": len([s for s in schedule if s.get("priority") == "high"]),
+            "computed_at": insights.get("computed_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting patrol schedule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

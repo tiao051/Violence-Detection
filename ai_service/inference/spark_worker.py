@@ -126,11 +126,6 @@ class SparkInferenceWorker:
             self.sc = self.spark.sparkContext
             self.sc.setLogLevel("WARN")
             
-            # Log Spark UI URL
-            logger.info("=" * 60)
-            logger.info("SPARK UI AVAILABLE AT: http://localhost:4040")
-            logger.info("=" * 60)
-            
             self.is_running = True
             logger.info("SparkInferenceWorker started successfully")
             
