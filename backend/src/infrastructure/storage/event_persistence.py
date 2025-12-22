@@ -276,34 +276,61 @@ class EventPersistenceService:
                     pass
 
     def _create_video_file(self, frames: List[np.ndarray], camera_id: str) -> Optional[str]:
-        """Encode frames to MP4 file."""
+        """
+        Encode frames to H.264 MP4 file using FFmpeg.
+        This format is universally supported on mobile devices.
+        """
+        import subprocess
+        
         try:
             if not frames:
                 return None
 
-            # Create temp file in app directory instead of /tmp to avoid permission issues in Docker
-            temp_dir = "/app/tmp"  # Use app directory instead of system /tmp
-            os.makedirs(temp_dir, exist_ok=True)  # Ensure directory exists
+            temp_dir = "/app/tmp"
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # Output MP4 file
             filename = f"violence_{camera_id}_{uuid.uuid4()}.mp4"
             filepath = os.path.join(temp_dir, filename)
-
+            
             # Get dimensions from first frame
-            height, width, layers = frames[0].shape
-            size = (width, height)
-
-            # Initialize VideoWriter (MJPG codec - works without FFmpeg in Docker)
-            fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-            out = cv2.VideoWriter(filepath, fourcc, 6.0, size)
-
-            for frame in frames:
-                out.write(frame)
-
-            out.release()
+            height, width, _ = frames[0].shape
+            
+            # Concatenate all frame bytes
+            frame_data = b''.join(frame.tobytes() for frame in frames)
+            
+            # Use FFmpeg to encode H.264 MP4 from raw frames
+            ffmpeg_cmd = [
+                'ffmpeg', '-y',  # Overwrite output
+                '-f', 'rawvideo',
+                '-vcodec', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{width}x{height}',
+                '-r', '6',  # 6 fps
+                '-i', 'pipe:0',  # Read from stdin
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-pix_fmt', 'yuv420p',
+                '-movflags', '+faststart',
+                filepath
+            ]
+            
+            # Run FFmpeg with all frame data at once
+            process = subprocess.run(
+                ffmpeg_cmd,
+                input=frame_data,
+                capture_output=True
+            )
+            
+            if process.returncode != 0:
+                logger.error(f"FFmpeg error: {process.stderr.decode()}")
+                return None
             
             file_size = os.path.getsize(filepath)
-            logger.info(f"Generated video file: {filepath} ({file_size} bytes)")
+            logger.info(f"Generated video file: {filepath} ({file_size} bytes, {len(frames)} frames)")
             
             return filepath
+            
         except Exception as e:
             logger.error(f"Failed to create video file: {e}")
             return None
@@ -316,8 +343,11 @@ class EventPersistenceService:
             
             blob = self.bucket.blob(blob_path)
             
+            # Set content type based on file extension
+            content_type = 'video/x-msvideo' if file_path.endswith('.avi') else 'video/mp4'
+            
             # Upload
-            blob.upload_from_filename(file_path, content_type='video/mp4')
+            blob.upload_from_filename(file_path, content_type=content_type)
             
             # Make public to get a viewable URL
             blob.make_public()
