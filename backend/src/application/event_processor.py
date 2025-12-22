@@ -145,8 +145,38 @@ class EventProcessor:
                 event = self.active_events[camera_id]
                 video_duration = detection_timestamp - event['start_time']
                 
+                # Check if max duration exceeded - force finalize and start new event
                 if video_duration > self.max_event_duration:
-                    logger.debug(f"[{camera_id}] Alert suppressed (max duration exceeded)")
+                    logger.info(f"[{camera_id}] Max duration exceeded ({video_duration:.1f}s). Force finalizing current event...")
+                    
+                    # Force finalize current event
+                    video_start_time = event['start_time'] - self.pre_event_padding
+                    video_end_time = event['last_seen'] + self.post_event_padding
+                    
+                    await self.persistence_service.finalize_event(
+                        event['event_id'],
+                        camera_id,
+                        video_start_time,
+                        video_end_time
+                    )
+                    
+                    # Remove from active list
+                    del self.active_events[camera_id]
+                    
+                    # Create new event for continuing violence
+                    event_id = await self.persistence_service.create_event(camera_id, alert)
+                    if event_id:
+                        logger.info(f"[{camera_id}] New violence event started after max duration (conf={confidence:.2f}, event_id={event_id})")
+                        
+                        self.active_events[camera_id] = {
+                            'event_id': event_id,
+                            'start_time': detection_timestamp,
+                            'last_seen': detection_timestamp,
+                            'last_processed_at': time.time(),
+                            'max_confidence': confidence,
+                            'best_alert': alert,
+                            'frames_temp_paths': []
+                        }
                     return
                 
                 # Update timing
