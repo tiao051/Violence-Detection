@@ -16,12 +16,14 @@ class EventService {
     }
 
     try {
+      // Only fetch completed events (with video ready)
       // Limit to 100 events to prevent OutOfMemoryError
       final querySnapshot = await _firestore
           .collection('events')
           .where('userId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'completed') // Only show finalized events
           .orderBy('timestamp', descending: true)
-          .limit(100) // IMPORTANT: Limit to prevent OOM
+          .limit(100)
           .get();
 
       final events = querySnapshot.docs.map((doc) {
