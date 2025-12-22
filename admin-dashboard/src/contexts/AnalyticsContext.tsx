@@ -80,78 +80,67 @@ export const AnalyticsProvider: React.FC<{ children: ReactNode }> = ({ children 
   });
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
-  
+
   // Prevent duplicate fetches
   const fetchingRef = useRef(false);
 
   const fetchData = async () => {
     if (fetchingRef.current) return;
-    
+
     fetchingRef.current = true;
     setLoading({ summary: true, patterns: true, rules: true, highRisk: true });
     setError(null);
 
-    // Fetch each API independently for progressive loading
-    const fetchSummary = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/analytics/summary`);
-        if (!res.ok) throw new Error("Failed to fetch summary");
-        const summaryData = await res.json();
-        setData(prev => ({ ...prev, summary: summaryData }));
-      } catch (err) {
-        console.error('Summary fetch error:', err);
-      } finally {
-        setLoading(prev => ({ ...prev, summary: false }));
-      }
+    // Helper for polling endpoints that might return 202
+    const fetchWithPoll = async (
+      endpoint: string,
+      key: keyof AnalyticsData,
+      errorMessage: string
+    ) => {
+      let attempts = 0;
+      const maxAttempts = 10; // 20 seconds max
+
+      const poll = async () => {
+        try {
+          if (attempts >= maxAttempts) {
+            setLoading(prev => ({ ...prev, [key]: false }));
+            return;
+          }
+
+          const res = await fetch(`${API_BASE}${endpoint}`);
+
+          if (res.status === 202) {
+            attempts++;
+            setTimeout(poll, 2000); // Retry after 2s
+            return;
+          }
+
+          if (!res.ok) throw new Error(errorMessage);
+
+          const resultData = await res.json();
+          setData(prev => ({ ...prev, [key]: resultData }));
+        } catch (err) {
+          console.error(`${key} fetch error:`, err);
+        } finally {
+          // Only stop loading if we're not retrying (status != 202)
+          if (attempts < maxAttempts || attempts >= maxAttempts) {
+            // Logic check: if we are here, we either succeeded, failed, or timed out.
+            // If we were retrying (202), we returned early above.
+            setLoading(prev => ({ ...prev, [key]: false }));
+          }
+        }
+      };
+
+      poll();
     };
 
-    const fetchPatterns = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/analytics/patterns`);
-        if (!res.ok) throw new Error("Failed to fetch patterns");
-        const patternsData = await res.json();
-        setData(prev => ({ ...prev, patterns: patternsData }));
-      } catch (err) {
-        console.error('Patterns fetch error:', err);
-      } finally {
-        setLoading(prev => ({ ...prev, patterns: false }));
-      }
-    };
-
-    const fetchRules = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/analytics/rules?top_n=10`);
-        if (!res.ok) throw new Error("Failed to fetch rules");
-        const rulesData = await res.json();
-        setData(prev => ({ ...prev, rules: rulesData }));
-      } catch (err) {
-        console.error('Rules fetch error:', err);
-      } finally {
-        setLoading(prev => ({ ...prev, rules: false }));
-      }
-    };
-
-    const fetchHighRisk = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/analytics/predictions?top_n=5`);
-        if (!res.ok) throw new Error("Failed to fetch predictions");
-        const predictionsData = await res.json();
-        setData(prev => ({ ...prev, highRisk: predictionsData }));
-      } catch (err) {
-        console.error('Predictions fetch error:', err);
-      } finally {
-        setLoading(prev => ({ ...prev, highRisk: false }));
-      }
-    };
-
-    // Start all fetches in parallel but update UI progressively
+    // Start all fetches in parallel with polling support
     try {
-      await Promise.all([
-        fetchSummary(),
-        fetchPatterns(),
-        fetchRules(),
-        fetchHighRisk()
-      ]);
+      fetchWithPoll('/api/analytics/summary', 'summary', 'Failed to fetch summary');
+      fetchWithPoll('/api/analytics/patterns', 'patterns', 'Failed to fetch patterns');
+      fetchWithPoll('/api/analytics/rules?top_n=10', 'rules', 'Failed to fetch rules');
+      fetchWithPoll('/api/analytics/predictions?top_n=5', 'highRisk', 'Failed to fetch predictions');
+
       setLastFetched(Date.now());
     } catch (err) {
       setError("Some analytics data failed to load");

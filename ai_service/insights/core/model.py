@@ -48,6 +48,10 @@ class InsightsModel:
         self.events: List[ViolenceEvent] = []
         self.is_fitted: bool = False
         self.fit_time: Optional[datetime] = None
+        
+        # Internal caches
+        self._cache_summary: Optional[Dict[str, Any]] = None
+        self._cache_full_report: Optional[Dict[str, Any]] = None
     
     def fit(self, events: List[ViolenceEvent]) -> "InsightsModel":
         """
@@ -173,11 +177,14 @@ class InsightsModel:
         """Get quick summary of key insights."""
         self._check_fitted()
         
+        if self._cache_summary is not None:
+            return self._cache_summary
+        
         patterns = self.get_patterns()
         rules = self.get_rules(3)
         high_risk = self.get_high_risk_conditions(3)
         
-        return {
+        self._cache_summary = {
             "total_events": len(self.events) if self.events else getattr(self, '_n_events', 0),
             "patterns_discovered": len(patterns),
             "rules_discovered": len(self.association_model.rules) if self.association_model.rules is not None else 0,
@@ -186,6 +193,7 @@ class InsightsModel:
             "top_rule": rules[0] if rules else None,
             "highest_risk": high_risk[0] if high_risk else None,
         }
+        return self._cache_summary
     
     
     def save(self, filepath: str) -> str:

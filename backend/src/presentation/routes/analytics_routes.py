@@ -86,6 +86,9 @@ def init_insights_model() -> None:
     _model = InsightsModel.load(model_path)
     _model_loaded = True
 
+    # Pre-compute analytics so they are ready when requested
+    start_analytics_computation()
+
 def get_model() -> InsightsModel:
     """
     Get the loaded InsightsModel.

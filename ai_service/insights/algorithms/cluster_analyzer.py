@@ -39,6 +39,9 @@ class ClusterAnalyzer(BaseAnalyzer):
         self.features: Optional[np.ndarray] = None
         self.labels: Optional[np.ndarray] = None
         
+        # Cache for expensive computations
+        self._cached_insights: Optional[List[Dict[str, Any]]] = None
+        
     def _prepare_features(self, events: List[ViolenceEvent]) -> np.ndarray:
         camera_ids = [e.camera_id for e in events]
         camera_encoded = self.camera_encoder.fit_transform(camera_ids)
@@ -140,6 +143,9 @@ class ClusterAnalyzer(BaseAnalyzer):
     def get_cluster_insights(self) -> List[Dict[str, Any]]:
         self._check_fitted()
         
+        if self._cached_insights is not None:
+            return self._cached_insights
+        
         insights = []
         for cluster_id in range(self.n_clusters):
             analysis = self._analyze_cluster(cluster_id)
@@ -147,6 +153,7 @@ class ClusterAnalyzer(BaseAnalyzer):
             insights.append(analysis)
         
         insights.sort(key=lambda x: x['size'], reverse=True)
+        self._cached_insights = insights
         return insights
     
     def get_summary(self) -> Dict[str, Any]:
