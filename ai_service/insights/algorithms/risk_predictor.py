@@ -144,32 +144,67 @@ class RiskPredictor(BaseAnalyzer):
         return {name: round(imp, 4) for name, imp in zip(feature_names, importances)}
     
     def get_high_risk_conditions(self, top_n: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get conditions with highest risk using vectorized prediction.
+        
+        Optimized: Uses batch numpy operations instead of 840 individual predict() calls.
+        """
         self._check_fitted()
         
-        results = []
-        for hour in range(24):
-            for day in DAYS:
-                for camera in self.cameras:
-                    pred = self.predict(hour, day, camera)
-                    high_prob = pred['probabilities'].get('High', 0)
-                    
-                    # Calculate risk_level based on high_prob, not model prediction
-                    if high_prob >= 0.7:
-                        risk_level = "HIGH"
-                    elif high_prob >= 0.4:
-                        risk_level = "MEDIUM"
-                    else:
-                        risk_level = "LOW"
-                    
-                    results.append({
-                        "hour": hour,
-                        "day": day,
-                        "camera": camera,
-                        "high_prob": high_prob,
-                        "risk_level": risk_level,
-                    })
+        # Check cache first (use getattr for backwards compatibility with pickled models)
+        cached = getattr(self, '_cached_high_risk', None)
+        if cached is not None:
+            return cached[:top_n]
         
+        # Build all combinations at once (24 hours × 7 days × N cameras)
+        all_features = []
+        all_metadata = []
+        
+        for hour in range(24):
+            for day_idx, day in enumerate(DAYS):
+                is_weekend = 1 if day_idx >= 5 else 0
+                time_period = categorize_hour(hour).capitalize()
+                period_encoded = self.period_encoder.transform([time_period])[0]
+                
+                for camera in self.cameras:
+                    camera_encoded = self.camera_encoder.transform([camera])[0]
+                    
+                    all_features.append([hour, day_idx, is_weekend, period_encoded, camera_encoded])
+                    all_metadata.append({"hour": hour, "day": day, "camera": camera})
+        
+        # Vectorized prediction - single call instead of 840
+        X = np.array(all_features)
+        probabilities = self.model.predict_proba(X)
+        
+        # Find index of 'High' class
+        high_idx = list(self.model.classes_).index('High') if 'High' in self.model.classes_ else 0
+        
+        # Build results
+        results = []
+        for i, meta in enumerate(all_metadata):
+            high_prob = probabilities[i][high_idx]
+            
+            if high_prob >= 0.7:
+                risk_level = "HIGH"
+            elif high_prob >= 0.4:
+                risk_level = "MEDIUM"
+            else:
+                risk_level = "LOW"
+            
+            results.append({
+                "hour": meta["hour"],
+                "day": meta["day"],
+                "camera": meta["camera"],
+                "high_prob": round(float(high_prob), 3),
+                "risk_level": risk_level,
+            })
+        
+        # Sort by high_prob descending
         results.sort(key=lambda x: x['high_prob'], reverse=True)
+        
+        # Cache full results
+        self._cached_high_risk = results
+        
         return results[:top_n]
     
     def get_summary(self) -> Dict[str, Any]:

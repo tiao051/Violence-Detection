@@ -177,8 +177,10 @@ class InsightsModel:
         """Get quick summary of key insights."""
         self._check_fitted()
         
-        if self._cache_summary is not None:
-            return self._cache_summary
+        # Handle legacy pickled models that don't have _cache_summary
+        cached = getattr(self, '_cache_summary', None)
+        if cached is not None:
+            return cached
         
         patterns = self.get_patterns()
         rules = self.get_rules(3)

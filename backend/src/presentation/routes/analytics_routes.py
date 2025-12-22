@@ -40,6 +40,7 @@ _cache_state: Dict[str, Optional[Any]] = {
     "rules": None,
     "high_risk": None,
     "full_report": None,
+    "hotspots": None,  # NEW: hotspot cache
 }
 _computing_tasks: Dict[str, bool] = {
     "summary": False,
@@ -47,6 +48,7 @@ _computing_tasks: Dict[str, bool] = {
     "rules": False,
     "high_risk": False,
     "full_report": False,
+    "hotspots": False,  # NEW: hotspot computing flag
 }
 _cache_lock = threading.Lock()
 
@@ -167,6 +169,66 @@ def _compute_full_report() -> None:
         _computing_tasks["full_report"] = False
 
 
+def _compute_hotspots() -> None:
+    """Compute hotspot analysis in background."""
+    try:
+        logger.info("Computing hotspots...")
+        
+        # Find CSV data file
+        data_dir_options = [
+            '/app/ai_service/insights/data',
+            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
+        ]
+        
+        csv_path = None
+        for path in data_dir_options:
+            potential_path = os.path.join(path, 'analytics_events.csv')
+            if os.path.exists(potential_path):
+                csv_path = potential_path
+                break
+        
+        if csv_path is None:
+            logger.warning("Hotspot CSV not found, skipping hotspot computation")
+            return
+        
+        # Perform analysis
+        analyzer = HotspotAnalyzer()
+        analyzer.load_from_csv(csv_path)
+        analyzer.analyze()
+        summary = analyzer.get_summary()
+        
+        # Enrich with coordinates and English names
+        for cam in summary.get("cameras", []):
+            cam_id = cam.get("camera_id", "")
+            if cam_id in CAMERA_COORDINATES:
+                cam["lat"] = CAMERA_COORDINATES[cam_id]["lat"]
+                cam["lng"] = CAMERA_COORDINATES[cam_id]["lng"]
+            
+            vn_name = cam.get("camera_name", "")
+            cam["camera_name_en"] = CAMERA_NAME_MAP.get(vn_name, vn_name)
+        
+        _cache_state["hotspots"] = {
+            "success": True,
+            "algorithm": "Weighted Hotspot Scoring",
+            "description": "Statistical analysis using violence ratio, confidence scores, and Z-score comparison",
+            "weights": {
+                "violence_ratio": 0.4,
+                "avg_confidence": 0.3,
+                "z_score": 0.3,
+            },
+            "thresholds": {
+                "hotspot": 0.6,
+                "warning": 0.4,
+            },
+            **summary,
+        }
+        logger.info("Hotspots computed")
+    except Exception as e:
+        logger.error(f"Error computing hotspots: {e}", exc_info=True)
+    finally:
+        _computing_tasks["hotspots"] = False
+
+
 def start_analytics_computation() -> None:
     """Start all analytics computations in parallel (non-blocking)."""
     global _computing_tasks
@@ -177,6 +239,7 @@ def start_analytics_computation() -> None:
         ("rules", _compute_rules),
         ("high_risk", _compute_high_risk),
         ("full_report", _compute_full_report),
+        ("hotspots", _compute_hotspots),  # NEW: include hotspots
     ]
     
     for task_name, task_func in tasks:
@@ -187,6 +250,54 @@ def start_analytics_computation() -> None:
             logger.info(f"Started background task: {task_name}")
     
     logger.info("All analytics tasks started in parallel")
+
+
+def wait_for_analytics_completion(timeout_seconds: int = 60) -> bool:
+    """
+    Block until all analytics computations are complete.
+    
+    Called during startup to ensure all data is ready before serving requests.
+    This only blocks the startup thread, not the main event loop or inference pipeline.
+    
+    Args:
+        timeout_seconds: Maximum time to wait (default 60s)
+        
+    Returns:
+        True if all completed, False if timeout reached
+    """
+    import time as time_module
+    
+    start = time_module.time()
+    check_interval = 0.5  # Check every 500ms
+    
+    required_keys = ["summary", "patterns", "rules", "high_risk", "full_report", "hotspots"]
+    
+    while time_module.time() - start < timeout_seconds:
+        # Check if all are done
+        all_done = True
+        pending = []
+        
+        for key in required_keys:
+            if _cache_state[key] is None:
+                all_done = False
+                status = "computing" if _computing_tasks[key] else "pending"
+                pending.append(f"{key}({status})")
+        
+        if all_done:
+            elapsed = time_module.time() - start
+            logger.info(f"All analytics ready in {elapsed:.1f}s")
+            return True
+        
+        # Log progress periodically (every 5 seconds)
+        elapsed = time_module.time() - start
+        if int(elapsed) % 5 == 0 and int(elapsed) > 0:
+            logger.info(f"Waiting for analytics: {', '.join(pending)} ({elapsed:.0f}s elapsed)")
+        
+        time_module.sleep(check_interval)
+    
+    # Timeout reached
+    logger.warning(f"Analytics timeout after {timeout_seconds}s. Some data may not be ready.")
+    return False
 
 
 # Request/Response models
@@ -229,6 +340,7 @@ async def get_computation_status() -> Dict[str, str]:
         "rules": "done" if _cache_state["rules"] is not None else ("computing" if _computing_tasks["rules"] else "pending"),
         "high_risk": "done" if _cache_state["high_risk"] is not None else ("computing" if _computing_tasks["high_risk"] else "pending"),
         "full_report": "done" if _cache_state["full_report"] is not None else ("computing" if _computing_tasks["full_report"] else "pending"),
+        "hotspots": "done" if _cache_state["hotspots"] is not None else ("computing" if _computing_tasks["hotspots"] else "pending"),
     }
 
 
@@ -402,64 +514,39 @@ async def get_hotspot_analysis() -> Dict[str, Any]:
     - Warning: score >= 0.4
     - Safe: score < 0.4
     
-    No ML model training required - works directly on event data.
+    Now uses cached data computed at startup for instant response.
     """
     try:
-        # Find CSV data file
-        data_dir_options = [
-            '/app/ai_service/insights/data',
-            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
-        ]
+        # Trigger computation if not started
+        start_analytics_computation()
         
-        csv_path = None
-        for path in data_dir_options:
-            potential_path = os.path.join(path, 'analytics_events.csv')
-            if os.path.exists(potential_path):
-                csv_path = potential_path
-                break
+        # Return cached data if available
+        if _cache_state["hotspots"] is not None:
+            return _cache_state["hotspots"]
         
-        if csv_path is None:
+        # If still computing, return 202
+        if _computing_tasks["hotspots"]:
             raise HTTPException(
-                status_code=404,
-                detail="Event data CSV not found. Please ensure analytics_events.csv exists."
+                status_code=202,
+                detail="Hotspot analysis still computing. Check /api/analytics/status for progress."
             )
         
-        # Perform analysis
-        analyzer = HotspotAnalyzer()
-        analyzer.load_from_csv(csv_path)
-        analyzer.analyze()
-        summary = analyzer.get_summary()
+        # Fallback: compute synchronously if cache miss and not computing
+        # This should rarely happen after startup
+        _compute_hotspots()
         
-        # Enrich with coordinates and English names
-        for cam in summary.get("cameras", []):
-            cam_id = cam.get("camera_id", "")
-            if cam_id in CAMERA_COORDINATES:
-                cam["lat"] = CAMERA_COORDINATES[cam_id]["lat"]
-                cam["lng"] = CAMERA_COORDINATES[cam_id]["lng"]
-            
-            # Add English name
-            vn_name = cam.get("camera_name", "")
-            cam["camera_name_en"] = CAMERA_NAME_MAP.get(vn_name, vn_name)
+        if _cache_state["hotspots"] is not None:
+            return _cache_state["hotspots"]
         
-        return {
-            "success": True,
-            "algorithm": "Weighted Hotspot Scoring",
-            "description": "Statistical analysis using violence ratio, confidence scores, and Z-score comparison",
-            "weights": {
-                "violence_ratio": 0.4,
-                "avg_confidence": 0.3,
-                "z_score": 0.3,
-            },
-            "thresholds": {
-                "hotspot": 0.6,
-                "warning": 0.4,
-            },
-            **summary,
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot data not available. CSV file may be missing."
+        )
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in get_hotspot_analysis: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
 

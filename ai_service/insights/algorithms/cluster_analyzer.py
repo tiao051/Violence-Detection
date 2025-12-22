@@ -143,8 +143,10 @@ class ClusterAnalyzer(BaseAnalyzer):
     def get_cluster_insights(self) -> List[Dict[str, Any]]:
         self._check_fitted()
         
-        if self._cached_insights is not None:
-            return self._cached_insights
+        # Handle legacy pickled models that don't have _cached_insights
+        cached = getattr(self, '_cached_insights', None)
+        if cached is not None:
+            return cached
         
         insights = []
         for cluster_id in range(self.n_clusters):

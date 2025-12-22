@@ -74,10 +74,18 @@ async def startup(app: FastAPI) -> None:
         # 3. Initialize InsightsModel (for Analytics)
         # Load or train at startup (not on-demand) for fast request responses
         try:
-            from src.presentation.routes.analytics_routes import init_insights_model
+            from src.presentation.routes.analytics_routes import init_insights_model, wait_for_analytics_completion
             logger.info("Initializing InsightsModel...")
             init_insights_model()
-            logger.info("InsightsModel loaded successfully")
+            logger.info("InsightsModel loaded, waiting for analytics computation...")
+            
+            # Block until all analytics are ready (max 60s)
+            # This ensures /api/analytics/* endpoints return data immediately
+            analytics_ready = wait_for_analytics_completion(timeout_seconds=60)
+            if analytics_ready:
+                logger.info("All analytics ready - endpoints will respond instantly")
+            else:
+                logger.warning("Analytics timeout - some endpoints may need to compute on first request")
         except Exception as e:
             logger.warning(f"Failed to initialize InsightsModel: {e}")
             # Continue - analytics endpoint will handle gracefully

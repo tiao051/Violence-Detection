@@ -111,7 +111,7 @@ export const AnalyticsProvider: React.FC<{ children: ReactNode }> = ({ children 
 
           if (res.status === 202) {
             attempts++;
-            setTimeout(poll, 2000); // Retry after 2s
+            setTimeout(poll, 1000); // Retry after 1s (was 2s)
             return;
           }
 
@@ -149,14 +149,9 @@ export const AnalyticsProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  // Preload data after a short delay (don't block main stream)
+  // Fetch data immediately on mount (no delay since backend pre-computes)
   useEffect(() => {
-    // Wait 3 seconds after app start to let main functionality initialize first
-    const timer = setTimeout(() => {
-      fetchData();
-    }, 3000);
-
-    return () => clearTimeout(timer);
+    fetchData();
   }, []);
 
   return (
