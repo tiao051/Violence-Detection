@@ -71,24 +71,27 @@ async def startup(app: FastAPI) -> None:
         await redis_client.ping()
         app.state.redis_client = redis_client
 
-        # 3. Initialize InsightsModel (for Analytics)
-        # Load or train at startup (not on-demand) for fast request responses
+        # 3. Initialize Analytics Engines (Insights + Spark)
+        import asyncio
+        
+        # A. Warmup Spark Session (Background Task)
+        # This prevents the 10-15s delay on first 'Run Analysis' click
         try:
-            from src.presentation.routes.analytics_routes import init_insights_model, wait_for_analytics_completion
-            logger.info("Initializing InsightsModel...")
+            from ai_service.insights.spark.spark_insights_job import warmup_spark
+            logger.info("Triggering Spark Session warmup in background...")
+            asyncio.create_task(asyncio.to_thread(warmup_spark))
+        except ImportError:
+            logger.warning("Could not import Spark job for warmup - likely missing dependencies or path issues.")
+        except Exception as e:
+            logger.warning(f"Spark warmup failed to trigger: {e}")
+
+        # B. Initialize InsightsModel (Legacy/Prediction)
+        try:
+            from src.presentation.routes.analytics_routes import init_insights_model
+            logger.info("Initializing InsightsModel for predictions...")
             init_insights_model()
-            logger.info("InsightsModel loaded, waiting for analytics computation...")
-            
-            # Block until all analytics are ready (max 60s)
-            # This ensures /api/analytics/* endpoints return data immediately
-            analytics_ready = wait_for_analytics_completion(timeout_seconds=60)
-            if analytics_ready:
-                logger.info("All analytics ready - endpoints will respond instantly")
-            else:
-                logger.warning("Analytics timeout - some endpoints may need to compute on first request")
         except Exception as e:
             logger.warning(f"Failed to initialize InsightsModel: {e}")
-            # Continue - analytics endpoint will handle gracefully
 
         # 4. Connect Kafka producer
         kafka_producer = get_kafka_producer()
