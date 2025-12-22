@@ -24,7 +24,7 @@ class _CameraGridItemState extends State<CameraGridItem> {
   late final Player _player;
   late final VideoController _controller;
   final CameraService _cameraService = CameraService();
-  
+
   bool _isLoading = true;
   bool _hasError = false;
 
@@ -32,13 +32,15 @@ class _CameraGridItemState extends State<CameraGridItem> {
   void initState() {
     super.initState();
     _player = Player();
-    _controller = VideoController(_player, configuration: const VideoControllerConfiguration(enableHardwareAcceleration: true));
+    _controller = VideoController(_player,
+        configuration: const VideoControllerConfiguration(
+            enableHardwareAcceleration: true));
     _initializeStream();
   }
 
   Future<void> _initializeStream() async {
     if (!mounted) return;
-    
+
     try {
       final authProvider = context.read<AuthProvider>();
       final accessToken = authProvider.accessToken;
@@ -128,11 +130,13 @@ class _CameraGridItemState extends State<CameraGridItem> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.videocam_off, color: Colors.white.withOpacity(0.3), size: 32),
+                      Icon(Icons.videocam_off,
+                          color: Colors.white.withOpacity(0.3), size: 32),
                       const SizedBox(height: 8),
                       Text(
                         'Offline',
-                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.5), fontSize: 12),
                       ),
                     ],
                   ),
@@ -169,7 +173,8 @@ class _CameraGridItemState extends State<CameraGridItem> {
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.9),
                       borderRadius: BorderRadius.circular(4),
@@ -208,7 +213,10 @@ class _CameraGridItemState extends State<CameraGridItem> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (_hasError ? Colors.red : const Color(0xFF00FF94)).withOpacity(0.5),
+                            color: (_hasError
+                                    ? Colors.red
+                                    : const Color(0xFF00FF94))
+                                .withOpacity(0.5),
                             blurRadius: 6,
                             spreadRadius: 1,
                           ),
