@@ -20,15 +20,13 @@ class CameraService {
   /// Returns: List of cameras owned by user
   /// Throws: Exception if API call fails or token is missing
   Future<List<CameraModel>> getCameras({required String accessToken}) async {
-    print("CameraService: Fetching cameras from backend API...");
-
     if (accessToken.isEmpty) {
       throw Exception('Access token is missing. User not authenticated.');
     }
 
     try {
       final uri = Uri.parse(AppConfig.camerasListUrl);
-      
+
       final response = await http.get(
         uri,
         headers: {
@@ -37,11 +35,9 @@ class CameraService {
         },
       ).timeout(const Duration(seconds: 10));
 
-      print('CameraService: Backend response status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        
+
         final cameras = data.map((cam) {
           return CameraModel(
             id: cam['id'] ?? '',
@@ -51,9 +47,6 @@ class CameraService {
           );
         }).toList();
 
-        print("List of cameras fetched: $cameras");
-
-        print("CameraService: Found ${cameras.length} cameras.");
         return cameras;
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized: Invalid or expired token');
@@ -79,15 +72,13 @@ class CameraService {
     String cameraId, {
     required String accessToken,
   }) async {
-    print("CameraService: Getting stream URL for camera $cameraId");
-
     if (accessToken.isEmpty) {
       throw Exception('Access token is missing. User not authenticated.');
     }
 
     try {
       final uri = Uri.parse(AppConfig.cameraStreamUrl(cameraId));
-      
+
       final response = await http.get(
         uri,
         headers: {
@@ -96,16 +87,13 @@ class CameraService {
         },
       ).timeout(const Duration(seconds: 10));
 
-      print('CameraService: Backend response status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['stream_url'] == null) {
           throw Exception('Invalid response: missing stream_url');
         }
 
-        print("CameraService: Stream URL received for camera $cameraId");
         return data['stream_url'];
       } else if (response.statusCode == 403) {
         throw Exception('Not authorized to access this camera');

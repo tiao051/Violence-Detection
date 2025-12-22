@@ -47,33 +47,17 @@ class NotificationService {
   /// Foreground: User sees notification while app is open.
   /// Background: User taps notification from system tray while app is closed or backgrounded.
   Future<void> _setupMessageHandlers() async {
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (kDebugMode) {
-        print('NotificationService: Foreground message received');
-        print('Title: ${message.notification?.title}');
-        print('Body: ${message.notification?.body}');
-        print('Data: ${message.data}');
-      }
-      // In foreground, system notification won't show automatically on Android.
-      // You could display a custom notification or handle it here.
-    });
+    // Handle foreground messages - system will show notification automatically
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {});
 
     // Handle notification tap when app is in foreground
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      if (kDebugMode) {
-        print('NotificationService: Notification tapped (foreground)');
-      }
       _handleNotificationTap(message);
     });
 
     // Handle initial message when app is opened from terminated state
     final initialMessage = await _firebaseMessaging.getInitialMessage();
     if (initialMessage != null) {
-      if (kDebugMode) {
-        print(
-            'NotificationService: App opened from terminated state via notification');
-      }
       _handleNotificationTap(initialMessage);
     }
   }
@@ -84,15 +68,7 @@ class NotificationService {
     final eventId = message.data['event_id'];
 
     if (eventId != null && _onNotificationTap != null) {
-      if (kDebugMode) {
-        print('NotificationService: Deep linking to event: $eventId');
-      }
       _onNotificationTap!(eventId);
-    } else {
-      if (kDebugMode) {
-        print(
-            'NotificationService: No event_id in notification data or callback not set');
-      }
     }
   }
 
@@ -103,37 +79,13 @@ class NotificationService {
   /// debug mode to help during development.
   Future<void> _requestPermission() async {
     try {
-      final NotificationSettings settings =
-          await _firebaseMessaging.requestPermission(
+      await _firebaseMessaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
-        announcement: false,
-        carPlay: false,
-        criticalAlert: false,
-        provisional: false,
       );
-
-      if (kDebugMode) {
-        switch (settings.authorizationStatus) {
-          case AuthorizationStatus.authorized:
-            print('NotificationService: Permission granted.');
-            break;
-          case AuthorizationStatus.provisional:
-            print('NotificationService: Provisional permission granted.');
-            break;
-          case AuthorizationStatus.denied:
-          case AuthorizationStatus.notDetermined:
-            print(
-                'NotificationService: Permission declined or not determined.');
-            break;
-        }
-      }
     } catch (e) {
-      // Non-fatal: log error and continue. Permission failure should not crash app.
-      if (kDebugMode) {
-        print('NotificationService: Failed to request permission: $e');
-      }
+      debugPrint('NotificationService: Failed to request permission: $e');
     }
   }
 
@@ -146,35 +98,14 @@ class NotificationService {
   Future<void> _getToken() async {
     try {
       final token = await _firebaseMessaging.getToken();
+      if (token == null) return;
 
-      if (token == null) {
-        if (kDebugMode) {
-          print('NotificationService: Unable to retrieve FCM token (null).');
-        }
-        return;
-      }
-
-      if (kDebugMode) {
-        // Clear, human-friendly log block for easier discovery during dev
-        print('--- FCM TOKEN START ----------------------------------');
-        print('FCM TOKEN: $token');
-        print('--- FCM TOKEN END ------------------------------------');
-      }
-
-      // Send token to backend
+      // Send token to backend if authenticated
       if (_accessToken != null) {
         await _sendTokenToBackend(token);
-      } else {
-        if (kDebugMode) {
-          print(
-              'NotificationService: No access token available, skipping backend registration');
-          print('NotificationService: Token will be registered after login');
-        }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('NotificationService: Failed to get FCM token: $e');
-      }
+      debugPrint('NotificationService: Failed to get FCM token: $e');
     }
   }
 
@@ -183,20 +114,11 @@ class NotificationService {
   /// Registers the device token with the backend so it can send push notifications
   /// when violence is detected.
   Future<void> _sendTokenToBackend(String token) async {
+    if (_accessToken == null) return;
+
     try {
-      if (_accessToken == null) {
-        if (kDebugMode) {
-          print('NotificationService: Cannot send token - no access token');
-        }
-        return;
-      }
-
-      if (kDebugMode) {
-        print('NotificationService: Sending FCM token to backend...');
-      }
-
       final uri = Uri.parse(AppConfig.registerFcmTokenUrl);
-      final response = await http
+      await http
           .post(
             uri,
             headers: {
@@ -209,43 +131,22 @@ class NotificationService {
             }),
           )
           .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        if (kDebugMode) {
-          print('NotificationService: ✅ FCM token registered successfully');
-        }
-      } else {
-        if (kDebugMode) {
-          print(
-              'NotificationService: ❌ Failed to register token - Status: ${response.statusCode}');
-          print('NotificationService: Response: ${response.body}');
-        }
-      }
     } catch (e) {
-      if (kDebugMode) {
-        print('NotificationService: ❌ Error sending token to backend: $e');
-      }
+      debugPrint('NotificationService: Error sending token to backend: $e');
     }
   }
 
   /// Update access token (call this after login or token refresh).
-  ///
-  /// This allows the service to register the FCM token with the backend.
-  /// Call this method after successful login.
   Future<void> updateAccessToken(String accessToken) async {
     _accessToken = accessToken;
 
-    // If we have a token, try to register it now
     try {
       final fcmToken = await _firebaseMessaging.getToken();
       if (fcmToken != null) {
         await _sendTokenToBackend(fcmToken);
       }
     } catch (e) {
-      if (kDebugMode) {
-        print(
-            'NotificationService: Error re-registering tokenafter access token update: $e');
-      }
+      debugPrint('NotificationService: Error re-registering token: $e');
     }
   }
 }
