@@ -6,10 +6,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import jwt
-from firebase_admin import auth
+from firebase_admin import auth, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from fastapi import APIRouter, HTTPException, Depends, Header
 from src.infrastructure.storage.token_repository import get_token_repository
+
+# Initialize Firestore client for camera queries
+try:
+    _db = firestore.client()
+except Exception:
+    _db = None
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +66,20 @@ class CameraModel(BaseModel):
 
 
 def _get_user_owned_cameras(user_id: str) -> list[str]:
-    """Get list of camera IDs owned by user."""
-    # TODO: Query Firestore for cameras where owner_uid == user_id
-    return []
+    """Get list of camera IDs owned by user from Firestore."""
+    if not _db:
+        return []
+    
+    try:
+        cameras_ref = _db.collection('cameras')
+        query = cameras_ref.where(filter=FieldFilter("owner_uid", "==", user_id))
+        docs = query.stream()
+        camera_ids = [doc.id for doc in docs]
+        logger.info(f"User {user_id} owns cameras: {camera_ids}")
+        return camera_ids
+    except Exception as e:
+        logger.error(f"Error getting user cameras: {e}")
+        return []
 
 
 def _get_camera_by_id(camera_id: str) -> Optional[Dict[str, Any]]:

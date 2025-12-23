@@ -5,6 +5,7 @@ import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
 
 import MapDashboard from './components/MapDashboard'
+import UserManagement from './components/UserManagement/UserManagement'
 import { ThemeProvider, AlertProvider } from './contexts'
 import './App.css'
 
@@ -19,6 +20,8 @@ const App = () => {
 
       case 'map':
         return <MapDashboard />;
+      case 'users':
+        return <UserManagement />;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:
