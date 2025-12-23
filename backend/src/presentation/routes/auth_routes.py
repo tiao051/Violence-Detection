@@ -12,11 +12,18 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from fastapi import APIRouter, HTTPException, Depends, Header
 from src.infrastructure.storage.token_repository import get_token_repository
 
-# Initialize Firestore client for camera queries
-try:
-    _db = firestore.client()
-except Exception:
-    _db = None
+# Lazy Firestore client initialization
+_db = None
+
+def _get_db():
+    global _db
+    if _db is None:
+        try:
+            _db = firestore.client()
+        except Exception as e:
+            logger.error(f"Failed to initialize Firestore client: {e}")
+            return None
+    return _db
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +72,37 @@ class CameraModel(BaseModel):
     stream_url: str
 
 
+def _ensure_firestore_user(user_id: str, email: str):
+    """Ensure user exists in Firestore fields."""
+    db = _get_db()
+    if not db:
+        return
+    try:
+        user_ref = db.collection('users').document(user_id)
+        doc = user_ref.get()
+        if not doc.exists:
+            user_ref.set({
+                'uid': user_id,
+                'email': email,
+                'displayName': email.split('@')[0],
+                'authProvider': 'firebase',
+                'createdAt': firestore.SERVER_TIMESTAMP,
+                'roles': ['user'],
+                'disabled': False
+            }, merge=True)
+            logger.info(f'Auto-created Firestore user document for {user_id}')
+    except Exception as e:
+        logger.error(f'Error ensuring firestore user: {e}')
+
+
 def _get_user_owned_cameras(user_id: str) -> list[str]:
     """Get list of camera IDs owned by user from Firestore."""
-    if not _db:
+    db = _get_db()
+    if not db:
         return []
     
     try:
-        cameras_ref = _db.collection('cameras')
+        cameras_ref = db.collection('cameras')
         query = cameras_ref.where(filter=FieldFilter("owner_uid", "==", user_id))
         docs = query.stream()
         camera_ids = [doc.id for doc in docs]
@@ -98,8 +129,7 @@ def _create_access_token(user_id: str, email: str, owner_cameras: list[str]) -> 
         "email": email,
         "owner_cameras": owner_cameras,
         "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "access",
+        "type": "access"
     }
     
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -107,15 +137,13 @@ def _create_access_token(user_id: str, email: str, owner_cameras: list[str]) -> 
 
 
 def _create_refresh_token(user_id: str) -> str:
-    """Create JWT refresh token (30 days)."""
-    expires_delta = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    expire = datetime.now(timezone.utc) + expires_delta
+    """Create JWT refresh token."""
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     
     to_encode = {
         "sub": user_id,
         "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "refresh",
+        "type": "refresh"
     }
     
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -186,6 +214,9 @@ async def verify_firebase_token(request: FirebaseTokenRequest) -> TokenResponse:
         if not user_id or not email:
             raise HTTPException(status_code=401, detail="Invalid token claims")
         
+        # Ensure user exists in Firestore so Admin Dashboard can see them
+        _ensure_firestore_user(user_id, email)
+        
         owner_cameras = _get_user_owned_cameras(user_id)
         access_token, expires_in = _create_access_token(user_id, email, owner_cameras)
         refresh_token = _create_refresh_token(user_id)
@@ -200,144 +231,121 @@ async def verify_firebase_token(request: FirebaseTokenRequest) -> TokenResponse:
                 "uid": user_id,
                 "email": email,
                 "email_verified": firebase_claims.get("email_verified", False),
-                "owner_cameras": owner_cameras,
+                "cameras": owner_cameras,
+                "owner_cameras": owner_cameras, 
             },
         )
+        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Token verification error: {e}")
-        raise HTTPException(status_code=500, detail="Token verification failed")
+        logger.error(f"Error verifying token: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_access_token(request: RefreshTokenRequest) -> TokenResponse:
+async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
     """Refresh access token using refresh token."""
     try:
         payload = jwt.decode(request.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
-        
+            
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid user ID in token")
-        
+            raise HTTPException(status_code=401, detail="Invalid token")
+            
+        # Get user email and cameras (query Firestore/Auth again)
+        try:
+            user = auth.get_user(user_id)
+            email = user.email
+        except Exception:
+            raise HTTPException(status_code=401, detail="User not found")
+            
         owner_cameras = _get_user_owned_cameras(user_id)
-        access_token, expires_in = _create_access_token(user_id, "", owner_cameras)
-        
-        logger.info(f"Access token refreshed for user {user_id}")
+        access_token, expires_in = _create_access_token(user_id, email, owner_cameras)
+        new_refresh_token = _create_refresh_token(user_id)
         
         return TokenResponse(
             access_token=access_token,
-            refresh_token=request.refresh_token,
+            refresh_token=new_refresh_token,
             expires_in=expires_in,
             user={
                 "uid": user_id,
+                "email": email,
+                "email_verified": user.email_verified,
+                "cameras": owner_cameras,
                 "owner_cameras": owner_cameras,
             },
         )
+        
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Refresh token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Token refresh error: {e}")
+        logger.error(f"Error refreshing token: {e}")
         raise HTTPException(status_code=500, detail="Token refresh failed")
 
 
-@router.get("/cameras", response_model=list[CameraModel])
-async def get_user_cameras(current_user: Dict[str, Any] = Depends(get_current_user)) -> list[CameraModel]:
-    """Get list of cameras owned by current user."""
-    try:
-        owner_cameras = current_user.get("owner_cameras", [])
-        if not owner_cameras:
-            logger.info(f"User {current_user.get('uid')} owns no cameras")
-            return []
-        
-        cameras = []
-        for camera_id in owner_cameras:
-            camera = _get_camera_by_id(camera_id)
-            if camera:
-                cameras.append(
-                    CameraModel(
-                        id=camera["id"],
-                        name=camera["name"],
-                        location=camera["location"],
-                        stream_url=camera["stream_url"],
-                    )
-                )
-        
-        logger.info(f"Retrieved {len(cameras)} cameras for user {current_user.get('uid')}")
-        return cameras
-    except Exception as e:
-        logger.error(f"Error retrieving cameras: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve cameras")
-
-
-@router.get("/streams/{camera_id}/url")
-async def get_stream_url(
-    camera_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """Get authorized stream URL for camera."""
-    try:
-        user_id = current_user.get("uid")
-        owner_cameras = current_user.get("owner_cameras", [])
-        
-        if camera_id not in owner_cameras:
-            logger.warning(f"User {user_id} attempted unauthorized access to camera {camera_id}")
-            raise HTTPException(status_code=403, detail="Not authorized to access this camera")
-        
-        camera = _get_camera_by_id(camera_id)
-        if not camera:
-            raise HTTPException(status_code=404, detail="Camera not found")
-        
-        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-        logger.info(f"Stream URL provided to user {user_id} for camera {camera_id}")
-        
-        return {
-            "camera_id": camera_id,
-            "stream_url": camera["stream_url"],
-            "type": "webrtc",
-            "expires_at": expires_at,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting stream URL: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get stream URL")
-
-
-@router.post("/register-fcm-token")
+@router.post("/fcm-token")
 async def register_fcm_token(
     request: FCMTokenRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, str]:
     """Register FCM token for push notifications."""
     try:
-        user_id = current_user.get("uid")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid user")
+        user_id = current_user["uid"]
         
-        token_repo = get_token_repository()
-        success = token_repo.save_token(
-            user_id=user_id,
-            token=request.token,
-            device_type=request.device_type
-        )
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to register FCM token")
-        
-        logger.info(f"FCM token registered for user {user_id} (device: {request.device_type})")
-        return {
-            "message": "FCM token registered successfully",
-            "status": "success"
-        }
-    except HTTPException:
-        raise
+        # Save token to Firestore
+        db = _get_db()
+        if db:
+            # Store in user's document or a separate tokens collection
+            # Here keeping it simple: users/{uid}/fcm_tokens/{token}
+            token_ref = db.collection('users').document(user_id).collection('fcm_tokens').document(request.token)
+            token_ref.set({
+                "token": request.token,
+                "device_type": request.device_type,
+                "updated_at": firestore.SERVER_TIMESTAMP
+            })
+            
+            logger.info(f"Registered FCM token for user {user_id}")
+            return {"message": "FCM token registered successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Database error")
+            
     except Exception as e:
         logger.error(f"Error registering FCM token: {e}")
-        raise HTTPException(status_code=500, detail="Failed to register FCM token")
+        raise HTTPException(status_code=500, detail="Failed to register token")
+
+
+# ============ Config copy for Camera Labels ============
+CAMERA_LOCATIONS = {
+    "cam1": {"name": "Le Trong Tan Intersection", "location": "Tan Phu District"},
+    "cam2": {"name": "Cong Hoa Intersection", "location": "Tan Binh District"},
+    "cam3": {"name": "Au Co Junction", "location": "Tan Phu District"},
+    "cam4": {"name": "Hoa Binh Intersection", "location": "Tan Phu District"},
+}
+
+@router.get("/cameras", response_model=list[CameraModel])
+async def get_user_cameras(current_user: Dict[str, Any] = Depends(get_current_user)) -> list[CameraModel]:
+    """Get list of cameras owned by the authenticated user."""
+    try:
+        user_id = current_user["uid"]
+        owner_cameras = _get_user_owned_cameras(user_id)
+        
+        cameras = []
+        for cam_id in owner_cameras:
+            cam_info = CAMERA_LOCATIONS.get(cam_id, {"name": cam_id, "location": "Unknown"})
+            cameras.append(CameraModel(
+                id=cam_id,
+                name=cam_info["name"],
+                location=cam_info["location"],
+                stream_url=f"/api/v1/streams/{cam_id}/url"
+            ))
+        
+        return cameras
+    except Exception as e:
+        logger.error(f"Error fetching user cameras: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch cameras")
