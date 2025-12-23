@@ -22,6 +22,8 @@ const App = () => {
         return <AnalyticsDashboard />;
       case 'users':
         return <UserManagement />;
+      case 'map':
+        return <MapDashboard />;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:
