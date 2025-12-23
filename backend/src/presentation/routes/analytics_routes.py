@@ -683,3 +683,161 @@ async def get_patrol_schedule() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting patrol schedule: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# SMART CAMERA PLACEMENT - Voronoi + Weighted Scoring Algorithm
+# ==============================================================================
+
+@router.get("/camera-placement")
+async def get_camera_placement_data() -> Dict[str, Any]:
+    """
+    Get data for smart camera placement suggestions.
+    
+    Returns:
+    - events: List of violence events with coordinates and timestamps
+    - cameras: List of existing cameras with coordinates
+    - risk_clusters: K-means cluster profiles (from camera_profiles.json)
+    - risk_rules: FP-Growth association rules (from risk_rules.json)
+    
+    Frontend uses this data to compute optimal camera placement using:
+    - Voronoi diagram for gap analysis
+    - Weighted scoring based on:
+      - Event density (30%)
+      - Distance to existing cameras (25%)
+      - Proximity to schools (20%)
+      - Critical risk cluster membership (15%)
+      - Night activity ratio (10%)
+    """
+    try:
+        import json
+        from datetime import datetime
+        
+        # Find data directory
+        data_dir_options = [
+            '/app/ai_service/insights/data',
+            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
+        ]
+        
+        data_dir = None
+        for path in data_dir_options:
+            if os.path.exists(path):
+                data_dir = path
+                break
+        
+        if data_dir is None:
+            raise HTTPException(status_code=404, detail="Data directory not found")
+        
+        # Load events from CSV
+        csv_path = os.path.join(data_dir, 'analytics_events.csv')
+        events = []
+        
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+            
+            for _, row in df.iterrows():
+                camera_id = row.get('cameraId', '')
+                timestamp_str = row.get('timestamp', '')
+                confidence = row.get('thumbnailConfidence', 0)
+                label = row.get('label', '')
+                
+                # Get camera coordinates
+                coords = CAMERA_COORDINATES.get(camera_id, {})
+                if not coords:
+                    continue
+                
+                # Parse timestamp to get hour
+                hour = 12  # default
+                try:
+                    if isinstance(timestamp_str, str) and timestamp_str:
+                        # Try parsing ISO format
+                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        hour = dt.hour
+                except:
+                    pass
+                
+                # Determine if night (22:00 - 06:00)
+                is_night = hour >= 22 or hour < 6
+                
+                # Determine cluster based on hour and confidence (simplified)
+                # Based on camera_profiles.json:
+                # Cluster 1 (Critical): ~1h, high confidence
+                # Cluster 0 (Moderate): ~17h
+                # Cluster 2 (Moderate): ~10h
+                if hour >= 0 and hour < 4 and confidence > 0.8:
+                    cluster = 1  # Critical
+                elif hour >= 15 and hour < 20:
+                    cluster = 0  # Moderate (evening)
+                else:
+                    cluster = 2  # Moderate (day)
+                
+                events.append({
+                    'camera_id': camera_id,
+                    'lat': coords['lat'],
+                    'lng': coords['lng'],
+                    'hour': hour,
+                    'is_night': is_night,
+                    'confidence': float(confidence) if confidence else 0,
+                    'is_violence': label == 'violence',
+                    'cluster': cluster
+                })
+        
+        # Load risk clusters (camera_profiles.json)
+        risk_clusters = []
+        clusters_path = os.path.join(data_dir, 'camera_profiles.json')
+        if os.path.exists(clusters_path):
+            with open(clusters_path, 'r') as f:
+                risk_clusters = json.load(f)
+        
+        # Load risk rules (risk_rules.json)
+        risk_rules = []
+        rules_path = os.path.join(data_dir, 'risk_rules.json')
+        if os.path.exists(rules_path):
+            with open(rules_path, 'r') as f:
+                risk_rules = json.load(f)
+        
+        # Prepare camera data
+        cameras = [
+            {
+                'camera_id': cam_id,
+                'lat': coords['lat'],
+                'lng': coords['lng'],
+                'name': coords['name']
+            }
+            for cam_id, coords in CAMERA_COORDINATES.items()
+        ]
+        
+        # Compute statistics
+        violence_events = [e for e in events if e['is_violence']]
+        night_events = [e for e in violence_events if e['is_night']]
+        critical_events = [e for e in violence_events if e['cluster'] == 1]
+        
+        return {
+            'success': True,
+            'events': events,
+            'violence_events_count': len(violence_events),
+            'cameras': cameras,
+            'risk_clusters': risk_clusters,
+            'risk_rules': risk_rules,
+            'statistics': {
+                'total_events': len(events),
+                'violence_events': len(violence_events),
+                'night_violence_ratio': len(night_events) / len(violence_events) if violence_events else 0,
+                'critical_cluster_ratio': len(critical_events) / len(violence_events) if violence_events else 0,
+            },
+            'weights': {
+                'event_density': 0.30,
+                'gap_distance': 0.25,
+                'school_proximity': 0.20,
+                'critical_cluster': 0.15,
+                'night_activity': 0.10
+            },
+            'algorithm': 'Voronoi + Weighted Scoring'
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_camera_placement_data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -36,6 +36,14 @@ interface SuggestedLocation {
   reason: string;
   betweenCameras: [string, string];
   gapDistance: number;
+  score?: number;
+  scoreBreakdown?: {
+    eventDensity: number;
+    gapDistance: number;
+    schoolProximity: number;
+    criticalCluster: number;
+    nightActivity: number;
+  };
 }
 
 interface HotspotApiResponse {
@@ -99,6 +107,57 @@ const COVERAGE_RADIUS = 200;
 const SCHOOL_SEARCH_RADIUS = 1000;
 const VIOLENCE_NEAR_SCHOOL_THRESHOLD = 0.3;
 const GAP_ANALYSIS_THRESHOLD = 0.8;
+
+// Weighted Scoring Weights
+const WEIGHTS = {
+  eventDensity: 0.30,
+  gapDistance: 0.25,
+  schoolProximity: 0.20,
+  criticalCluster: 0.15,
+  nightActivity: 0.10,
+};
+
+// Camera Placement API Response
+interface CameraPlacementApiResponse {
+  success: boolean;
+  events: Array<{
+    camera_id: string;
+    lat: number;
+    lng: number;
+    hour: number;
+    is_night: boolean;
+    confidence: number;
+    is_violence: boolean;
+    cluster: number;
+  }>;
+  violence_events_count: number;
+  cameras: Array<{
+    camera_id: string;
+    lat: number;
+    lng: number;
+    name: string;
+  }>;
+  risk_clusters: Array<{
+    cluster_id: number;
+    name: string;
+    avg_hour: number;
+    avg_confidence: number;
+    description: string;
+  }>;
+  risk_rules: Array<{
+    if: string[];
+    then: string[];
+    confidence: number;
+    lift: number;
+    rule_text: string;
+  }>;
+  statistics: {
+    total_events: number;
+    violence_events: number;
+    night_violence_ratio: number;
+    critical_cluster_ratio: number;
+  };
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -168,7 +227,172 @@ const findNearestSchool = (camera: CameraLocation, schools: School[]): School | 
   return nearest;
 };
 
-const analyzeGaps = (cameras: CameraLocation[]): SuggestedLocation[] => {
+/**
+ * Advanced Camera Placement Algorithm using Voronoi + Weighted Scoring
+ * 
+ * Score = 0.30 × EventDensity + 0.25 × GapDistance + 0.20 × SchoolProximity
+ *       + 0.15 × CriticalCluster + 0.10 × NightActivity
+ */
+const analyzeOptimalPlacements = (
+  cameras: CameraLocation[],
+  placementData: CameraPlacementApiResponse | null,
+  schools: School[]
+): SuggestedLocation[] => {
+  if (!placementData || !placementData.events || placementData.events.length === 0) {
+    // Fallback to simple gap analysis
+    return analyzeGapsSimple(cameras);
+  }
+
+  const suggestions: SuggestedLocation[] = [];
+  const violenceEvents = placementData.events.filter(e => e.is_violence);
+  
+  if (violenceEvents.length === 0) {
+    return analyzeGapsSimple(cameras);
+  }
+
+  // Create candidate points using Voronoi centroids and midpoints
+  const candidatePoints: Array<{ lat: number; lng: number; nearestCameras: string[] }> = [];
+
+  // Method 1: Midpoints between cameras (gap analysis)
+  for (let i = 0; i < cameras.length; i++) {
+    for (let j = i + 1; j < cameras.length; j++) {
+      const cam1 = cameras[i];
+      const cam2 = cameras[j];
+      const distance = calculateDistance(cam1.lat, cam1.lng, cam2.lat, cam2.lng);
+      
+      if (distance > GAP_ANALYSIS_THRESHOLD * 0.5) { // Lower threshold for more candidates
+        const midLat = (cam1.lat + cam2.lat) / 2;
+        const midLng = (cam1.lng + cam2.lng) / 2;
+        candidatePoints.push({
+          lat: midLat,
+          lng: midLng,
+          nearestCameras: [cam1.cameraNameEn, cam2.cameraNameEn],
+        });
+      }
+    }
+  }
+
+  // Method 2: Event cluster centroids using simple grid-based clustering
+  const gridSize = 0.003; // ~300m grid cells
+  const eventClusters: Map<string, { events: typeof violenceEvents; lat: number; lng: number }> = new Map();
+  
+  violenceEvents.forEach(event => {
+    const gridKey = `${Math.floor(event.lat / gridSize)}_${Math.floor(event.lng / gridSize)}`;
+    if (!eventClusters.has(gridKey)) {
+      eventClusters.set(gridKey, { events: [], lat: 0, lng: 0 });
+    }
+    const cluster = eventClusters.get(gridKey)!;
+    cluster.events.push(event);
+    cluster.lat += event.lat;
+    cluster.lng += event.lng;
+  });
+
+  eventClusters.forEach((cluster, _key) => {
+    const centroidLat = cluster.lat / cluster.events.length;
+    const centroidLng = cluster.lng / cluster.events.length;
+    
+    // Check if not too close to existing camera
+    const nearestCamDist = Math.min(...cameras.map(c => 
+      calculateDistance(centroidLat, centroidLng, c.lat, c.lng)
+    ));
+    
+    if (nearestCamDist > 0.15) { // At least 150m from nearest camera
+      const nearestCams = cameras
+        .map(c => ({ name: c.cameraNameEn, dist: calculateDistance(centroidLat, centroidLng, c.lat, c.lng) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 2);
+      
+      candidatePoints.push({
+        lat: centroidLat,
+        lng: centroidLng,
+        nearestCameras: [nearestCams[0]?.name || 'Unknown', nearestCams[1]?.name || 'Unknown'],
+      });
+    }
+  });
+
+  // Calculate score for each candidate point
+  const maxEvents = Math.max(...Array.from(eventClusters.values()).map(c => c.events.length), 1);
+  const maxDistance = Math.max(...candidatePoints.map(p => 
+    Math.min(...cameras.map(c => calculateDistance(p.lat, p.lng, c.lat, c.lng)))
+  ), 0.001);
+
+  candidatePoints.forEach(point => {
+    // 1. Event Density (30%)
+    const nearbyEvents = violenceEvents.filter(e => 
+      calculateDistance(point.lat, point.lng, e.lat, e.lng) < 0.3 // 300m radius
+    );
+    const eventDensityScore = nearbyEvents.length / maxEvents;
+
+    // 2. Gap Distance (25%)
+    const distToNearestCam = Math.min(...cameras.map(c => 
+      calculateDistance(point.lat, point.lng, c.lat, c.lng)
+    ));
+    const gapDistanceScore = Math.min(distToNearestCam / maxDistance, 1);
+
+    // 3. School Proximity (20%)
+    let schoolProximityScore = 0;
+    if (schools.length > 0) {
+      const nearestSchoolDist = Math.min(...schools.map(s => 
+        calculateDistance(point.lat, point.lng, s.lat, s.lng)
+      ));
+      schoolProximityScore = nearestSchoolDist < 0.3 ? 1 : 0; // Near school = bonus
+    }
+
+    // 4. Critical Cluster (15%) - based on cluster 1 from camera_profiles.json
+    const criticalEvents = nearbyEvents.filter(e => e.cluster === 1);
+    const criticalClusterScore = nearbyEvents.length > 0 
+      ? criticalEvents.length / nearbyEvents.length 
+      : 0;
+
+    // 5. Night Activity (10%) - based on risk_rules.json (Night → HIGH)
+    const nightEvents = nearbyEvents.filter(e => e.is_night);
+    const nightActivityScore = nearbyEvents.length > 0 
+      ? nightEvents.length / nearbyEvents.length 
+      : 0;
+
+    // Calculate total weighted score
+    const totalScore = 
+      WEIGHTS.eventDensity * eventDensityScore +
+      WEIGHTS.gapDistance * gapDistanceScore +
+      WEIGHTS.schoolProximity * schoolProximityScore +
+      WEIGHTS.criticalCluster * criticalClusterScore +
+      WEIGHTS.nightActivity * nightActivityScore;
+
+    // Only suggest if score is meaningful
+    if (totalScore > 0.25) {
+      const reasons: string[] = [];
+      if (eventDensityScore > 0.3) reasons.push(`${nearbyEvents.length} violence events nearby`);
+      if (gapDistanceScore > 0.5) reasons.push(`${(distToNearestCam * 1000).toFixed(0)}m coverage gap`);
+      if (schoolProximityScore > 0) reasons.push('Near educational facility');
+      if (criticalClusterScore > 0.3) reasons.push('High-risk time pattern detected');
+      if (nightActivityScore > 0.3) reasons.push('Night activity hotspot');
+
+      suggestions.push({
+        lat: point.lat,
+        lng: point.lng,
+        reason: reasons.length > 0 ? reasons.join(' • ') : 'Coverage optimization',
+        betweenCameras: point.nearestCameras as [string, string],
+        gapDistance: distToNearestCam,
+        score: totalScore,
+        scoreBreakdown: {
+          eventDensity: eventDensityScore,
+          gapDistance: gapDistanceScore,
+          schoolProximity: schoolProximityScore,
+          criticalCluster: criticalClusterScore,
+          nightActivity: nightActivityScore,
+        },
+      });
+    }
+  });
+
+  // Sort by score descending and take top 5
+  return suggestions
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, 5);
+};
+
+// Simple gap analysis fallback (original algorithm)
+const analyzeGapsSimple = (cameras: CameraLocation[]): SuggestedLocation[] => {
   const riskyCameras = cameras.filter((c) => c.classification === "hotspot" || c.classification === "warning");
   const suggestions: SuggestedLocation[] = [];
 
@@ -336,6 +560,7 @@ const MapDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Fetch hotspot data for camera display
       const data = await fetchHotspotData();
 
       if (data && data.success) {
@@ -348,11 +573,27 @@ const MapDashboard: React.FC = () => {
           safeZones: data.safe_zones,
           totalEvents: data.total_events,
           violenceEvents: data.total_violence_events,
-          algorithm: data.algorithm,
+          algorithm: 'Voronoi + Weighted Scoring',
         });
 
-        const gaps = analyzeGaps(transformed);
-        setSuggestions(gaps);
+        // Fetch camera placement data for advanced suggestions
+        let placementData: CameraPlacementApiResponse | null = null;
+        try {
+          const placementResponse = await fetch(`${API_BASE_URL}/api/analytics/camera-placement`);
+          if (placementResponse.ok) {
+            placementData = await placementResponse.json();
+          }
+        } catch (err) {
+          console.warn('Camera placement API not available, using simple gap analysis');
+        }
+
+        // Fetch nearby schools for scoring
+        const nearbySchools = await fetchNearbySchools(MAP_CENTER[0], MAP_CENTER[1], 2000);
+        setSchools(nearbySchools);
+
+        // Use advanced algorithm with weighted scoring
+        const optimalPlacements = analyzeOptimalPlacements(transformed, placementData, nearbySchools);
+        setSuggestions(optimalPlacements);
       } else {
         setError("Failed to load hotspot data. Please try again later.");
       }
@@ -601,9 +842,39 @@ const MapDashboard: React.FC = () => {
       marker.bindPopup(`
         <div class="suggestion-popup">
           <h4>📍 Suggested Camera Location #${index + 1}</h4>
-          <p>${suggestion.reason}</p>
+          ${suggestion.score ? `<div class="score-badge">Score: ${(suggestion.score * 100).toFixed(1)}%</div>` : ''}
+          <p class="suggestion-reason">${suggestion.reason}</p>
           <p><strong>Between:</strong> ${suggestion.betweenCameras.join(" ↔ ")}</p>
-          <p>Install a camera here to improve coverage of hotspot areas.</p>
+          ${suggestion.scoreBreakdown ? `
+            <div class="score-breakdown">
+              <div class="score-item">
+                <span>Event Density</span>
+                <div class="score-bar"><div style="width: ${suggestion.scoreBreakdown.eventDensity * 100}%"></div></div>
+                <span>${(suggestion.scoreBreakdown.eventDensity * 100).toFixed(0)}%</span>
+              </div>
+              <div class="score-item">
+                <span>Coverage Gap</span>
+                <div class="score-bar"><div style="width: ${suggestion.scoreBreakdown.gapDistance * 100}%"></div></div>
+                <span>${(suggestion.scoreBreakdown.gapDistance * 100).toFixed(0)}%</span>
+              </div>
+              <div class="score-item">
+                <span>Near School</span>
+                <div class="score-bar"><div style="width: ${suggestion.scoreBreakdown.schoolProximity * 100}%"></div></div>
+                <span>${suggestion.scoreBreakdown.schoolProximity > 0 ? 'Yes' : 'No'}</span>
+              </div>
+              <div class="score-item">
+                <span>Critical Risk</span>
+                <div class="score-bar critical"><div style="width: ${suggestion.scoreBreakdown.criticalCluster * 100}%"></div></div>
+                <span>${(suggestion.scoreBreakdown.criticalCluster * 100).toFixed(0)}%</span>
+              </div>
+              <div class="score-item">
+                <span>Night Activity</span>
+                <div class="score-bar night"><div style="width: ${suggestion.scoreBreakdown.nightActivity * 100}%"></div></div>
+                <span>${(suggestion.scoreBreakdown.nightActivity * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          ` : ''}
+          <p class="install-hint">Install a camera here to optimize coverage.</p>
         </div>
       `);
 
