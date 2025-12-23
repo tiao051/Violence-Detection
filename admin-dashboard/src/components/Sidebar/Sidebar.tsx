@@ -40,6 +40,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const menuItems = [
     { id: 'live', label: 'Live Monitor', icon: Icons.Camera },
     { id: 'history', label: 'Alert History', icon: Icons.History },
+    {
+      id: 'analytics', label: 'Analytics', icon: () => (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 3v18h18" />
+          <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+        </svg>
+      )
+    },
     { id: 'map', label: 'Hotspot Map', icon: Icons.Map },
     { id: 'settings', label: 'Settings', icon: Icons.Settings },
   ];

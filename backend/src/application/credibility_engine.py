@@ -42,7 +42,9 @@ class CredibilityEngine:
         # Loaded artifacts
         self.camera_credibility: Dict[str, Dict] = {}
         self.camera_clusters: List[Dict] = []
+        self.camera_clusters: List[Dict] = []
         self.false_alarm_patterns: List[Dict] = []
+        self.dashboard_stats: Dict[str, Any] = {}
         
         # Quick lookup maps
         self.camera_scores: Dict[str, float] = {}
@@ -86,6 +88,15 @@ class CredibilityEngine:
                 with open(patterns_file, 'r', encoding='utf-8') as f:
                     self.false_alarm_patterns = json.load(f)
                 logger.info(f"Loaded {len(self.false_alarm_patterns)} false alarm patterns")
+            
+            # 4. Dashboard Stats (Forecasting & Strategy)
+            stats_file = ARTIFACTS_DIR / "dashboard_stats.json"
+            if stats_file.exists():
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    self.dashboard_stats = json.load(f)
+                logger.info("Loaded dashboard stats (forecasts, heatmap, strategies)")
+            else:
+                 logger.warning("No dashboard stats found. Run Spark job to generate.")
             
         except Exception as e:
             logger.error(f"Failed to load artifacts: {e}", exc_info=True)
@@ -210,7 +221,12 @@ class CredibilityEngine:
         self.camera_tiers.clear()
         self.camera_clusters.clear()
         self.false_alarm_patterns.clear()
+        self.dashboard_stats.clear()
         self._load_artifacts()
+        
+    def get_dashboard_stats(self) -> Dict[str, Any]:
+        """Get high-level dashboard statistics (forecasts, strategies)."""
+        return self.dashboard_stats
 
 
 # Singleton accessor

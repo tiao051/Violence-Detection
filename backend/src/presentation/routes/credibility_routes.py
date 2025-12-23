@@ -160,6 +160,26 @@ async def get_camera_intelligence() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@router.get("/dashboard-stats")
+async def get_dashboard_stats() -> Dict[str, Any]:
+    """
+    Get aggregated dashboard statistics.
+    Includes Forecasts, Heatmaps, Strategies, and Anomalies.
+    """
+    try:
+        engine = get_credibility_engine()
+        stats = engine.get_dashboard_stats()
+        
+        return {
+            "success": True,
+            **stats
+        }
+    except Exception as e:
+        logger.error(f"Failed to get dashboard stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/camera-intelligence/{camera_id}")
 async def get_camera_stats(camera_id: str) -> Dict[str, Any]:
     """

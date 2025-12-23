@@ -23,7 +23,8 @@ from pyspark.ml.feature import VectorAssembler, StandardScaler, StringIndexer
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.fpm import FPGrowth
 from pyspark.ml.classification import RandomForestClassifier
-from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.regression import RandomForestRegressor
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator, RegressionEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,18 @@ class SparkInsightsJob:
             trends = self._compute_trends(df_processed)
             anomalies = self._detect_anomalies(df_processed)
             
+            # 6. Forecast Violence Trends (Random Forest Regressor)
+            logger.info("Forecasting violence trends with Random Forest...")
+            forecast = self._forecast_violence_rf(df_processed)
+            
+            # 7. Compute Peak Danger Heatmap
+            logger.info("Computing peak danger heatmap...")
+            heatmap = self._compute_heatmap(df_processed)
+            
+            # 8. Generate Strategic Recommendations
+            logger.info("Synthesizing strategic recommendations...")
+            strategies = self._generate_strategy(trends, heatmap, anomalies, forecast)
+            
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"PIPELINE COMPLETE in {elapsed:.1f}s")
             
@@ -134,7 +147,32 @@ class SparkInsightsJob:
                 "rf_metrics": rf_metrics,
                 "training_time": elapsed,
                 "trends": trends,
-                "anomalies": anomalies
+                "anomalies": anomalies,
+                "forecast": forecast,
+                "heatmap": heatmap,
+                "strategies": strategies
+            }
+            
+            # Save dashboard stats
+            dashboard_stats = {
+                "trends": trends, 
+                "anomalies": anomalies,
+                "forecast": forecast,
+                "heatmap": heatmap,
+                "strategies": strategies,
+                "generated_at": datetime.now().isoformat()
+            }
+            self._save_json(dashboard_stats, "dashboard_stats.json")
+            
+            return {
+                "success": True,
+                "verified_count": verified_count,
+                "clusters": clusters,
+                "false_alarm_patterns": len(fp_patterns),
+                "cameras_analyzed": len(credibility_data),
+                "rf_metrics": rf_metrics,
+                "training_time": elapsed,
+                "dashboard_stats_saved": True
             }
             
         except Exception as e:
@@ -621,6 +659,169 @@ class SparkInsightsJob:
             
         results.sort(key=lambda x: x["z_score"], reverse=True)
         return results
+
+    # ==================== ADVANCED ANALYTICS (FORECASTING & STRATEGY) ====================
+
+    def _forecast_violence_rf(self, df: DataFrame) -> Dict[str, Any]:
+        """
+        Forecast next 7 days of violence events using Random Forest Regressor.
+        Features: Day of week, Day of month, Is Weekend.
+        """
+        # 1. Aggregate daily counts
+        daily_counts = df.groupBy(F.to_date("dt").alias("date")) \
+                         .agg(F.count("*").alias("count")) \
+                         .orderBy("date")
+        
+        # 2. Extract temporal features
+        daily_features = daily_counts.withColumn("day_of_week", F.dayofweek("date") - 1) \
+                                     .withColumn("day_of_month", F.dayofmonth("date")) \
+                                     .withColumn("is_weekend", F.when(F.col("day_of_week").isin([0, 6]), 1).otherwise(0)) \
+                                     .withColumn("date_idx", F.datediff(F.col("date"), F.to_date(F.lit("2024-01-01")))) # Monotonic trend
+        
+        # 3. Prepare ML data
+        feature_cols = ["day_of_week", "day_of_month", "is_weekend", "date_idx"]
+        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+        
+        ml_df = assembler.transform(daily_features)
+        
+        # 4. Train Random Forest Regressor
+        # Use more trees for stability
+        rf = RandomForestRegressor(featuresCol="features", labelCol="count", numTrees=100, maxDepth=8, seed=42)
+        model = rf.fit(ml_df)
+        
+        # 5. Predict next 7 days
+        last_date_row = daily_features.orderBy(F.col("date").desc()).first()
+        last_date = last_date_row["date"] if last_date_row else datetime.now().date()
+        start_idx = last_date_row["date_idx"] if last_date_row else 0
+        
+        future_data = []
+        for i in range(1, 8):
+            next_date = last_date + timedelta(days=i)
+            future_data.append({
+                "date": next_date,
+                "day_of_week": next_date.weekday(), # 0=Mon
+                "day_of_month": next_date.day,
+                "is_weekend": 1 if next_date.weekday() in [5, 6] else 0,
+                "date_idx": start_idx + i
+            })
+            
+        future_df = self.spark.createDataFrame(future_data)
+        future_ml = assembler.transform(future_df)
+        predictions = model.transform(future_ml).collect()
+        
+        # 6. Format results
+        forecast_points = []
+        total_predicted = 0
+        for row in predictions:
+            val = max(0, round(row["prediction"], 1)) # No negative violence
+            forecast_points.append({
+                "date": row["date"].strftime("%Y-%m-%d"),
+                "predicted_count": val,
+                "day": row["date"].strftime("%A")
+            })
+            total_predicted += val
+            
+        # Get historical last 7 days for comparison
+        history_points = daily_counts.orderBy(F.col("date").desc()).limit(7).collect()
+        history_cleanup = [{"date": r["date"].strftime("%Y-%m-%d"), "count": r["count"]} for r in reversed(history_points)]
+        
+        return {
+            "forecast": forecast_points,
+            "history": history_cleanup,
+            "total_predicted_next_week": round(total_predicted, 1),
+            "trend_direction": "increasing" if total_predicted > sum(h["count"] for h in history_cleanup) else "decreasing"
+        }
+
+    def _compute_heatmap(self, df: DataFrame) -> List[Dict]:
+        """
+        Compute 7x24 Heatmap (Day x Hour) of violence density.
+        Only uses VERIFIED True Positive data for accuracy.
+        """
+        # Filter for verified or high confidence
+        df_clean = df.filter((F.col("confidence") > 0.7) | (F.col("is_verified") == True))
+        
+        # Group by Day (0-6) and Hour (0-23)
+        # Note: DayOfWeek in Spark is 1=Sunday, 2=Monday... we standardize to 0=Mon, 6=Sun
+        heatmap_data = df_clean.withColumn("day_std", (F.dayofweek("dt") + 5) % 7) \
+                               .groupBy("day_std", "hour") \
+                               .count() \
+                               .collect()
+        
+        # Initialize full grid
+        grid = []
+        counts = {(r["day_std"], r["hour"]): r["count"] for r in heatmap_data}
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        for d_idx, day_name in enumerate(days):
+            day_hours = []
+            for h in range(24):
+                val = counts.get((d_idx, h), 0)
+                day_hours.append({
+                    "hour": h,
+                    "count": val,
+                    "level": "high" if val > 10 else "medium" if val > 5 else "low" if val > 0 else "none"
+                })
+            grid.append({
+                "day": day_name,
+                "hours": day_hours,
+                "total_events": sum(h["count"] for h in day_hours)
+            })
+            
+        return grid
+
+    def _generate_strategy(self, trends: Dict, heatmap: List, anomalies: List, forecast: Dict) -> List[Dict]:
+        """
+        Strategic Recommendation Engine (Prescriptive Analytics).
+        Synthesizes insights to tell the user WHAT to do.
+        """
+        strategies = []
+        
+        # 1. Forecast Strategy
+        predicted_total = forecast.get("total_predicted_next_week", 0)
+        direction = forecast.get("trend_direction", "stable")
+        
+        if direction == "increasing" and predicted_total > 50:
+             strategies.append({
+                "type": "deployment",
+                "priority": "HIGH",
+                "title": "Predicted Violence Surge",
+                "message": f"Forecast models predict a violence increase (approx {predicted_total} events) next week. Review staffing schedules.",
+                "action": "Increase Patrol Frequency"
+            })
+            
+        # 2. Heatmap Strategy (Find peak day)
+        max_day = max(heatmap, key=lambda x: x["total_events"])
+        if max_day["total_events"] > 5:
+            strategies.append({
+                "type": "deployment",
+                "priority": "MEDIUM",
+                "title": f"High Risk Period: {max_day['day']}",
+                "message": f"{max_day['day']} has the highest accumulated violence density. Focus monitoring efforts on this day.",
+                "action": "Schedule Extra Shift"
+            })
+            
+        # 3. Anomaly Strategy
+        critical_anomalies = [a for a in anomalies if a["severity"] == "critical"]
+        for anomaly in critical_anomalies:
+            strategies.append({
+                "type": "maintenance",
+                "priority": "CRITICAL",
+                "title": f"Anomaly on {anomaly['camera_name']}",
+                "message": f"Camera is showing statistical deviation (Z-Score: {anomaly['z_score']}). May be a technical fault.",
+                "action": "Technician Inspection Required"
+            })
+            
+        # 4. Fallback if quiet
+        if not strategies:
+             strategies.append({
+                "type": "info",
+                "priority": "LOW",
+                "title": "System Stable",
+                "message": "No significant anomalies or risk spikes detected. Maintain standard procedure.",
+                "action": "Standard Monitoring"
+            })
+            
+        return strategies
 
 
 # Singleton Management  

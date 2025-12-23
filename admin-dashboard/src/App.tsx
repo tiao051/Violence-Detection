@@ -3,6 +3,7 @@ import Header from './components/Header'
 import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
+import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard'
 
 import MapDashboard from './components/MapDashboard'
 import { ThemeProvider, AlertProvider } from './contexts'
@@ -16,6 +17,8 @@ const App = () => {
     switch (activeTab) {
       case 'history':
         return <AlertHistory />;
+      case 'analytics':
+        return <AnalyticsDashboard />;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:

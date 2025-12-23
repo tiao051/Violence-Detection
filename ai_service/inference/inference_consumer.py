@@ -140,11 +140,17 @@ class InferenceConsumer:
         self.camera_context: Dict[str, List[np.ndarray]] = {} # Store last 29 frames for context
         self.context_size = 29 # Model needs 30 frames, so 29 context + 1 new
         
+        # Alert deduplication and cooldown (30s between events)
+        self.alert_cooldown_seconds = int(os.getenv("ALERT_COOLDOWN_SECONDS", "30"))
+        self.last_alert_time: Dict[str, float] = {}  # camera_id -> timestamp of last alert
+        self.active_event_start: Dict[str, float] = {}  # camera_id -> start time of active event
+        
         # Metrics
         self.frames_consumed = 0
         self.frames_processed = 0
         self.detections_made = 0
         self.alerts_sent = 0
+        self.alerts_skipped = 0  # New metric for skipped duplicate alerts
         self.start_time = time.time()
         
         # Queue for decoupling Kafka consumer and Inference worker
@@ -403,9 +409,14 @@ class InferenceConsumer:
                         await self._publish_result_to_kafka(cam_id, result_msg)
                         
                         if res.is_violence:
-                            await self._publish_detection(cam_id, frame_msg, detection, None)
-                            self.alerts_sent += 1
-                            self.detections_made += 1
+                            # Check cooldown before publishing (async)
+                            if await self._should_publish_alert(cam_id, res.timestamp):
+                                await self._publish_detection(cam_id, frame_msg, detection, None)
+                                self.alerts_sent += 1
+                                self.detections_made += 1
+                            else:
+                                self.alerts_skipped += 1
+                                logger.debug(f"[{cam_id}] Alert skipped (cooldown active, {self.alert_cooldown_seconds}s)")
 
         except Exception as e:
             logger.error(f"Spark batch processing error: {e}")
@@ -436,11 +447,69 @@ class InferenceConsumer:
                 await self._publish_result_to_kafka(camera_id, result_msg)
                 
                 if detection['violence']:
-                    await self._publish_detection(camera_id, frame_msg, detection, None)
-                    self.alerts_sent += 1
-                    self.detections_made += 1
+                    # Check cooldown before publishing (async)
+                    if await self._should_publish_alert(camera_id, frame_msg.timestamp):
+                        await self._publish_detection(camera_id, frame_msg, detection, None)
+                        self.alerts_sent += 1
+                        self.detections_made += 1
+                    else:
+                        self.alerts_skipped += 1
+                        logger.debug(f"[{camera_id}] Alert skipped (cooldown active, {self.alert_cooldown_seconds}s)")
         except Exception as e:
             logger.error(f"[{camera_id}] Local batch processing error: {e}")
+    
+    async def _should_publish_alert(self, camera_id: str, timestamp: float) -> bool:
+        """
+        Check if alert should be published based on active event status OR cooldown.
+        
+        Logic:
+        1. Check Redis: Is there an active event for this camera? (event:active:{camera_id})
+           YES -> Publish (Update) - bypass cooldown to ensure we keep the event alive.
+           NO  -> Proceed to Cooldown Check.
+           
+        2. Cooldown Check:
+           If time_since_last_alert < cooldown -> Skip (Prevent frequent new events).
+           Else -> Publish (Start new event).
+        """
+        current_time = timestamp
+        
+        # 1. Check if event is already active (Smart Deduplication)
+        try:
+             # Use Redis to sync with EventProcessor state
+             # If key exists, EventProcessor considers this event ACTIVE
+             is_active = await self.redis_client.exists(f"event:active:{camera_id}")
+             if is_active:
+                 self.last_alert_time[camera_id] = current_time
+                 # Don't log every time, too noisy
+                 return True
+        except Exception as e:
+            logger.warning(f"Failed to check active event in Redis: {e}")
+        
+        # 2. First alert for this camera -> always publish
+        if camera_id not in self.last_alert_time:
+            self.last_alert_time[camera_id] = current_time
+            logger.info(f"[{camera_id}] First alert - publishing (new event)")
+            return True
+        
+        last_alert = self.last_alert_time[camera_id]
+        time_since_last = current_time - last_alert
+        
+        # 3. Check cooldown period
+        if time_since_last < self.alert_cooldown_seconds:
+            # Within cooldown AND not active -> skip
+            logger.debug(
+                f"[{camera_id}] Alert within cooldown period "
+                f"({time_since_last:.1f}s < {self.alert_cooldown_seconds}s) - skipping"
+            )
+            return False
+        
+        # Cooldown expired -> this is a NEW event
+        logger.info(
+            f"[{camera_id}] Cooldown expired ({time_since_last:.1f}s >= {self.alert_cooldown_seconds}s) "
+            f"- publishing new event"
+        )
+        self.last_alert_time[camera_id] = current_time
+        return True
     
     async def _publish_detection(
         self,
@@ -492,6 +561,8 @@ class InferenceConsumer:
             'frames_processed': self.frames_processed,
             'detections_made': self.detections_made,
             'alerts_sent': self.alerts_sent,
+            'alerts_skipped': self.alerts_skipped,
+            'alert_cooldown_seconds': self.alert_cooldown_seconds,
             'fps': self.frames_consumed / elapsed if elapsed > 0 else 0,
             'elapsed_seconds': elapsed,
         }
