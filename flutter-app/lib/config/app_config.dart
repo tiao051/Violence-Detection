@@ -16,8 +16,7 @@ class AppConfig {
   static String get authVerifyFirebaseUrl =>
       '$backendUrl/api/v1/auth/verify-firebase';
   static String get authRefreshTokenUrl => '$backendUrl/api/v1/auth/refresh';
-  static String get registerFcmTokenUrl =>
-      '$backendUrl/api/v1/auth/register-fcm-token';
+  static String get registerFcmTokenUrl => '$backendUrl/api/v1/auth/fcm-token';
   static String get camerasListUrl => '$backendUrl/api/v1/auth/cameras';
   static String cameraStreamUrl(String cameraId) =>
       '$backendUrl/api/v1/auth/streams/$cameraId/url';

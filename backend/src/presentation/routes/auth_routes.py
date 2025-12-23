@@ -307,7 +307,8 @@ async def register_fcm_token(
             token_ref.set({
                 "token": request.token,
                 "device_type": request.device_type,
-                "updated_at": firestore.SERVER_TIMESTAMP
+                "updated_at": firestore.SERVER_TIMESTAMP,
+                "isActive": True
             })
             
             logger.info(f"Registered FCM token for user {user_id}")
