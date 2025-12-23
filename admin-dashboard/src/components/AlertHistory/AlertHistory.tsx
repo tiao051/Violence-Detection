@@ -130,6 +130,7 @@ const AlertHistory: React.FC = () => {
             <table className="alert-table">
               <thead>
                 <tr>
+                  <th>Severity</th>
                   <th>Status</th>
                   <th>Time</th>
                   <th>Camera</th>
@@ -142,8 +143,13 @@ const AlertHistory: React.FC = () => {
                   <tr 
                     key={alert.id} 
                     onClick={() => handleRowClick(alert)}
-                    className={selectedAlert?.id === alert.id ? 'selected' : ''}
+                    className={`${selectedAlert?.id === alert.id ? 'selected' : ''} severity-${alert.severity_level?.toLowerCase() || 'pending'}`}
                   >
+                    <td>
+                      <span className={`severity-badge severity-${alert.severity_level?.toLowerCase() || 'pending'}`}>
+                        {alert.severity_level || 'PENDING'}
+                      </span>
+                    </td>
                     <td>
                       <span className={`status-badge ${alert.is_reviewed ? 'reviewed' : 'new'}`}>
                         {alert.is_reviewed ? 'Reviewed' : 'New'}
@@ -228,6 +234,25 @@ const AlertHistory: React.FC = () => {
                   <label>Confidence:</label>
                   <span className="danger-text">{(selectedAlert.violence_score * 100).toFixed(1)}%</span>
                 </div>
+                <div className="info-row">
+                  <label>Severity:</label>
+                  <span className={`severity-badge severity-${selectedAlert.severity_level?.toLowerCase() || 'pending'}`}>
+                    {selectedAlert.severity_level || 'PENDING'}
+                    {selectedAlert.severity_score !== undefined && ` (${(selectedAlert.severity_score * 100).toFixed(0)}%)`}
+                  </span>
+                </div>
+                {selectedAlert.rule_matched && (
+                  <div className="info-row">
+                    <label>Rule:</label>
+                    <span className="mono-text">{selectedAlert.rule_matched}</span>
+                  </div>
+                )}
+                {selectedAlert.risk_profile && (
+                  <div className="info-row">
+                    <label>Risk Profile:</label>
+                    <span>{selectedAlert.risk_profile}</span>
+                  </div>
+                )}
                 <div className="info-row">
                   <label>Status:</label>
                   <span className={`event-status ${selectedAlert.status || 'completed'}`}>

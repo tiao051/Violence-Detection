@@ -348,3 +348,70 @@
   font-family: monospace;
   font-size: 11px;
 }
+
+/* Severity Badge Styles */
+.severity-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-block;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* PENDING = Yellow (Analysis in progress) */
+.severity-badge.severity-pending {
+  background: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  animation: pulse-pending 1.5s infinite;
+}
+
+@keyframes pulse-pending {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* HIGH = Red (Critical) */
+.severity-badge.severity-high {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+/* MEDIUM = Orange (Warning) */
+.severity-badge.severity-medium {
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.4);
+}
+
+/* LOW = Green (Safe) */
+.severity-badge.severity-low {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+/* Row highlighting based on severity */
+.alert-table tr.severity-high {
+  border-left: 3px solid #ef4444;
+}
+
+.alert-table tr.severity-high:hover {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.alert-table tr.severity-medium {
+  border-left: 3px solid #f97316;
+}
+
+.alert-table tr.severity-pending {
+  border-left: 3px solid #eab308;
+}
+
+.alert-table tr.severity-low {
+  border-left: 3px solid #22c55e;
+}

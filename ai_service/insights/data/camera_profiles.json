@@ -1,0 +1,23 @@
+[
+  {
+    "cluster_id": 0,
+    "name": "Moderate Risk",
+    "avg_hour": 17.6,
+    "avg_confidence": 0.71,
+    "description": "Moderate Risk around 17h"
+  },
+  {
+    "cluster_id": 1,
+    "name": "Critical Risk",
+    "avg_hour": 1.0,
+    "avg_confidence": 0.92,
+    "description": "Critical Risk around 1h"
+  },
+  {
+    "cluster_id": 2,
+    "name": "Moderate Risk",
+    "avg_hour": 10.2,
+    "avg_confidence": 0.66,
+    "description": "Moderate Risk around 10h"
+  }
+]

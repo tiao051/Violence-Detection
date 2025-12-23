@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.StringIndexerModel","timestamp":1766475789534,"sparkVersion":"3.5.0","uid":"StringIndexer_27173519c588","paramMap":{"inputCol":"camera_id","handleInvalid":"keep","outputCol":"cam_idx"},"defaultParamMap":{"stringOrderType":"frequencyDesc","handleInvalid":"error","outputCol":"StringIndexer_27173519c588__output"}}
