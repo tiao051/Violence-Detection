@@ -296,4 +296,34 @@ final ThemeData appThemeData = ThemeData(
       fontWeight: FontWeight.w600,
     ),
   ),
+
+  // Switch Theme - Use accent color instead of primary green
+  switchTheme: SwitchThemeData(
+    thumbColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.selected)) {
+        return kAccentColor;
+      }
+      return kTextMuted;
+    }),
+    trackColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.selected)) {
+        return kAccentColor.withOpacity(0.4);
+      }
+      return kSurfaceLight;
+    }),
+    trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+  ),
+
+  // Slider Theme - Use accent color
+  sliderTheme: SliderThemeData(
+    activeTrackColor: kAccentColor,
+    inactiveTrackColor: kSurfaceLight,
+    thumbColor: kAccentColor,
+    overlayColor: kAccentColor.withOpacity(0.2),
+    valueIndicatorColor: kAccentColor,
+    valueIndicatorTextStyle: const TextStyle(
+      color: kBackgroundColor,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
 );

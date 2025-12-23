@@ -132,7 +132,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-container {
@@ -227,8 +229,13 @@
 }
 
 @keyframes alertPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .nearest-school-info {
@@ -504,7 +511,8 @@
 }
 
 @keyframes pulse-red {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 3px 10px rgba(239, 68, 68, 0.4);
   }
   50% {
@@ -560,7 +568,8 @@
 }
 
 @keyframes suggestionPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 3px 12px rgba(168, 85, 247, 0.5);
   }
@@ -580,6 +589,82 @@
   color: #888;
   margin: 6px 0;
   font-size: 12px;
+}
+
+.suggestion-popup .score-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #a855f7, #9333ea);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.suggestion-popup .suggestion-reason {
+  color: #e0e0e0;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 8px 0;
+}
+
+.suggestion-popup .score-breakdown {
+  background: #252525;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+}
+
+.suggestion-popup .score-item {
+  display: grid;
+  grid-template-columns: 100px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 11px;
+}
+
+.suggestion-popup .score-item > span:first-child {
+  color: #888;
+}
+
+.suggestion-popup .score-item > span:last-child {
+  color: #e0e0e0;
+  text-align: right;
+  font-weight: 500;
+}
+
+.suggestion-popup .score-bar {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.suggestion-popup .score-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.suggestion-popup .score-bar.critical > div {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.suggestion-popup .score-bar.night > div {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.suggestion-popup .install-hint {
+  color: #666;
+  font-size: 11px;
+  font-style: italic;
+  text-align: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #333;
 }
 
 .custom-popup .leaflet-popup-content-wrapper {
