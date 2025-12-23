@@ -58,36 +58,44 @@ async def adjust_alert_confidence(request: ConfidenceAdjustmentRequest) -> Dict[
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from ...infrastructure.storage.event_persistence import get_event_persistence_service
+
+# ... (imports)
+
 @router.post("/mark-false-alarm/{alert_id}")
 async def mark_false_alarm(alert_id: str, report: FalseAlarmReport) -> Dict[str, Any]:
     """
     Mark an alert as a false alarm.
     
-    This endpoint is called when user clicks "Report False Alarm" button.
-    Updates the alert's verification status in the database.
-    
-    NOTE: Database update logic not implemented yet (placeholder).
-    In production, this would:
-    1. Update `detections` table: verification_status='false_positive', is_verified=True
-    2. Trigger retraining workflow if needed
+    This updates the alert's verification status in the database.
+    It is idempotent: calling it multiple times for the same alert is safe.
     """
     try:
-        # TODO: Implement database update
-        # db.update_alert(alert_id, verification_status='false_positive', is_verified=True)
+        event_service = get_event_persistence_service()
         
-        logger.info(f"Alert {alert_id} marked as false alarm by user")
-        logger.info(f"  Camera: {report.camera_id}")
-        logger.info(f"  Reason: {report.reason or 'No reason provided'}")
+        # Use the persistence service to atomic/safe update
+        result = await event_service.mark_false_alarm(
+            event_id=alert_id,
+            reason=report.reason
+        )
         
+        if not result["success"]:
+            # If error is "Event not found", return 404
+            if result.get("error") == "Event not found":
+                 raise HTTPException(status_code=404, detail="Alert not found")
+            raise HTTPException(status_code=500, detail=result.get("error"))
+            
         return {
             "success": True,
-            "message": "Alert marked as false alarm",
+            "message": result.get("message", "Alert marked as false alarm"),
             "alert_id": alert_id,
             "camera_id": report.camera_id,
             "verification_status": "false_positive",
-            "note": "Database update not implemented - this is a placeholder"
+            "already_reported": result.get("already_reported", False)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to mark false alarm: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -149,6 +157,26 @@ async def get_camera_intelligence() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Failed to get camera intelligence: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.get("/dashboard-stats")
+async def get_dashboard_stats() -> Dict[str, Any]:
+    """
+    Get aggregated dashboard statistics.
+    Includes Forecasts, Heatmaps, Strategies, and Anomalies.
+    """
+    try:
+        engine = get_credibility_engine()
+        stats = engine.get_dashboard_stats()
+        
+        return {
+            "success": True,
+            **stats
+        }
+    except Exception as e:
+        logger.error(f"Failed to get dashboard stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

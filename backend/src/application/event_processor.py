@@ -178,6 +178,12 @@ class EventProcessor:
                     'frames_temp_paths': []
                 }
                 
+                # Mark as active in Redis for InferenceConsumer deduplication
+                try:
+                    await self.redis_client.setex(f"event:active:{camera_id}", 60, event_id) # 60s auto-expire safety
+                except Exception as e:
+                    logger.error(f"Failed to set event:active Redis key: {e}")
+                
                 # Publish event_started (no severity - just violence detection)
                 await self._publish_event_notification('event_started', camera_id, {
                     'event_id': event_id,
@@ -211,10 +217,15 @@ class EventProcessor:
                     # Notify frontend about completed event
                     if result:
                         video_url = result.get('firebase_video_url')
+                        # Get raw_confidence from best_alert
+                        best_alert = event.get('best_alert', {})
+                        raw_conf = best_alert.get('raw_confidence', event['max_confidence'])
+                        
                         await self._publish_event_notification('event_completed', camera_id, {
                             'event_id': event['event_id'],
                             'timestamp': event['start_time'],
                             'confidence': event['max_confidence'],
+                            'raw_confidence': raw_conf,
                             'video_url': video_url,
                             'status': 'completed'
                         })
@@ -246,11 +257,23 @@ class EventProcessor:
                             'snapshot': alert.get('snapshot', ''),
                             'status': 'active'
                         })
+                        
+                        # Mark as active in Redis for InferenceConsumer deduplication
+                        try:
+                            await self.redis_client.setex(f"event:active:{camera_id}", 60, new_event_id)
+                        except Exception as e:
+                            logger.error(f"Failed to set event:active Redis key for new event: {e}")
                     return
                 
                 # Update timing
                 event['last_seen'] = detection_timestamp
                 event['last_processed_at'] = time.time()
+                
+                # Refresh Redis active key
+                try:
+                    await self.redis_client.expire(f"event:active:{camera_id}", 60)
+                except Exception:
+                    pass
                 
                 # Check if this alert has higher confidence
                 if confidence > event['max_confidence']:
@@ -330,10 +353,15 @@ class EventProcessor:
                             logger.info(f"[{camera_id}] Event finalized: {event['event_id']}")
                             
                             # Publish event_completed to frontend
+                            # Get raw_confidence from best_alert
+                            best_alert = event.get('best_alert', {})
+                            raw_conf = best_alert.get('raw_confidence', event['max_confidence'])
+                            
                             await self._publish_event_notification('event_completed', camera_id, {
                                 'event_id': event['event_id'],
                                 'timestamp': event['start_time'],
                                 'confidence': event['max_confidence'],
+                                'raw_confidence': raw_conf,
                                 'video_url': video_url,
                                 'status': 'completed'
                             })
@@ -365,6 +393,12 @@ class EventProcessor:
                                     shutil.rmtree(path)
                                 except:
                                     pass
+                                    
+                        # Remove active key from Redis
+                        try:
+                            await self.redis_client.delete(f"event:active:{camera_id}")
+                        except Exception:
+                            pass
                 
                 await asyncio.sleep(1.0)
                 

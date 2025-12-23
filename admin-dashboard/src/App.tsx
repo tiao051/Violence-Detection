@@ -3,6 +3,7 @@ import Header from './components/Header'
 import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
+import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard'
 
 import MapDashboard from './components/MapDashboard'
 import UserManagement from './components/UserManagement/UserManagement'
@@ -17,9 +18,8 @@ const App = () => {
     switch (activeTab) {
       case 'history':
         return <AlertHistory />;
-
-      case 'map':
-        return <MapDashboard />;
+      case 'analytics':
+        return <AnalyticsDashboard />;
       case 'users':
         return <UserManagement />;
       case 'settings':
@@ -41,8 +41,14 @@ const App = () => {
               <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
                 <VideoDashboard />
               </div>
-              {/* Other tabs render normally */}
-              {activeTab !== 'live' && renderOtherContent()}
+
+              {/* Keep-Alive: MapDashboard stays mounted, just hidden */}
+              <div style={{ display: activeTab === 'map' ? 'block' : 'none', height: '100%' }}>
+                <MapDashboard isVisible={activeTab === 'map'} />
+              </div>
+
+              {/* Other tabs render normally (unmount on switch) */}
+              {activeTab !== 'live' && activeTab !== 'map' && renderOtherContent()}
             </main>
           </div>
         </div>
