@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.ml.feature.VectorAssembler","timestamp":1766475795447,"sparkVersion":"3.5.0","uid":"VectorAssembler_595568016316","paramMap":{"outputCol":"features_raw","handleInvalid":"skip","inputCols":["hour","day_of_week","cam_idx","is_weekend","confidence","duration"]},"defaultParamMap":{"outputCol":"VectorAssembler_595568016316__output","handleInvalid":"error"}}
