@@ -2,7 +2,7 @@
 Analytics API Routes (Hotspots Only)
 
 Endpoints for visual analytics, mainly Hotspot Map.
-Removed legacy severity prediction and rule mining.
+Refactored for Clean Code & DRY principles.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -11,15 +11,18 @@ import os
 import sys
 import logging
 import threading
+import json
+from datetime import datetime
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Add ai_service to path for HotspotAnalyzer
-ai_service_paths = [
+AI_SERVICE_PATHS = [
     '/app/ai_service',
     os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service'),
 ]
-for path in ai_service_paths:
+
+for path in AI_SERVICE_PATHS:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
 
@@ -29,13 +32,7 @@ except ImportError as e:
     logger.warning(f"Failed to import HotspotAnalyzer: {e}")
     HotspotAnalyzer = None
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"])
-
-# Cache state for hotspots
-_hotspot_cache: Optional[Dict[str, Any]] = None
-_is_computing: bool = False
-
-# Camera Metadata (Coordinates)
+# Camera Metadata
 CAMERA_COORDINATES = {
     "cam1": {"lat": 10.7912, "lng": 106.6294, "name": "Luy Ban Bich Street"},
     "cam2": {"lat": 10.8024, "lng": 106.6401, "name": "Au Co Junction"},
@@ -44,7 +41,6 @@ CAMERA_COORDINATES = {
     "cam5": {"lat": 10.7856, "lng": 106.6523, "name": "Dam Sen Park"},
 }
 
-# English names map
 CAMERA_NAME_MAP = {
     "Luy Ban Bich Street": "Luy Ban Bich Street",
     "Au Co Junction": "Au Co Junction",
@@ -53,9 +49,100 @@ CAMERA_NAME_MAP = {
     "Dam Sen Park": "Dam Sen Park",
 }
 
+DATA_DIRS = [
+    '/app/ai_service/insights/data',
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
+]
+
+# Cache state
+_hotspot_cache: Optional[Dict[str, Any]] = None
+_is_computing: bool = False
+
+router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+def _get_data_dir() -> Optional[str]:
+    """Resolve the data directory path."""
+    for path in DATA_DIRS:
+        if os.path.exists(path):
+            return path
+    return None
+
+def _get_file_path(filename: str) -> Optional[str]:
+    """Resolve full path for a data file."""
+    data_dir = _get_data_dir()
+    if not data_dir:
+        return None
+    
+    file_path = os.path.join(data_dir, filename)
+    return file_path if os.path.exists(file_path) else None
+
+def _load_json_data(filename: str, default: Any = None) -> Any:
+    """Safely load JSON data."""
+    if default is None:
+        default = []
+    
+    file_path = _get_file_path(filename)
+    if not file_path:
+        return default
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading {filename}: {e}")
+        return default
+
+def _process_single_event(row: pd.Series) -> Optional[Dict[str, Any]]:
+    """Process a single event row into a structured dictionary."""
+    camera_id = str(row.get('cameraId', ''))
+    coords = CAMERA_COORDINATES.get(camera_id)
+    
+    if not coords:
+        return None
+
+    timestamp_str = str(row.get('timestamp', ''))
+    try:
+        confidence = float(row.get('thumbnailConfidence', 0))
+    except (ValueError, TypeError):
+        confidence = 0.0
+
+    label = str(row.get('label', ''))
+
+    # Parse time
+    hour = 12
+    try:
+        if timestamp_str:
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            hour = dt.hour
+    except ValueError:
+        pass
+
+    # Logic: Cluster Definition (Simplified)
+    # Cluster 1 (High Risk/Critical): 00:00-04:00 & High Conf
+    # Cluster 0 (Evening): 15:00-20:00
+    # Cluster 2 (Day/Normal): Others
+    if 0 <= hour < 4 and confidence > 0.8:
+        cluster = 1
+    elif 15 <= hour < 20:
+        cluster = 0
+    else:
+        cluster = 2
+
+    return {
+        'camera_id': camera_id,
+        'lat': coords['lat'],
+        'lng': coords['lng'],
+        'hour': hour,
+        'is_night': (hour >= 22 or hour < 6),
+        'confidence': confidence,
+        'is_violence': (label == 'violence'),
+        'cluster': cluster
+    }
+
 def _compute_hotspots() -> None:
     """Compute hotspot analysis in background."""
     global _hotspot_cache, _is_computing
+    
     try:
         if HotspotAnalyzer is None:
             logger.error("HotspotAnalyzer not available")
@@ -63,47 +150,34 @@ def _compute_hotspots() -> None:
 
         logger.info("Computing hotspots...")
         
-        # Find CSV data file
-        data_dir_options = [
-            '/app/ai_service/insights/data',
-            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'ai_service', 'insights', 'data'),
-        ]
-        
-        csv_path = None
-        for path in data_dir_options:
-            potential_path = os.path.join(path, 'analytics_events.csv')
-            if os.path.exists(potential_path):
-                csv_path = potential_path
-                break
-        
-        # If no CSV, try to use default data or empty
+        # Initialize and load data
         analyzer = HotspotAnalyzer()
+        csv_path = _get_file_path('analytics_events.csv')
         
         if csv_path:
             analyzer.load_from_csv(csv_path)
             analyzer.analyze()
             summary = analyzer.get_summary()
         else:
-            logger.warning("Hotspot CSV not found, using dummy data structure")
+            logger.warning("Hotspot CSV not found, using dummy data")
             summary = {"cameras": []}
         
-        # Enrich with coordinates
+        # Enrich camera data
         filtered_cameras = []
         for cam in summary.get("cameras", []):
             cam_id = cam.get("camera_id", "")
+            coords = CAMERA_COORDINATES.get(cam_id)
             
-            # Add coordinates if known
-            if cam_id in CAMERA_COORDINATES:
-                cam["lat"] = CAMERA_COORDINATES[cam_id]["lat"]
-                cam["lng"] = CAMERA_COORDINATES[cam_id]["lng"]
-                
-                # Add display name
+            if coords:
                 vn_name = cam.get("camera_name", "")
-                cam["camera_name_en"] = CAMERA_NAME_MAP.get(vn_name, vn_name)
-                
-                filtered_cameras.append(cam)
+                filtered_cameras.append({
+                    **cam,
+                    "lat": coords["lat"],
+                    "lng": coords["lng"],
+                    "camera_name_en": CAMERA_NAME_MAP.get(vn_name, vn_name)
+                })
         
-        # Update cache
+        # Result construction
         _hotspot_cache = {
             "success": True,
             "algorithm": "Weighted Hotspot Scoring",
@@ -124,42 +198,106 @@ def _compute_hotspots() -> None:
     finally:
         _is_computing = False
 
-def start_hotspot_computation() -> None:
-    """Start hotspot computation in background."""
+def _start_hotspot_computation() -> None:
+    """Trigger background computation."""
     global _is_computing
     if not _is_computing:
         _is_computing = True
-        thread = threading.Thread(target=_compute_hotspots, daemon=True)
-        thread.start()
+        threading.Thread(target=_compute_hotspots, daemon=True).start()
 
 @router.get("/hotspots")
 async def get_hotspot_analysis() -> Dict[str, Any]:
-    """
-    Get hotspot analysis for all cameras.
-    Used by Map Dashboard to show heatmaps.
-    """
+    """Get hotspot analysis for all cameras (Cached/Async)."""
     try:
-        # Trigger computation if cache empty
-        if _hotspot_cache is None and not _is_computing:
-            start_hotspot_computation()
+        # Lazy loading
+        if _hotspot_cache is None:
+            if not _is_computing:
+                _start_hotspot_computation()
             
-            # If blocking wait is acceptable for first load:
-            # _compute_hotspots() 
-            # return _hotspot_cache
-            
-            # Else return computing status
+            # Return accepted status while computing
             raise HTTPException(
                 status_code=202, 
                 detail="Hotspots computing. Please retry in a few seconds."
             )
-        
-        if _hotspot_cache is None:
-             raise HTTPException(status_code=202, detail="Hotspots computing...")
-             
+            
         return _hotspot_cache
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in get_hotspot_analysis: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/camera-placement")
+async def get_camera_placement_data() -> Dict[str, Any]:
+    """Get data for smart camera placement optimization."""
+    try:
+        # 1. Load Data
+        csv_path = _get_file_path('analytics_events.csv')
+        risk_clusters = _load_json_data('camera_profiles.json', default=[])
+        risk_rules = _load_json_data('risk_rules.json', default=[])
+        
+        # 2. Process Events
+        events = []
+        if csv_path:
+            # Use pandas for efficient reading, handle empty/malformed files
+            try:
+                df = pd.read_csv(csv_path)
+                if not df.empty:
+                    processed = df.apply(_process_single_event, axis=1)
+                    events = [e for e in processed if e is not None]
+            except Exception as e:
+                logger.error(f"Error reading/processing CSV: {e}")
+                events = []
+
+        # 3. Prepare Static Camera List
+        cameras = [
+            {
+                'camera_id': cid,
+                'lat': c['lat'],
+                'lng': c['lng'],
+                'name': c['name']
+            }
+            for cid, c in CAMERA_COORDINATES.items()
+        ]
+
+        # 4. Compute Aggregate Stats
+        # (Filtering lists once for readability)
+        violence_events = [e for e in events if e['is_violence']]
+        n_violence = len(violence_events)
+        
+        stats = {
+            'total_events': len(events),
+            'violence_events': n_violence,
+            'night_violence_ratio': (
+                len([e for e in violence_events if e['is_night']]) / n_violence 
+                if n_violence > 0 else 0
+            ),
+            'critical_cluster_ratio': (
+                len([e for e in violence_events if e['cluster'] == 1]) / n_violence 
+                if n_violence > 0 else 0
+            ),
+        }
+
+        return {
+            'success': True,
+            'events': events,
+            'violence_events_count': n_violence,
+            'cameras': cameras,
+            'risk_clusters': risk_clusters,
+            'risk_rules': risk_rules,
+            'statistics': stats,
+            'weights': {
+                'event_density': 0.30,
+                'gap_distance': 0.25,
+                'school_proximity': 0.20,
+                'critical_cluster': 0.15,
+                'night_activity': 0.10
+            },
+            'algorithm': 'Voronoi + Weighted Scoring'
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_camera_placement_data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
