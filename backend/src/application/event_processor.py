@@ -153,23 +153,34 @@ class EventProcessor:
                     video_start_time = event['start_time'] - self.pre_event_padding
                     video_end_time = event['last_seen'] + self.post_event_padding
                     
-                    await self.persistence_service.finalize_event(
+                    result = await self.persistence_service.finalize_event(
                         event['event_id'],
                         camera_id,
                         video_start_time,
                         video_end_time
                     )
                     
+                    # Notify frontend about completed event
+                    if result:
+                        video_url = result.get('firebase_video_url')
+                        await self._publish_event_notification('event_completed', camera_id, {
+                            'event_id': event['event_id'],
+                            'timestamp': event['start_time'],
+                            'confidence': event['max_confidence'],
+                            'video_url': video_url,
+                            'status': 'completed'
+                        })
+                    
                     # Remove from active list
                     del self.active_events[camera_id]
                     
                     # Create new event for continuing violence
-                    event_id = await self.persistence_service.create_event(camera_id, alert)
-                    if event_id:
-                        logger.info(f"[{camera_id}] New violence event started after max duration (conf={confidence:.2f}, event_id={event_id})")
+                    new_event_id = await self.persistence_service.create_event(camera_id, alert)
+                    if new_event_id:
+                        logger.info(f"[{camera_id}] New violence event started after max duration (conf={confidence:.2f}, event_id={new_event_id})")
                         
                         self.active_events[camera_id] = {
-                            'event_id': event_id,
+                            'event_id': new_event_id,
                             'start_time': detection_timestamp,
                             'last_seen': detection_timestamp,
                             'last_processed_at': time.time(),
@@ -177,6 +188,15 @@ class EventProcessor:
                             'best_alert': alert,
                             'frames_temp_paths': []
                         }
+                        
+                        # Notify frontend about new event
+                        await self._publish_event_notification('event_started', camera_id, {
+                            'event_id': new_event_id,
+                            'timestamp': detection_timestamp,
+                            'confidence': confidence,
+                            'snapshot': alert.get('snapshot', ''),
+                            'status': 'active'
+                        })
                     return
                 
                 # Update timing
