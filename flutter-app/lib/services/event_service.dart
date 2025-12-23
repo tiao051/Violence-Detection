@@ -27,10 +27,7 @@ class EventService {
           .get();
 
       final events = querySnapshot.docs.map((doc) {
-        // Remove imageBase64 from list to save memory
-        final data = Map<String, dynamic>.from(doc.data());
-        data.remove('imageBase64');
-        return EventModel.fromJson(data, doc.id);
+        return EventModel.fromJson(doc.data(), doc.id);
       }).toList();
 
       print("EventService: Loaded ${events.length} events");

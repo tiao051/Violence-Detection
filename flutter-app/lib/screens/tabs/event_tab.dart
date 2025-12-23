@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:go_router/go_router.dart';
@@ -43,6 +44,60 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
     }
   }
 
+  /// Builds thumbnail widget with fallback chain: thumbnailUrl -> imageBase64 -> icon
+  Widget _buildThumbnail(event) {
+    // Priority 1: Network URL
+    if (event.thumbnailUrl.isNotEmpty) {
+      return Image.network(
+        event.thumbnailUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: kSurfaceColor,
+            child: const Center(
+              child: SpinKitFadingCircle(color: kAccentColor, size: 24.0),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => _buildBase64OrIcon(event),
+      );
+    }
+    // Priority 2 & 3: Base64 or Icon
+    return _buildBase64OrIcon(event);
+  }
+
+  /// Builds image from base64 or fallback icon
+  Widget _buildBase64OrIcon(event) {
+    if (event.imageBase64.isNotEmpty) {
+      try {
+        // Remove data URI prefix if present
+        String base64String = event.imageBase64;
+        if (base64String.contains(',')) {
+          base64String = base64String.split(',').last;
+        }
+        return Image.memory(
+          base64Decode(base64String),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
+        );
+      } catch (e) {
+        return _buildPlaceholderIcon();
+      }
+    }
+    return _buildPlaceholderIcon();
+  }
+
+  /// Builds placeholder camera icon
+  Widget _buildPlaceholderIcon() {
+    return Container(
+      color: kSurfaceColor,
+      child: Center(
+        child: Icon(Icons.videocam_outlined, color: kTextMuted, size: 32),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<EventProvider>(
@@ -51,10 +106,7 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
 
         if (eventProvider.isLoading) {
           return const Center(
-            child: SpinKitFadingCircle(
-              color: kAccentColor,
-              size: 50.0,
-            ),
+            child: SpinKitFadingCircle(color: kAccentColor, size: 50.0),
           );
         }
 
@@ -146,17 +198,17 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                         itemCount: filteredEvents.length,
                         itemBuilder: (context, index) {
                           final event = filteredEvents[index];
-                          final formattedTime = DateFormat('HH:mm - dd/MM/yyyy')
-                              .format(event.timestamp);
+                          final formattedTime = DateFormat(
+                            'HH:mm - dd/MM/yyyy',
+                          ).format(event.timestamp);
 
                           return Card(
                             margin: const EdgeInsets.all(8.0),
                             // === SỬA LỖI 1: Thêm màu nền (tint) ===
                             color: !event.viewed
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withOpacity(0.05)
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withOpacity(0.05)
                                 : null,
                             child: ListTile(
                               leading: SizedBox(
@@ -164,48 +216,7 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                 height: 75.0,
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8.0),
-                                  child: event.thumbnailUrl.isNotEmpty
-                                      ? Image.network(
-                                          event.thumbnailUrl,
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child,
-                                              loadingProgress) {
-                                            if (loadingProgress == null)
-                                              return child;
-                                            return Container(
-                                              color: kSurfaceColor,
-                                              child: const Center(
-                                                child: SpinKitFadingCircle(
-                                                  color: kAccentColor,
-                                                  size: 24.0,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                            return Container(
-                                              color: kSurfaceColor,
-                                              child: Center(
-                                                child: Icon(
-                                                  Icons.videocam_outlined,
-                                                  color: kTextMuted,
-                                                  size: 32,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        )
-                                      : Container(
-                                          color: kSurfaceColor,
-                                          child: Center(
-                                            child: Icon(
-                                              Icons.videocam_outlined,
-                                              color: kTextMuted,
-                                              size: 32,
-                                            ),
-                                          ),
-                                        ),
+                                  child: _buildThumbnail(event),
                                 ),
                               ),
                               // === SỬA LỖI 2: In đậm tiêu đề ===
@@ -224,7 +235,9 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: kWarningColor.withOpacity(0.15),
                                         borderRadius: BorderRadius.circular(4),
@@ -247,8 +260,9 @@ class _EventTabState extends State<EventTab> with WidgetsBindingObserver {
                                 children: [
                                   if (!event.viewed)
                                     Padding(
-                                      padding:
-                                          const EdgeInsets.only(right: 8.0),
+                                      padding: const EdgeInsets.only(
+                                        right: 8.0,
+                                      ),
                                       child: Icon(
                                         Icons.circle,
                                         size: 10,
