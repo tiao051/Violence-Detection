@@ -1,4 +1,4 @@
-/* User Management Container - matches AlertHistory pattern */
+﻿/* User Management Container - matches AlertHistory pattern */
 .user-management-container {
   height: 100vh;
   display: flex;
@@ -364,7 +364,7 @@
 
 .camera-item.assigned-other {
   opacity: 0.5;
-  cursor: not-allowed;
+  
 }
 
 .camera-item input[type="checkbox"] {
@@ -438,5 +438,6 @@
 
 .btn-save:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  
 }
+

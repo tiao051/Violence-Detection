@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import './UserManagement.css';
 
 interface User {
@@ -161,7 +161,7 @@ const UserManagement: React.FC = () => {
     return (
       <div className="user-management-container">
         <div className="error-state">
-          <span className="error-icon">⚠️</span>
+          <span className="error-icon">âš ï¸</span>
           <p>{error}</p>
           <button onClick={fetchData} className="retry-btn">Retry</button>
         </div>
@@ -178,7 +178,7 @@ const UserManagement: React.FC = () => {
           <span className="user-count">{users.length} users</span>
         </div>
         <button onClick={fetchData} className="refresh-btn">
-          🔄 Refresh
+          ðŸ”„ Refresh
         </button>
       </div>
 
@@ -186,7 +186,7 @@ const UserManagement: React.FC = () => {
       <div className="table-container">
         {users.length === 0 ? (
           <div className="empty-state">
-            <span className="empty-icon">👥</span>
+            <span className="empty-icon">ðŸ‘¥</span>
             <p>No users found</p>
           </div>
         ) : (
@@ -204,7 +204,7 @@ const UserManagement: React.FC = () => {
               {users.map(user => (
                 <tr key={user.uid}>
                   <td className="email-cell">{user.email}</td>
-                  <td className="name-cell">{user.displayName || '—'}</td>
+                  <td className="name-cell">{user.displayName || 'â€”'}</td>
                   <td>
                     <span className={`cameras-badge ${user.camerasCount > 0 ? 'has-cameras' : ''}`}>
                       {user.camerasCount} camera{user.camerasCount !== 1 ? 's' : ''}
@@ -220,13 +220,13 @@ const UserManagement: React.FC = () => {
                       className="action-btn assign"
                       onClick={() => openAssignModal(user)}
                     >
-                      📷 Assign Cameras
+                      ðŸ“· Assign Cameras
                     </button>
                     <button 
                       className={`action-btn toggle-status ${user.disabled ? 'enable' : 'disable'}`}
                       onClick={() => toggleUserStatus(user)}
                     >
-                      {user.disabled ? '✓ Enable' : '✕ Disable'}
+                      {user.disabled ? 'âœ“ Enable' : 'âœ• Disable'}
                     </button>
                   </td>
                 </tr>
@@ -242,7 +242,7 @@ const UserManagement: React.FC = () => {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Assign Cameras</h3>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <button className="close-btn" onClick={() => setShowModal(false)}>Ã—</button>
             </div>
             
             <div className="modal-user-info">
@@ -264,7 +264,7 @@ const UserManagement: React.FC = () => {
                       type="checkbox"
                       checked={isAssigned}
                       onChange={() => toggleCamera(camera.id)}
-                      disabled={isOtherUser as boolean}
+                      
                     />
                     <div className="camera-info">
                       <span className="camera-name">{camera.name}</span>
@@ -298,3 +298,4 @@ const UserManagement: React.FC = () => {
 };
 
 export default UserManagement;
+
