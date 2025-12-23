@@ -738,7 +738,7 @@ async def get_camera_placement_data() -> Dict[str, Any]:
             for _, row in df.iterrows():
                 camera_id = row.get('cameraId', '')
                 timestamp_str = row.get('timestamp', '')
-                confidence = row.get('thumbnailConfidence', 0)
+                confidence = row.get('confidence', 0)
                 label = row.get('label', '')
                 
                 # Get camera coordinates
