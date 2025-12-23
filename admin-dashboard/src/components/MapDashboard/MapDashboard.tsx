@@ -94,11 +94,11 @@ interface MapStats {
 }
 
 const CAMERA_COORDINATES: Record<string, { lat: number; lng: number }> = {
-  cam1: { lat: 10.806367, lng: 106.627457 },
-  cam2: { lat: 10.801751, lng: 106.636715 },
-  cam3: { lat: 10.803524, lng: 106.632650 },
-  cam4: { lat: 10.803633, lng: 106.634296 },
-  cam5: { lat: 10.805748, lng: 106.633514 },
+  cam1: { lat: 10.766761, lng: 106.641934 },  // Ngã tư Hòa Bình
+  cam2: { lat: 10.804096, lng: 106.637517 },  // Ngã tư Cộng Hòa
+  cam3: { lat: 10.801625, lng: 106.636815 },  // Ngã ba Âu Cơ
+  cam4: { lat: 10.803639, lng: 106.632466 },  // Ngã ba Lê Trọng Tấn
+  cam5: { lat: 10.794952, lng: 106.629491 },  // Ngã tư Tân Sơn Nhì
 };
 
 const MAP_CENTER: [number, number] = [10.7950, 106.6400];
