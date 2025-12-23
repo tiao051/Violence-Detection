@@ -97,50 +97,92 @@ const UserManagement: React.FC = () => {
       const toAssign = selectedCameras.filter(id => !currentUserCameras.includes(id));
       const toUnassign = currentUserCameras.filter(id => !selectedCameras.includes(id));
       
-      // Process assignments
+      // Optimistic update - update local state immediately
+      const updatedCameras = cameras.map(cam => {
+        if (toAssign.includes(cam.id)) {
+          return { ...cam, owner_uid: selectedUser.uid, owner_email: selectedUser.email };
+        }
+        if (toUnassign.includes(cam.id)) {
+          return { ...cam, owner_uid: null, owner_email: null };
+        }
+        return cam;
+      });
+      setCameras(updatedCameras);
+      
+      // Update users camera count
+      const updatedUsers = users.map(u => {
+        if (u.uid === selectedUser.uid) {
+          return { ...u, camerasCount: selectedCameras.length };
+        }
+        // Decrease count for users who lost cameras
+        const lostCameras = toAssign.filter(camId => {
+          const cam = cameras.find(c => c.id === camId);
+          return cam?.owner_uid === u.uid;
+        });
+        if (lostCameras.length > 0) {
+          return { ...u, camerasCount: Math.max(0, u.camerasCount - lostCameras.length) };
+        }
+        return u;
+      });
+      setUsers(updatedUsers);
+      
+      // Close modal immediately
+      setShowModal(false);
+      setSelectedUser(null);
+      setSaving(false);
+      
+      // Process API calls in background
+      const promises = [];
       for (const camId of toAssign) {
-        await fetch(`${API_BASE}/cameras/${camId}/assign`, {
+        promises.push(fetch(`${API_BASE}/cameras/${camId}/assign`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_uid: selectedUser.uid })
-        });
+        }));
       }
-      
-      // Process unassignments
       for (const camId of toUnassign) {
-        await fetch(`${API_BASE}/cameras/${camId}/assign`, {
+        promises.push(fetch(`${API_BASE}/cameras/${camId}/assign`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_uid: null })
-        });
+        }));
       }
       
-      // Refresh data
-      await fetchData();
-      setShowModal(false);
-      setSelectedUser(null);
+      await Promise.all(promises);
+      
     } catch (err) {
       console.error('Error saving assignments:', err);
-      alert('Failed to save assignments');
-    } finally {
-      setSaving(false);
+      // Revert on error
+      await fetchData();
     }
   };
 
   const toggleUserStatus = async (user: User) => {
+    // Optimistic update
+    const newDisabled = !user.disabled;
+    setUsers(prev => prev.map(u => 
+      u.uid === user.uid ? { ...u, disabled: newDisabled } : u
+    ));
+    
     try {
       const res = await fetch(`${API_BASE}/users/${user.uid}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ disabled: !user.disabled })
+        body: JSON.stringify({ disabled: newDisabled })
       });
       
-      if (res.ok) {
-        await fetchData();
-      } else {
+      if (!res.ok) {
+        // Revert on error
+        setUsers(prev => prev.map(u => 
+          u.uid === user.uid ? { ...u, disabled: !newDisabled } : u
+        ));
         alert('Failed to update user status');
       }
     } catch (err) {
+      // Revert on error
+      setUsers(prev => prev.map(u => 
+        u.uid === user.uid ? { ...u, disabled: !newDisabled } : u
+      ));
       console.error('Error updating user status:', err);
       alert('Failed to update user status');
     }
