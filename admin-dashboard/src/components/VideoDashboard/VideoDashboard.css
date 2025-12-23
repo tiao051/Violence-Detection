@@ -115,38 +115,42 @@
   fill: currentColor;
 }
 
-/* Alert State - Blinking Red Border */
-@keyframes blink-border {
-  0% { border-color: rgba(255, 0, 0, 1); box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
-  50% { border-color: rgba(255, 0, 0, 0.3); box-shadow: 0 0 0 rgba(255, 0, 0, 0); }
-  100% { border-color: rgba(255, 0, 0, 1); box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
+/* ============================================
+   ALERT STYLING - Red border for violence detection
+   ============================================ */
+
+/* Alert State - Red Blinking Border */
+@keyframes blink-border-red {
+  0% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
+  50% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); }
+  100% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
 }
 
 .camera-video-container.alert-active {
-  animation: blink-border 1s infinite;
+  animation: blink-border-red 1s infinite;
   border-width: 4px;
-  z-index: 10; /* Bring to front */
+  z-index: 10;
 }
 
-/* Alert Overlay */
+/* Alert Overlay - Red background for all alerts */
 .alert-overlay {
   position: absolute;
   top: 16px;
   right: 16px;
-  background: rgba(220, 38, 38, 0.9); /* Red-600 */
   color: white;
   padding: 8px 12px;
   border-radius: 4px;
   display: flex;
-  flex-direction: column; /* Stack icon/text and image */
+  flex-direction: column;
   align-items: center;
   gap: 8px;
   font-weight: bold;
   font-size: 14px;
   z-index: 20;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   animation: pulse 1s infinite;
-  max-width: 200px; /* Limit width */
+  max-width: 200px;
+  background: rgba(239, 68, 68, 0.95);  /* Always red */
 }
 
 .alert-snapshot {

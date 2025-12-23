@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type SeverityLevel = 'PENDING' | 'HIGH' | 'MEDIUM' | 'LOW';
+// Simplified: No severity analysis, just violence detection
+export type SeverityLevel = 'DETECTED';  // Only one level now
 
 export interface Alert {
   id: string;              // Firestore event_id (source of truth)
@@ -11,10 +12,6 @@ export interface Alert {
   is_reviewed?: boolean;
   video_url?: string;
   status: 'active' | 'completed';  // Track event status
-  severity_level: SeverityLevel;   // NEW: Severity from SecurityEngine
-  severity_score?: number;         // NEW: 0.0-1.0 severity confidence
-  rule_matched?: string;           // NEW: Which rule triggered the severity
-  risk_profile?: string;           // NEW: Camera risk profile name
 }
 
 interface AlertContextType {
@@ -27,13 +24,6 @@ interface AlertContextType {
     snapshot?: string;
     video_url?: string;
     status: 'active' | 'completed';
-    severity_level?: SeverityLevel;
-  }) => void;
-  updateSeverity: (event_id: string, severity: {
-    severity_level: SeverityLevel;
-    severity_score?: number;
-    rule_matched?: string;
-    risk_profile?: string;
   }) => void;
   clearAlerts: () => void;
   markAsReviewed: (id: string) => void;
@@ -64,7 +54,6 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     snapshot?: string;
     video_url?: string;
     status: 'active' | 'completed';
-    severity_level?: SeverityLevel;
   }) => {
     if (!eventData.event_id) {
       console.error('Event must have event_id:', eventData);
@@ -84,13 +73,11 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           image_base64: eventData.snapshot || updatedAlerts[existingIndex].image_base64,
           video_url: eventData.video_url || updatedAlerts[existingIndex].video_url,
           status: eventData.status,
-          // Only update severity if provided (don't overwrite existing)
-          severity_level: eventData.severity_level || updatedAlerts[existingIndex].severity_level,
         };
         return updatedAlerts;
       }
 
-      // CREATE new event (event_started) - default severity: PENDING (yellow)
+      // CREATE new event (event_started)
       const newAlert: Alert = {
         id: eventData.event_id,
         timestamp: eventData.timestamp,
@@ -100,34 +87,9 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         video_url: eventData.video_url,
         is_reviewed: false,
         status: eventData.status,
-        severity_level: eventData.severity_level || 'PENDING',  // Default to PENDING
       };
       return [newAlert, ...prev].slice(0, 100); // Keep last 100
     });
-  };
-
-  /**
-   * Update severity for an existing alert.
-   * Called when SecurityEngine background worker completes analysis.
-   */
-  const updateSeverity = (event_id: string, severity: {
-    severity_level: SeverityLevel;
-    severity_score?: number;
-    rule_matched?: string;
-    risk_profile?: string;
-  }) => {
-    setAlerts(prev => prev.map(alert => {
-      if (alert.id === event_id) {
-        return {
-          ...alert,
-          severity_level: severity.severity_level,
-          severity_score: severity.severity_score,
-          rule_matched: severity.rule_matched,
-          risk_profile: severity.risk_profile,
-        };
-      }
-      return alert;
-    }));
   };
 
   const clearAlerts = () => setAlerts([]);
@@ -139,7 +101,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const unreadCount = alerts.filter(a => !a.is_reviewed).length;
 
   return (
-    <AlertContext.Provider value={{ alerts, addOrUpdateEvent, updateSeverity, clearAlerts, markAsReviewed, unreadCount }}>
+    <AlertContext.Provider value={{ alerts, addOrUpdateEvent, clearAlerts, markAsReviewed, unreadCount }}>
       {children}
     </AlertContext.Provider>
   );

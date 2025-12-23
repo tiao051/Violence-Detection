@@ -13,7 +13,7 @@ const VideoDashboard: React.FC = () => {
   );
 
   // Global Alert History Context (Firestore-first)
-  const { addOrUpdateEvent, updateSeverity } = useAlerts();
+  const { addOrUpdateEvent } = useAlerts();
 
   // State for active alerts per camera (camera_id -> timestamp)
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
@@ -26,7 +26,7 @@ const VideoDashboard: React.FC = () => {
   // Track processed message count to avoid reprocessing
   const processedCountRef = React.useRef(0);
 
-  // Process incoming messages (Firestore-first design)
+  // Process incoming messages (Firestore-first design, no severity)
   React.useEffect(() => {
     if (messages.length <= processedCountRef.current) return;
     
@@ -35,21 +35,9 @@ const VideoDashboard: React.FC = () => {
     processedCountRef.current = messages.length;
 
     newMessages.forEach((msg: WebSocketMessage) => {
-      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status, severity_level, severity_score, rule_matched, risk_profile } = msg;
+      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status } = msg;
 
-      // Handle severity_updated from SecurityEngine background worker
-      if (type === 'severity_updated' && event_id) {
-        updateSeverity(event_id, {
-          severity_level: severity_level || 'MEDIUM',
-          severity_score,
-          rule_matched,
-          risk_profile
-        });
-        console.log(`[Severity] Event ${event_id}: ${severity_level} (score=${severity_score})`);
-        return;
-      }
-
-      // Handle Firestore-first event messages
+      // Handle Firestore-first event messages (no severity)
       if ((type === 'event_started' || type === 'event_updated' || type === 'event_completed') && event_id) {
         // Update global alert history (synced with Firestore)
         addOrUpdateEvent({
@@ -59,12 +47,13 @@ const VideoDashboard: React.FC = () => {
           confidence: confidence || 0,
           snapshot,
           video_url,
-          status: status || 'active',
-          severity_level: severity_level || 'PENDING'  // Default PENDING for new events
+          status: status || 'active'
         });
 
         // Visual feedback for active alerts
         if (type === 'event_started' || type === 'event_updated') {
+          console.log(`[Alert] ${type} for ${camera_id}: conf=${confidence}`);
+          
           setActiveAlerts(prev => ({
             ...prev,
             [camera_id]: Date.now()
@@ -121,7 +110,7 @@ const VideoDashboard: React.FC = () => {
         }, 5000);
       }
     });
-  }, [messages, addOrUpdateEvent, updateSeverity]);
+  }, [messages, addOrUpdateEvent]);
 
   const handleCameraClick = (cameraId: string) => {
     if (expandedCamera === cameraId) {
