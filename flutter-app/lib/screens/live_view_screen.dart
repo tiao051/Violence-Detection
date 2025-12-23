@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart'; // Import mới
 import 'package:media_kit_video/media_kit_video.dart'; // Import mới
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/auth_provider.dart';
+import 'package:security_app/providers/camera_provider.dart';
 import 'package:security_app/services/camera_service.dart';
 import 'package:security_app/theme/app_theme.dart';
 
@@ -45,11 +46,19 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
         throw Exception('Authentication failed: Access token is missing.');
       }
 
-      // 2. Lấy URL RTSP từ Backend
-      final streamUrl = await _cameraService.getStreamUrl(
-        widget.cameraId,
-        accessToken: accessToken,
-      );
+      // 2. Lấy URL Stream từ CameraProvider (đã load từ trước)
+      // Thay vì gọi API mới (bị lỗi 404), ta reuse URL xịn từ list cameras
+      final camera = context.read<CameraProvider>().cameras.firstWhere(
+            (cam) => cam.id == widget.cameraId,
+            orElse: () => throw Exception('Camera not found in local cache'),
+          );
+
+      final streamUrl = camera.streamUrl;
+
+      if (streamUrl.isEmpty) {
+        // Fallback nếu cache rỗng (ít khi xảy ra)
+        throw Exception('Stream URL is empty');
+      }
 
       debugPrint('[LiveViewScreen] RTSP Stream URL: $streamUrl');
 

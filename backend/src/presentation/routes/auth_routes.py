@@ -336,13 +336,18 @@ async def get_user_cameras(current_user: Dict[str, Any] = Depends(get_current_us
         owner_cameras = _get_user_owned_cameras(user_id)
         
         cameras = []
+        # Use Host machine IP for mobile app access (Docker localhost is not accessible)
+        # TODO: Move to config
+        HOST_IP = os.getenv("HOST_IP", "192.168.1.88")
+        
         for cam_id in owner_cameras:
             cam_info = CAMERA_LOCATIONS.get(cam_id, {"name": cam_id, "location": "Unknown"})
             cameras.append(CameraModel(
                 id=cam_id,
                 name=cam_info["name"],
                 location=cam_info["location"],
-                stream_url=f"/api/v1/streams/{cam_id}/url"
+                # Direct HLS stream from MediaMTX
+                stream_url=f"http://{HOST_IP}:8888/{cam_id}/index.m3u8"
             ))
         
         return cameras

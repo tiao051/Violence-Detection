@@ -29,7 +29,8 @@ class AuthService {
       print('AuthService: Google account selected: ${googleUser.email}');
 
       // Step 2: Get Google authentication tokens
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       // Step 3: Create Firebase credential from Google tokens
       final AuthCredential credential = GoogleAuthProvider.credential(
@@ -49,7 +50,8 @@ class AuthService {
 
       print('AuthService: Firebase Sign-In success: ${user.email}');
       print('AuthService: User UID: ${user.uid}');
-      print('AuthService: New user: ${userCredential.additionalUserInfo?.isNewUser}');
+      print(
+          'AuthService: New user: ${userCredential.additionalUserInfo?.isNewUser}');
 
       // Step 5: Get Firebase ID token (JWT)
       // This token contains user claims and can be verified by backend
@@ -59,11 +61,16 @@ class AuthService {
         throw Exception('Failed to get Firebase ID token');
       }
 
-      print('AuthService: Firebase ID Token retrieved (length: ${idToken.length})');
+      print(
+          'AuthService: Firebase ID Token retrieved (length: ${idToken.length})');
 
       return idToken;
     } on FirebaseAuthException catch (e) {
-      print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      print(
+          'AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      if (e.code == 'user-disabled') {
+        throw Exception('This account has been disabled by an administrator.');
+      }
       throw Exception('Firebase Sign-In failed: ${e.message}');
     } catch (e) {
       print('AuthService: Unknown Error: $e');
@@ -137,7 +144,10 @@ class AuthService {
         createdAt: DateTime.now(),
       );
 
-      await _firestore.collection('users').doc(user.uid).set(authModel.toJson());
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set(authModel.toJson());
       print('AuthService: User data saved to Firestore');
 
       // Step 4: Get Firebase ID token
@@ -151,7 +161,8 @@ class AuthService {
 
       return user.uid;
     } on FirebaseAuthException catch (e) {
-      print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      print(
+          'AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
       if (e.code == 'email-already-in-use') {
         throw Exception('Email already registered');
       } else if (e.code == 'weak-password') {
@@ -203,11 +214,16 @@ class AuthService {
       print('AuthService: Firebase ID token retrieved');
       return idToken;
     } on FirebaseAuthException catch (e) {
-      print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      print(
+          'AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
       if (e.code == 'user-not-found') {
         throw Exception('Email not registered');
       } else if (e.code == 'wrong-password') {
         throw Exception('Incorrect password');
+      } else if (e.code == 'user-disabled') {
+        throw Exception('This account has been disabled by an administrator.');
+      } else if (e.code == 'invalid-credential') {
+        throw Exception('Invalid credentials.');
       }
       throw Exception('Login failed: ${e.message}');
     } catch (e) {
@@ -252,13 +268,14 @@ class AuthService {
         print('AuthService: Re-authentication successful');
       } on FirebaseAuthException catch (e) {
         print('AuthService: Re-authentication failed - Code: ${e.code}');
-        
+
         // CRITICAL: Verify user is still logged in after re-auth failure
         // Firebase does NOT sign out user when re-auth fails
         // But let's verify to be absolutely sure
         final stillLoggedIn = _firebaseAuth.currentUser != null;
-        print('AuthService: User still logged in after re-auth failure: $stillLoggedIn');
-        
+        print(
+            'AuthService: User still logged in after re-auth failure: $stillLoggedIn');
+
         // User remains logged in, just can't change password
         if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
           throw Exception('Current password is incorrect');
@@ -337,7 +354,8 @@ class AuthService {
         return null;
       }
 
-      final authModel = AuthModel.fromJson(userDoc.data() as Map<String, dynamic>);
+      final authModel =
+          AuthModel.fromJson(userDoc.data() as Map<String, dynamic>);
       print('AuthService: User profile fetched successfully');
       return authModel;
     } catch (e) {
@@ -354,7 +372,8 @@ class AuthService {
     try {
       print('AuthService: Checking if email exists: $email');
 
-      final signInMethods = await _firebaseAuth.fetchSignInMethodsForEmail(email);
+      final signInMethods =
+          await _firebaseAuth.fetchSignInMethodsForEmail(email);
       final exists = signInMethods.isNotEmpty;
 
       print('AuthService: Email exists: $exists');
@@ -396,7 +415,8 @@ class AuthService {
       await _firebaseAuth.sendPasswordResetEmail(email: email);
       print('AuthService: Password reset email sent successfully');
     } on FirebaseAuthException catch (e) {
-      print('AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
+      print(
+          'AuthService: Firebase Auth Error - Code: ${e.code}, Message: ${e.message}');
       if (e.code == 'user-not-found') {
         throw Exception('Email not found');
       }
@@ -420,27 +440,32 @@ class AuthService {
   ///
   /// Throws Exception if backend verification fails
   /// Exchanges Firebase ID token for backend JWT tokens
-  Future<Map<String, String>> verifyFirebaseToken(String firebaseIdToken) async {
+  Future<Map<String, String>> verifyFirebaseToken(
+      String firebaseIdToken) async {
     try {
       print('AuthService: Exchanging Firebase token for JWT...');
-      
+
       // FIX: Use AppConfig instead of hardcoded localhost
       // This ensures we use the IP address loaded from .env
       final uri = Uri.parse(AppConfig.authVerifyFirebaseUrl);
 
-      print('AuthService: Connecting to verification endpoint: $uri'); // Debug log
+      print(
+          'AuthService: Connecting to verification endpoint: $uri'); // Debug log
 
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'firebase_token': firebaseIdToken}),
-      ).timeout(const Duration(seconds: 30)); // Increased timeout for network operations
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'firebase_token': firebaseIdToken}),
+          )
+          .timeout(const Duration(
+              seconds: 30)); // Increased timeout for network operations
 
       print('AuthService: Backend response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['access_token'] == null || data['refresh_token'] == null) {
           throw Exception('Invalid response: missing tokens');
         }
@@ -457,8 +482,7 @@ class AuthService {
         throw Exception('Backend error: $errorMsg');
       }
     } catch (e) {
-        throw Exception('Failed to verify Firebase token: $e');
+      throw Exception('Failed to verify Firebase token: $e');
     }
   }
-
 }

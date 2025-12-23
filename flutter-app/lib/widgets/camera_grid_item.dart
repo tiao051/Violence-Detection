@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:provider/provider.dart';
 import 'package:security_app/models/camera_model.dart';
-import 'package:security_app/providers/auth_provider.dart';
 import 'package:security_app/services/camera_service.dart';
 
 class CameraGridItem extends StatefulWidget {
@@ -23,7 +21,7 @@ class CameraGridItem extends StatefulWidget {
 class _CameraGridItemState extends State<CameraGridItem> {
   late final Player _player;
   late final VideoController _controller;
-  final CameraService _cameraService = CameraService();
+  // CameraService removed as it is unused
 
   bool _isLoading = true;
   bool _hasError = false;
@@ -42,18 +40,12 @@ class _CameraGridItemState extends State<CameraGridItem> {
     if (!mounted) return;
 
     try {
-      final authProvider = context.read<AuthProvider>();
-      final accessToken = authProvider.accessToken;
+      // Use streamUrl directly from the model (already populated by backend with HLS URL)
+      final streamUrl = widget.camera.streamUrl;
 
-      if (accessToken == null) {
-        throw Exception('No access token');
+      if (streamUrl.isEmpty) {
+        throw Exception('Stream URL is empty');
       }
-
-      // Get RTSP URL
-      final streamUrl = await _cameraService.getStreamUrl(
-        widget.camera.id,
-        accessToken: accessToken,
-      );
 
       if (!mounted) return;
 
