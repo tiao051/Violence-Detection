@@ -161,7 +161,7 @@ const UserManagement: React.FC = () => {
     return (
       <div className="user-management-container">
         <div className="error-state">
-          <span className="error-icon">âš ï¸</span>
+          <span className="error-icon">!</span>
           <p>{error}</p>
           <button onClick={fetchData} className="retry-btn">Retry</button>
         </div>
@@ -178,7 +178,7 @@ const UserManagement: React.FC = () => {
           <span className="user-count">{users.length} users</span>
         </div>
         <button onClick={fetchData} className="refresh-btn">
-          ðŸ”„ Refresh
+          Refresh
         </button>
       </div>
 
@@ -186,7 +186,7 @@ const UserManagement: React.FC = () => {
       <div className="table-container">
         {users.length === 0 ? (
           <div className="empty-state">
-            <span className="empty-icon">ðŸ‘¥</span>
+            <span className="empty-icon">No Users</span>
             <p>No users found</p>
           </div>
         ) : (
@@ -204,7 +204,7 @@ const UserManagement: React.FC = () => {
               {users.map(user => (
                 <tr key={user.uid}>
                   <td className="email-cell">{user.email}</td>
-                  <td className="name-cell">{user.displayName || 'â€”'}</td>
+                  <td className="name-cell">{user.displayName || '-'}</td>
                   <td>
                     <span className={`cameras-badge ${user.camerasCount > 0 ? 'has-cameras' : ''}`}>
                       {user.camerasCount} camera{user.camerasCount !== 1 ? 's' : ''}
@@ -220,13 +220,13 @@ const UserManagement: React.FC = () => {
                       className="action-btn assign"
                       onClick={() => openAssignModal(user)}
                     >
-                      ðŸ“· Assign Cameras
+                      Assign Cameras
                     </button>
                     <button 
                       className={`action-btn toggle-status ${user.disabled ? 'enable' : 'disable'}`}
                       onClick={() => toggleUserStatus(user)}
                     >
-                      {user.disabled ? 'âœ“ Enable' : 'âœ• Disable'}
+                      {user.disabled ? 'Enable' : 'Disable'}
                     </button>
                   </td>
                 </tr>
@@ -242,7 +242,7 @@ const UserManagement: React.FC = () => {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Assign Cameras</h3>
-              <button className="close-btn" onClick={() => setShowModal(false)}>Ã—</button>
+              <button className="close-btn" onClick={() => setShowModal(false)}>x</button>
             </div>
             
             <div className="modal-user-info">
@@ -258,19 +258,18 @@ const UserManagement: React.FC = () => {
                 return (
                   <label 
                     key={camera.id} 
-                    className={`camera-item ${isAssigned ? 'selected' : ''} ${isOtherUser ? 'assigned-other' : ''}`}
+                    className={`camera-item ${isAssigned ? 'selected' : ''} ${isOtherUser && !isAssigned ? 'assigned-other' : ''}`}
                   >
                     <input
                       type="checkbox"
                       checked={isAssigned}
                       onChange={() => toggleCamera(camera.id)}
-                      
                     />
                     <div className="camera-info">
                       <span className="camera-name">{camera.name}</span>
                       <span className="camera-location">{camera.location}</span>
-                      {isOtherUser && (
-                        <span className="camera-owner">Assigned to: {camera.owner_email}</span>
+                      {isOtherUser && !isAssigned && (
+                        <span className="camera-owner">Currently: {camera.owner_email || 'Unknown user'}</span>
                       )}
                     </div>
                   </label>
@@ -298,4 +297,3 @@ const UserManagement: React.FC = () => {
 };
 
 export default UserManagement;
-
