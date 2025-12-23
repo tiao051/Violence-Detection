@@ -139,9 +139,12 @@ def _process_single_event(row: pd.Series) -> Optional[Dict[str, Any]]:
         'cluster': cluster
     }
 
+# Global Analyzer Instance
+_analyzer_instance = None
+
 def _compute_hotspots() -> None:
     """Compute hotspot analysis in background."""
-    global _hotspot_cache, _is_computing
+    global _hotspot_cache, _is_computing, _analyzer_instance
     
     try:
         if HotspotAnalyzer is None:
@@ -150,14 +153,17 @@ def _compute_hotspots() -> None:
 
         logger.info("Computing hotspots...")
         
-        # Initialize and load data
-        analyzer = HotspotAnalyzer()
+        # Initialize or reuse analyzer (Persist cache)
+        if _analyzer_instance is None:
+            _analyzer_instance = HotspotAnalyzer()
+            
         csv_path = _get_file_path('analytics_events.csv')
         
         if csv_path:
-            analyzer.load_from_csv(csv_path)
-            analyzer.analyze()
-            summary = analyzer.get_summary()
+            # load_from_csv has internal caching (checks mtime)
+            _analyzer_instance.load_from_csv(csv_path)
+            _analyzer_instance.analyze()
+            summary = _analyzer_instance.get_summary()
         else:
             logger.warning("Hotspot CSV not found, using dummy data")
             summary = {"cameras": []}
@@ -174,7 +180,7 @@ def _compute_hotspots() -> None:
                     **cam,
                     "lat": coords["lat"],
                     "lng": coords["lng"],
-                    "camera_name_en": CAMERA_NAME_MAP.get(vn_name, vn_name)
+                    "camera_name_en": coords["name"]
                 })
         
         # Result construction
@@ -256,6 +262,7 @@ async def get_camera_placement_data() -> Dict[str, Any]:
     try:
         import json
         from datetime import datetime
+        import numpy as np
         
         # Find data directory
         data_dir_options = [
@@ -279,68 +286,71 @@ async def get_camera_placement_data() -> Dict[str, Any]:
         if os.path.exists(csv_path):
             df = pd.read_csv(csv_path)
             
-            for _, row in df.iterrows():
-                camera_id = row.get('cameraId', '')
-                timestamp_str = row.get('timestamp', '')
-                confidence = row.get('confidence', 0)
-                label = row.get('label', '')
+            if not df.empty:
+                # 1. Clean and Prepare Data (Vectorized)
+                df['cameraId'] = df['cameraId'].astype(str)
+                df['label'] = df['label'].astype(str)
+                df['confidence'] = pd.to_numeric(df.get('confidence', 0), errors='coerce').fillna(0)
                 
-                # Get camera coordinates
-                coords = CAMERA_COORDINATES.get(camera_id, {})
-                if not coords:
-                    continue
+                # 2. Map Coordinates (Vectorized)
+                # Create coordinate mapping series
+                lat_map = {k: v['lat'] for k, v in CAMERA_COORDINATES.items()}
+                lng_map = {k: v['lng'] for k, v in CAMERA_COORDINATES.items()}
                 
-                # Parse timestamp to get hour
-                hour = 12  # default
-                try:
-                    if isinstance(timestamp_str, str) and timestamp_str:
-                        # Try parsing ISO format
-                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                        hour = dt.hour
-                except:
-                    pass
+                df['lat'] = df['cameraId'].map(lat_map)
+                df['lng'] = df['cameraId'].map(lng_map)
                 
-                # Determine if night (22:00 - 06:00)
-                is_night = hour >= 22 or hour < 6
-                
-                # Determine cluster based on hour and confidence (simplified)
-                # Based on camera_profiles.json:
-                # Cluster 1 (Critical): ~1h, high confidence
-                # Cluster 0 (Moderate): ~17h
-                # Cluster 2 (Moderate): ~10h
-                if hour >= 0 and hour < 4 and confidence > 0.8:
-                    cluster = 1  # Critical
-                elif hour >= 15 and hour < 20:
-                    cluster = 0  # Moderate (evening)
-                else:
-                    cluster = 2  # Moderate (day)
-                
-                events.append({
-                    'camera_id': camera_id,
-                    'lat': coords['lat'],
-                    'lng': coords['lng'],
-                    'hour': hour,
-                    'is_night': is_night,
-                    'confidence': float(confidence) if confidence else 0,
-                    'is_violence': label == 'violence',
-                    'cluster': cluster
-                })
+                # Filter out unknown cameras (where lat/lng is NaN)
+                df = df.dropna(subset=['lat', 'lng'])
+
+                if not df.empty:
+                    # 3. Time Processing (Vectorized)
+                    # Convert timestamp to datetime (handle ISO format)
+                    df['dt'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+                    # Fill missing times with current hour (fallback) or 12
+                    df['hour'] = df['dt'].dt.hour.fillna(12).astype(int)
+                    
+                    # 4. Logic Calculation (Vectorized)
+                    # Night: 22:00 - 06:00
+                    df['is_night'] = (df['hour'] >= 22) | (df['hour'] < 6)
+                    
+                    # Cluster Logic
+                    # C1 (Critical): 00-04h & Conf > 0.8
+                    # C0 (Moderate Evening): 15-20h
+                    # C2 (Moderate Day): Else
+                    conditions = [
+                        (df['hour'] >= 0) & (df['hour'] < 4) & (df['confidence'] > 0.8),
+                        (df['hour'] >= 15) & (df['hour'] < 20)
+                    ]
+                    choices = [1, 0]
+                    df['cluster'] = np.select(conditions, choices, default=2)
+                    
+                    # 5. Convert to List of Dicts
+                    # Explicitly selecting columns to ensure order and presence
+                    result_df = df[[
+                        'cameraId', 'lat', 'lng', 'hour', 'is_night', 
+                        'confidence', 'label', 'cluster'
+                    ]].rename(columns={'cameraId': 'camera_id', 'label': 'event_type'})
+                    
+                    # 'is_violence' flag
+                    result_df['is_violence'] = result_df['event_type'] == 'violence'
+                    
+                    events = result_df.to_dict('records')
         
-        # Load risk clusters (camera_profiles.json)
+        # Load risk metadata
         risk_clusters = []
         clusters_path = os.path.join(data_dir, 'camera_profiles.json')
         if os.path.exists(clusters_path):
             with open(clusters_path, 'r') as f:
                 risk_clusters = json.load(f)
         
-        # Load risk rules (risk_rules.json)
         risk_rules = []
         rules_path = os.path.join(data_dir, 'risk_rules.json')
         if os.path.exists(rules_path):
             with open(rules_path, 'r') as f:
                 risk_rules = json.load(f)
         
-        # Prepare camera data
+        # Prepare static camera list
         cameras = [
             {
                 'camera_id': cam_id,
@@ -351,23 +361,25 @@ async def get_camera_placement_data() -> Dict[str, Any]:
             for cam_id, coords in CAMERA_COORDINATES.items()
         ]
         
-        # Compute statistics
-        violence_events = [e for e in events if e['is_violence']]
-        night_events = [e for e in violence_events if e['is_night']]
-        critical_events = [e for e in violence_events if e['cluster'] == 1]
+        # Compute statistics (from the processed list)
+        violence_events = [e for e in events if e.get('is_violence')]
+        n_violence = len(violence_events)
+        
+        night_events_count = sum(1 for e in violence_events if e.get('is_night'))
+        critical_events_count = sum(1 for e in violence_events if e.get('cluster') == 1)
         
         return {
             'success': True,
             'events': events,
-            'violence_events_count': len(violence_events),
+            'violence_events_count': n_violence,
             'cameras': cameras,
             'risk_clusters': risk_clusters,
             'risk_rules': risk_rules,
             'statistics': {
                 'total_events': len(events),
-                'violence_events': len(violence_events),
-                'night_violence_ratio': len(night_events) / len(violence_events) if violence_events else 0,
-                'critical_cluster_ratio': len(critical_events) / len(violence_events) if violence_events else 0,
+                'violence_events': n_violence,
+                'night_violence_ratio': night_events_count / n_violence if n_violence > 0 else 0,
+                'critical_cluster_ratio': critical_events_count / n_violence if n_violence > 0 else 0,
             },
             'weights': {
                 'event_density': 0.30,
@@ -376,7 +388,7 @@ async def get_camera_placement_data() -> Dict[str, Any]:
                 'critical_cluster': 0.15,
                 'night_activity': 0.10
             },
-            'algorithm': 'Voronoi + Weighted Scoring'
+            'algorithm': 'Voronoi + Weighted Scoring (Vectorized)'
         }
         
     except HTTPException:

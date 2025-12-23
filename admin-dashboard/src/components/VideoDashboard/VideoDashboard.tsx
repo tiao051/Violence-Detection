@@ -15,8 +15,8 @@ const VideoDashboard: React.FC = () => {
   // Global Alert History Context (Firestore-first)
   const { addOrUpdateEvent } = useAlerts();
 
-  // State for active alerts per camera (camera_id -> timestamp)
-  const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
+  // State for active alerts per camera (camera_id -> { timestamp, eventId })
+  const [activeAlerts, setActiveAlerts] = React.useState<Record<string, { timestamp: number; eventId?: string }>>({});
   // State for alert snapshots (camera_id -> base64 string)
   const [alertSnapshots, setAlertSnapshots] = React.useState<Record<string, string>>({});
 
@@ -53,11 +53,10 @@ const VideoDashboard: React.FC = () => {
 
         // Visual feedback for active alerts
         if (type === 'event_started' || type === 'event_updated') {
-          console.log(`[Alert] ${type} for ${camera_id}: conf=${confidence}`);
 
           setActiveAlerts(prev => ({
             ...prev,
-            [camera_id]: Date.now()
+            [camera_id]: { timestamp: Date.now(), eventId: event_id }
           }));
 
           if (snapshot) {
@@ -71,7 +70,7 @@ const VideoDashboard: React.FC = () => {
           setTimeout(() => {
             setActiveAlerts(prev => {
               const newState = { ...prev };
-              if (Date.now() - newState[camera_id] > 4500) {
+              if (newState[camera_id] && Date.now() - newState[camera_id].timestamp > 4500) {
                 delete newState[camera_id];
               }
               return newState;
@@ -90,7 +89,11 @@ const VideoDashboard: React.FC = () => {
         // Visual feedback only (no add to history - wait for event_started)
         setActiveAlerts(prev => ({
           ...prev,
-          [camera_id]: Date.now()
+          // Preserve eventId if we already have one for this camera
+          [camera_id]: {
+            timestamp: Date.now(),
+            eventId: prev[camera_id]?.eventId
+          }
         }));
 
         if (snapshot) {
@@ -103,7 +106,7 @@ const VideoDashboard: React.FC = () => {
         setTimeout(() => {
           setActiveAlerts(prev => {
             const newState = { ...prev };
-            if (Date.now() - newState[camera_id] > 4500) {
+            if (newState[camera_id] && Date.now() - newState[camera_id].timestamp > 4500) {
               delete newState[camera_id];
             }
             return newState;
@@ -129,6 +132,7 @@ const VideoDashboard: React.FC = () => {
           cameraId={cam}
           isAlerting={!!activeAlerts[cam]}
           alertSnapshot={alertSnapshots[cam]}
+          alertId={activeAlerts[cam]?.eventId}
           isExpanded={expandedCamera === cam}
           onClick={() => handleCameraClick(cam)}
         />

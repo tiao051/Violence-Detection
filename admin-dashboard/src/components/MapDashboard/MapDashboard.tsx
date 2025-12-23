@@ -93,6 +93,10 @@ interface MapStats {
   algorithm: string;
 }
 
+interface MapDashboardProps {
+  isVisible?: boolean;
+}
+
 const CAMERA_COORDINATES: Record<string, { lat: number; lng: number }> = {
   cam1: { lat: 10.766761, lng: 106.641934 },  // Ngã tư Hòa Bình
   cam2: { lat: 10.804096, lng: 106.637517 },  // Ngã tư Cộng Hòa
@@ -100,6 +104,10 @@ const CAMERA_COORDINATES: Record<string, { lat: number; lng: number }> = {
   cam4: { lat: 10.803639, lng: 106.632466 },  // Ngã ba Lê Trọng Tấn
   cam5: { lat: 10.794952, lng: 106.629491 },  // Ngã tư Tân Sơn Nhì
 };
+
+// ... (rest of imports and helper functions)
+
+
 
 const MAP_CENTER: [number, number] = [10.7950, 106.6400];
 const DEFAULT_ZOOM = 14;
@@ -190,7 +198,7 @@ const fetchNearbySchools = async (lat: number, lng: number, radiusMeters: number
     }
 
     const data = await response.json();
-    
+
     return data.elements.map((el: any) => ({
       id: el.id.toString(),
       name: el.tags?.name || el.tags?.["name:vi"] || "Unknown School",
@@ -245,7 +253,7 @@ const analyzeOptimalPlacements = (
 
   const suggestions: SuggestedLocation[] = [];
   const violenceEvents = placementData.events.filter(e => e.is_violence);
-  
+
   if (violenceEvents.length === 0) {
     return analyzeGapsSimple(cameras);
   }
@@ -259,7 +267,7 @@ const analyzeOptimalPlacements = (
       const cam1 = cameras[i];
       const cam2 = cameras[j];
       const distance = calculateDistance(cam1.lat, cam1.lng, cam2.lat, cam2.lng);
-      
+
       if (distance > GAP_ANALYSIS_THRESHOLD * 0.5) { // Lower threshold for more candidates
         const midLat = (cam1.lat + cam2.lat) / 2;
         const midLng = (cam1.lng + cam2.lng) / 2;
@@ -275,7 +283,7 @@ const analyzeOptimalPlacements = (
   // Method 2: Event cluster centroids using simple grid-based clustering
   const gridSize = 0.003; // ~300m grid cells
   const eventClusters: Map<string, { events: typeof violenceEvents; lat: number; lng: number }> = new Map();
-  
+
   violenceEvents.forEach(event => {
     const gridKey = `${Math.floor(event.lat / gridSize)}_${Math.floor(event.lng / gridSize)}`;
     if (!eventClusters.has(gridKey)) {
@@ -290,18 +298,18 @@ const analyzeOptimalPlacements = (
   eventClusters.forEach((cluster, _key) => {
     const centroidLat = cluster.lat / cluster.events.length;
     const centroidLng = cluster.lng / cluster.events.length;
-    
+
     // Check if not too close to existing camera
-    const nearestCamDist = Math.min(...cameras.map(c => 
+    const nearestCamDist = Math.min(...cameras.map(c =>
       calculateDistance(centroidLat, centroidLng, c.lat, c.lng)
     ));
-    
+
     if (nearestCamDist > 0.15) { // At least 150m from nearest camera
       const nearestCams = cameras
         .map(c => ({ name: c.cameraNameEn, dist: calculateDistance(centroidLat, centroidLng, c.lat, c.lng) }))
         .sort((a, b) => a.dist - b.dist)
         .slice(0, 2);
-      
+
       candidatePoints.push({
         lat: centroidLat,
         lng: centroidLng,
@@ -312,19 +320,19 @@ const analyzeOptimalPlacements = (
 
   // Calculate score for each candidate point
   const maxEvents = Math.max(...Array.from(eventClusters.values()).map(c => c.events.length), 1);
-  const maxDistance = Math.max(...candidatePoints.map(p => 
+  const maxDistance = Math.max(...candidatePoints.map(p =>
     Math.min(...cameras.map(c => calculateDistance(p.lat, p.lng, c.lat, c.lng)))
   ), 0.001);
 
   candidatePoints.forEach(point => {
     // 1. Event Density (30%)
-    const nearbyEvents = violenceEvents.filter(e => 
+    const nearbyEvents = violenceEvents.filter(e =>
       calculateDistance(point.lat, point.lng, e.lat, e.lng) < 0.3 // 300m radius
     );
     const eventDensityScore = nearbyEvents.length / maxEvents;
 
     // 2. Gap Distance (25%)
-    const distToNearestCam = Math.min(...cameras.map(c => 
+    const distToNearestCam = Math.min(...cameras.map(c =>
       calculateDistance(point.lat, point.lng, c.lat, c.lng)
     ));
     const gapDistanceScore = Math.min(distToNearestCam / maxDistance, 1);
@@ -332,7 +340,7 @@ const analyzeOptimalPlacements = (
     // 3. School Proximity (20%)
     let schoolProximityScore = 0;
     if (schools.length > 0) {
-      const nearestSchoolDist = Math.min(...schools.map(s => 
+      const nearestSchoolDist = Math.min(...schools.map(s =>
         calculateDistance(point.lat, point.lng, s.lat, s.lng)
       ));
       schoolProximityScore = nearestSchoolDist < 0.3 ? 1 : 0; // Near school = bonus
@@ -340,18 +348,18 @@ const analyzeOptimalPlacements = (
 
     // 4. Critical Cluster (15%) - based on cluster 1 from camera_profiles.json
     const criticalEvents = nearbyEvents.filter(e => e.cluster === 1);
-    const criticalClusterScore = nearbyEvents.length > 0 
-      ? criticalEvents.length / nearbyEvents.length 
+    const criticalClusterScore = nearbyEvents.length > 0
+      ? criticalEvents.length / nearbyEvents.length
       : 0;
 
     // 5. Night Activity (10%) - based on risk_rules.json (Night → HIGH)
     const nightEvents = nearbyEvents.filter(e => e.is_night);
-    const nightActivityScore = nearbyEvents.length > 0 
-      ? nightEvents.length / nearbyEvents.length 
+    const nightActivityScore = nearbyEvents.length > 0
+      ? nightEvents.length / nearbyEvents.length
       : 0;
 
     // Calculate total weighted score
-    const totalScore = 
+    const totalScore =
       WEIGHTS.eventDensity * eventDensityScore +
       WEIGHTS.gapDistance * gapDistanceScore +
       WEIGHTS.schoolProximity * schoolProximityScore +
@@ -532,7 +540,7 @@ const getStatusLabel = (classification: string): string => {
   }
 };
 
-const MapDashboard: React.FC = () => {
+const MapDashboard: React.FC<MapDashboardProps> = ({ isVisible = true }) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -554,6 +562,14 @@ const MapDashboard: React.FC = () => {
   const [nearestSchool, setNearestSchool] = useState<School | null>(null);
   const [suggestions, setSuggestions] = useState<SuggestedLocation[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isVisible && mapRef.current) {
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 100);
+    }
+  }, [isVisible]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -900,7 +916,7 @@ const MapDashboard: React.FC = () => {
       setLoadingSchools(true);
       const centerSchools = await fetchNearbySchools(MAP_CENTER[0], MAP_CENTER[1], 2000);
       setSchools(centerSchools);
-      
+
       if (centerSchools.length > 0 && mapRef.current) {
         const virtualCamera: CameraLocation = {
           cameraId: 'center',
@@ -1066,13 +1082,13 @@ const MapDashboard: React.FC = () => {
 
             <div className="sidebar-controls">
               <button
-                className={`control-btn ${showCoverage ? "active" : ""}`}
+                className={`map-control-btn ${showCoverage ? "active" : ""}`}
                 onClick={toggleCoverage}
               >
                 {showCoverage ? "Hide Coverage" : "Show Coverage"}
               </button>
               <button
-                className={`control-btn ${showSchools ? "active" : ""}`}
+                className={`map-control-btn ${showSchools ? "active" : ""}`}
                 onClick={toggleSchools}
                 disabled={loadingSchools}
               >
@@ -1082,13 +1098,13 @@ const MapDashboard: React.FC = () => {
 
             <div className="sidebar-controls">
               <button
-                className={`control-btn suggestion ${showSuggestions ? "active" : ""}`}
+                className={`map-control-btn suggestion ${showSuggestions ? "active" : ""}`}
                 onClick={toggleSuggestions}
                 disabled={suggestions.length === 0}
               >
                 {showSuggestions ? "Hide Suggestions" : "Show Suggestions"}
               </button>
-              <button className="control-btn" onClick={resetView}>
+              <button className="map-control-btn" onClick={resetView}>
                 Reset View
               </button>
             </div>
@@ -1105,28 +1121,28 @@ const MapDashboard: React.FC = () => {
               </div>
             )}
 
-            <div className="camera-list">
+            <div className="map-camera-list">
               <h3>All Cameras</h3>
               {cameras.map((camera) => (
                 <div
                   key={camera.cameraId}
-                  className={`camera-item ${camera.classification} ${selectedCamera === camera.cameraId ? "selected" : ""}`}
+                  className={`map-camera-item ${camera.classification} ${selectedCamera === camera.cameraId ? "selected" : ""}`}
                   onClick={() => panToCamera(camera.cameraId)}
                 >
-                  <div className="camera-indicator">
+                  <div className="map-camera-indicator">
                     <span
                       className={`status-dot ${camera.classification}`}
                       title={getStatusLabel(camera.classification)}
                     />
                   </div>
-                  <div className="camera-info">
-                    <span className="camera-name">{camera.cameraNameEn}</span>
-                    <span className="camera-desc">
+                  <div className="map-camera-info">
+                    <span className="map-camera-name">{camera.cameraNameEn}</span>
+                    <span className="map-camera-desc">
                       Score: {(camera.hotspotScore * 100).toFixed(0)}% |
                       Violence: {(camera.violenceRatio * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <div className={`camera-classification ${camera.classification}`}>
+                  <div className={`map-camera-classification ${camera.classification}`}>
                     {getStatusLabel(camera.classification)}
                   </div>
                 </div>

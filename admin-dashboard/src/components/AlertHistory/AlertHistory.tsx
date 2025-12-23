@@ -3,11 +3,20 @@ import { useAlerts, Alert } from "../../contexts";
 import Swal from 'sweetalert2';
 import "./AlertHistory.css";
 
+const CAMERA_NAMES: Record<string, string> = {
+  "cam1": "Le Trong Tan Intersection",
+  "cam2": "Cong Hoa Intersection",
+  "cam3": "Au Co Junction",
+  "cam4": "Hoa Binh Intersection",
+  "cam5": "Tan Son Nhi Intersection"
+};
+
 const AlertHistory: React.FC = () => {
   const { alerts, clearAlerts, markAsReviewed } = useAlerts();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [cameraCredibility, setCameraCredibility] = useState<Record<string, any>>({});
   const [isReporting, setIsReporting] = useState(false);
+  const [reportedAlerts, setReportedAlerts] = useState<Set<string>>(new Set());
 
   // Fetch camera credibility on mount
   useEffect(() => {
@@ -103,21 +112,39 @@ const AlertHistory: React.FC = () => {
       });
 
       if (response.ok) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Report Sent',
-          text: 'Alert reported as False Alarm. Thank you for your feedback!',
-          timer: 2500,
-          showConfirmButton: false,
-          background: '#1e293b',
-          color: '#fff'
-        });
-        setSelectedAlert(null); // Close panel
+        const data = await response.json();
+
+        // Mark as reported in local state
+        setReportedAlerts(prev => new Set(prev).add(selectedAlert.id));
+
+        // Check if it was already reported
+        if (data.already_reported) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Already Reported',
+            text: data.message || 'Alert was already marked as false alarm',
+            background: '#1e293b',
+            color: '#fff'
+          });
+        } else {
+          // First time reporting
+          Swal.fire({
+            icon: 'success',
+            title: 'Report Sent',
+            text: 'Alert reported as False Alarm. Thank you for your feedback!',
+            timer: 2500,
+            showConfirmButton: false,
+            background: '#1e293b',
+            color: '#fff'
+          });
+        }
       } else {
+        // HTTP error response
+        const errorData = await response.json().catch(() => ({}));
         Swal.fire({
           icon: 'error',
           title: 'Failed',
-          text: 'Failed to report false alarm.',
+          text: errorData.message || 'Failed to report false alarm.',
           background: '#1e293b',
           color: '#fff'
         });
@@ -269,7 +296,9 @@ const AlertHistory: React.FC = () => {
                     </td>
                     <td className="time-cell">{formatDate(alert.timestamp)}</td>
                     <td className="camera-cell">
-                      {alert.camera_id}
+                      <div className="camera-info">
+                        <span className="camera-name">{CAMERA_NAMES[alert.camera_id] || alert.camera_id}</span>
+                      </div>
                       {getCredibilityBadge(alert.camera_id) && (
                         <span style={{ marginLeft: '6px', fontSize: '10px' }}>{getCredibilityBadge(alert.camera_id)}</span>
                       )}
@@ -392,7 +421,7 @@ const AlertHistory: React.FC = () => {
                 <div className="info-row">
                   <label>Camera:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{selectedAlert.camera_id}</span>
+                    <span>{CAMERA_NAMES[selectedAlert.camera_id] || selectedAlert.camera_id}</span>
                     {getCredibilityBadge(selectedAlert.camera_id)}
                   </div>
                 </div>
@@ -421,21 +450,32 @@ const AlertHistory: React.FC = () => {
                   <button
                     className="report-false-btn"
                     onClick={handleReportFalseAlarm}
-                    disabled={isReporting}
+                    disabled={isReporting || reportedAlerts.has(selectedAlert.id)}
                     style={{
                       width: '100%',
                       padding: '8px',
-                      background: 'rgba(239, 68, 68, 0.1)',
-                      color: 'var(--error-color)',
-                      border: '1px solid var(--error-color)',
+                      background: reportedAlerts.has(selectedAlert.id)
+                        ? 'rgba(34, 197, 94, 0.1)'
+                        : 'rgba(239, 68, 68, 0.1)',
+                      color: reportedAlerts.has(selectedAlert.id)
+                        ? '#22c55e'
+                        : 'var(--error-color)',
+                      border: reportedAlerts.has(selectedAlert.id)
+                        ? '1px solid #22c55e'
+                        : '1px solid var(--error-color)',
                       borderRadius: '6px',
-                      cursor: 'pointer',
+                      cursor: reportedAlerts.has(selectedAlert.id) ? 'not-allowed' : 'pointer',
                       fontSize: '13px',
                       fontWeight: 500,
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      opacity: reportedAlerts.has(selectedAlert.id) ? 0.7 : 1
                     }}
                   >
-                    {isReporting ? "Reporting..." : "🚫 Report False Alarm"}
+                    {isReporting
+                      ? "⏳ Processing..."
+                      : reportedAlerts.has(selectedAlert.id)
+                        ? "Reported"
+                        : "🚫 Report False Alarm"}
                   </button>
                 </div>
               </div>

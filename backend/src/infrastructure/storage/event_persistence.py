@@ -111,6 +111,70 @@ class EventPersistenceService:
             logger.error(f"Failed to update event {event_id}: {e}")
             return False
 
+    async def mark_false_alarm(self, event_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Mark an event as a false alarm in Firestore.
+        Idempotent: Checks if already marked to prevent redundant updates.
+        """
+        import time
+        start_time = time.time()
+        
+        if not self.db:
+            return {"success": False, "error": "Database not initialized"}
+
+        try:
+            logger.info(f"[PERF] Starting mark_false_alarm for event {event_id}")
+            
+            event_ref = self.db.collection('events').document(event_id)
+            
+            read_start = time.time()
+            doc = event_ref.get()
+            read_time = time.time() - read_start
+            logger.info(f"[PERF] Firestore read took {read_time:.3f}s")
+
+            if not doc.exists:
+                return {"success": False, "error": "Event not found"}
+
+            data = doc.to_dict()
+            
+            # Idempotency check
+            if data.get('verification_status') == 'false_positive':
+                total_time = time.time() - start_time
+                logger.info(f"[PERF] Event {event_id} already marked (total: {total_time:.3f}s)")
+                return {
+                    "success": True, 
+                    "already_reported": True,
+                    "message": "Alert was already marked as false alarm"
+                }
+
+            # Update fields
+            update_data = {
+                "is_verified": True,
+                "verification_status": "false_positive",
+                "verification_reason": reason,
+                "verified_at": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP
+            }
+            
+            write_start = time.time()
+            event_ref.update(update_data)
+            write_time = time.time() - write_start
+            
+            total_time = time.time() - start_time
+            logger.info(f"[PERF] Firestore write took {write_time:.3f}s, total: {total_time:.3f}s")
+            logger.info(f"Marked event {event_id} as FALSE ALARM")
+            
+            return {
+                "success": True, 
+                "already_reported": False,
+                "message": "Alert marked as false alarm"
+            }
+
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[PERF] Failed after {total_time:.3f}s - Error: {e}")
+            return {"success": False, "error": str(e)}
+
     async def finalize_event(
         self,
         event_id: str,
