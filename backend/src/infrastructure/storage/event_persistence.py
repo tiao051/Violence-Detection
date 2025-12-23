@@ -458,19 +458,23 @@ class EventPersistenceService:
         
         return event_ref.id
 
-    def _get_camera_owner(self, camera_id: str) -> str:
-        """Mock function to get camera owner."""
-        # Mapping based on auth_routes.py mock data
-        # cam1, cam2, cam3 -> user_123
-        # cam4, cam5 -> user_456
-        if camera_id in ['cam1', 'cam2', 'cam3']:
-            return "H2399Gybu8TeslP8zyEyP4uhn0l2" # Updated with real user UID for testing
-        elif camera_id in ['cam4', 'cam5']:
-            return "user_456"
-        
-        # Fallback to a default user if you are testing with a specific account
-        # Return the UID of the user currently logged in the Flutter app for easier testing
-        return "H2399Gybu8TeslP8zyEyP4uhn0l2" # From auth_routes.py mock
+    def _get_camera_owner(self, camera_id: str) -> Optional[str]:
+        """Get camera owner from Firestore."""
+        if not self.db:
+             logger.warning("Firestore DB not initialized for fetching camera owner")
+             return None
+
+        try:
+             # Fetch ownership from centralized 'cameras' collection
+             doc = self.db.collection('cameras').document(camera_id).get()
+             if doc.exists:
+                 return doc.to_dict().get('owner_uid')
+             
+             logger.warning(f"Camera {camera_id} not found in Firestore or has no owner")
+             return None
+        except Exception as e:
+             logger.error(f"Failed to fetch camera owner for {camera_id}: {e}")
+             return None
 
     def _get_camera_name(self, camera_id: str) -> str:
         names = {
