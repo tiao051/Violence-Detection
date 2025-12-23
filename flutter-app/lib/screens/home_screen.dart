@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:security_app/providers/event_provider.dart';
+import 'package:security_app/providers/settings_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
@@ -94,9 +95,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _widgetOptions.elementAt(_selectedIndex),
-      bottomNavigationBar: Consumer<EventProvider>(
-        builder: (context, eventProvider, child) {
+      bottomNavigationBar: Consumer2<EventProvider, SettingsProvider>(
+        builder: (context, eventProvider, settingsProvider, child) {
           final unviewedCount = eventProvider.unviewedCount;
+          final showBadge = settingsProvider.showBadge && unviewedCount > 0;
 
           return Stack(
             alignment: Alignment.center,
@@ -110,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   BottomNavigationBarItem(
                     icon: Badge(
-                      isLabelVisible: unviewedCount > 0,
+                      isLabelVisible: showBadge,
                       label: Text(
                         unviewedCount > 99 ? '99+' : unviewedCount.toString(),
                         style: const TextStyle(
@@ -119,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: const Icon(Icons.notification_important_outlined),
                     ),
                     activeIcon: Badge(
-                      isLabelVisible: unviewedCount > 0,
+                      isLabelVisible: showBadge,
                       label: Text(
                         unviewedCount > 99 ? '99+' : unviewedCount.toString(),
                         style: const TextStyle(

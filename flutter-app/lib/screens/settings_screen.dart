@@ -97,26 +97,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               // SECURITY SECTION
               _buildSectionHeader('Security'),
-              _buildSwitchTile(
-                title: 'Enable Motion Alerts',
-                subtitle: 'Receive alerts when motion is detected',
-                value: settingsProvider.enableMotionAlerts,
-                onChanged: (value) {
-                  settingsProvider.updateSetting('enableMotionAlerts', value);
-                },
-              ),
-              _buildSliderTile(
-                title: 'Alert Sensitivity',
-                subtitle: '${settingsProvider.alertSensitivity}%',
-                value: settingsProvider.alertSensitivity.toDouble(),
-                onChanged: (value) {
-                  settingsProvider.updateSetting(
-                      'alertSensitivity', value.toInt());
-                },
-                min: 0,
-                max: 100,
-                divisions: 10,
-              ),
               _buildDropdownTile(
                 title: 'Alert Sound',
                 subtitle: _getAlertSoundLabel(settingsProvider.alertSound),
@@ -143,15 +123,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 enabled: false, // Dark mode always on for this app
               ),
               _buildDropdownTile(
-                title: 'Refresh Rate',
-                subtitle: '${settingsProvider.refreshRateSeconds}s',
+                title: 'Auto Refresh',
+                subtitle:
+                    _getRefreshRateLabel(settingsProvider.refreshRateSeconds),
                 value: settingsProvider.refreshRateSeconds.toString(),
-                items: ['1', '5', '10', '30'],
+                items: ['0', '5', '10', '30', '60'],
                 itemLabels: [
-                  '1 second',
+                  'Off',
                   '5 seconds',
                   '10 seconds',
-                  '30 seconds'
+                  '30 seconds',
+                  '1 minute'
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -166,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSectionHeader('Notifications'),
               _buildSwitchTile(
                 title: 'Enable Push Notifications',
-                subtitle: 'Receive FCM push notifications',
+                subtitle: 'Receive alerts for violence detection',
                 value: settingsProvider.enableNotifications,
                 onChanged: (value) {
                   settingsProvider.updateSetting('enableNotifications', value);
@@ -174,7 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _buildSwitchTile(
                 title: 'Show Badge',
-                subtitle: 'Display unread event badge',
+                subtitle: 'Display unread count on Events tab',
                 value: settingsProvider.showBadge,
                 onChanged: (value) {
                   settingsProvider.updateSetting('showBadge', value);
@@ -281,39 +263,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Build slider tile
-  Widget _buildSliderTile({
-    required String title,
-    required String subtitle,
-    required double value,
-    required Function(double) onChanged,
-    required double min,
-    required double max,
-    int? divisions,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(fontWeight: FontWeight.w500)),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Build dropdown tile
   Widget _buildDropdownTile({
     required String title,
@@ -404,6 +353,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return 'Sound';
       default:
         return 'Sound';
+    }
+  }
+
+  /// Get readable label for refresh rate
+  String _getRefreshRateLabel(int seconds) {
+    switch (seconds) {
+      case 0:
+        return 'Off';
+      case 60:
+        return '1 minute';
+      default:
+        return '$seconds seconds';
     }
   }
 }
