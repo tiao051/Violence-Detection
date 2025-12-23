@@ -8,6 +8,7 @@ export interface Alert {
   timestamp: number;       // Detection timestamp from backend (Unix time in seconds)
   camera_id: string;
   violence_score: number;
+  raw_violence_score?: number; // Added to store original confidence
   image_base64?: string;
   is_reviewed?: boolean;
   video_url?: string;
@@ -21,6 +22,7 @@ interface AlertContextType {
     camera_id: string;
     timestamp: number;
     confidence: number;
+    raw_confidence?: number;
     snapshot?: string;
     video_url?: string;
     status: 'active' | 'completed';
@@ -51,6 +53,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     camera_id: string;
     timestamp: number;
     confidence: number;
+    raw_confidence?: number;
     snapshot?: string;
     video_url?: string;
     status: 'active' | 'completed';
@@ -70,6 +73,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         updatedAlerts[existingIndex] = {
           ...updatedAlerts[existingIndex],
           violence_score: eventData.confidence,
+          raw_violence_score: eventData.raw_confidence,
           image_base64: eventData.snapshot || updatedAlerts[existingIndex].image_base64,
           video_url: eventData.video_url || updatedAlerts[existingIndex].video_url,
           status: eventData.status,
@@ -83,6 +87,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         timestamp: eventData.timestamp,
         camera_id: eventData.camera_id,
         violence_score: eventData.confidence,
+        raw_violence_score: eventData.raw_confidence,
         image_base64: eventData.snapshot,
         video_url: eventData.video_url,
         is_reviewed: false,

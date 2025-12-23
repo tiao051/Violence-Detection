@@ -19,7 +19,7 @@ const VideoDashboard: React.FC = () => {
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
   // State for alert snapshots (camera_id -> base64 string)
   const [alertSnapshots, setAlertSnapshots] = React.useState<Record<string, string>>({});
-  
+
   // State for expanded camera
   const [expandedCamera, setExpandedCamera] = React.useState<string | null>(null);
 
@@ -29,13 +29,13 @@ const VideoDashboard: React.FC = () => {
   // Process incoming messages (Firestore-first design, no severity)
   React.useEffect(() => {
     if (messages.length <= processedCountRef.current) return;
-    
+
     // Process only new messages
     const newMessages = messages.slice(processedCountRef.current);
     processedCountRef.current = messages.length;
 
     newMessages.forEach((msg: WebSocketMessage) => {
-      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status } = msg;
+      const { type, camera_id, timestamp, confidence, raw_confidence, snapshot, video_url, event_id, status } = msg;
 
       // Handle Firestore-first event messages (no severity)
       if ((type === 'event_started' || type === 'event_updated' || type === 'event_completed') && event_id) {
@@ -45,6 +45,7 @@ const VideoDashboard: React.FC = () => {
           camera_id,
           timestamp: timestamp || Date.now() / 1000,
           confidence: confidence || 0,
+          raw_confidence: raw_confidence,
           snapshot,
           video_url,
           status: status || 'active'
@@ -53,7 +54,7 @@ const VideoDashboard: React.FC = () => {
         // Visual feedback for active alerts
         if (type === 'event_started' || type === 'event_updated') {
           console.log(`[Alert] ${type} for ${camera_id}: conf=${confidence}`);
-          
+
           setActiveAlerts(prev => ({
             ...prev,
             [camera_id]: Date.now()
@@ -75,7 +76,7 @@ const VideoDashboard: React.FC = () => {
               }
               return newState;
             });
-            
+
             setAlertSnapshots(prev => {
               const newState = { ...prev };
               delete newState[camera_id];
@@ -123,9 +124,9 @@ const VideoDashboard: React.FC = () => {
   return (
     <div className={`video-dashboard-grid ${expandedCamera ? 'has-expanded' : ''}`}>
       {cameras.map((cam) => (
-        <CameraVideo 
-          key={cam} 
-          cameraId={cam} 
+        <CameraVideo
+          key={cam}
+          cameraId={cam}
           isAlerting={!!activeAlerts[cam]}
           alertSnapshot={alertSnapshots[cam]}
           isExpanded={expandedCamera === cam}

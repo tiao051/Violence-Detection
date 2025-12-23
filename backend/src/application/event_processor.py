@@ -9,6 +9,7 @@ import shutil
 from typing import Dict, Optional
 import redis.asyncio as redis
 from src.infrastructure.storage.event_persistence import get_event_persistence_service
+from src.application.credibility_engine import get_credibility_engine
 # DISABLED: SecurityEngine is not part of violence detection pipeline
 # from src.application.security_engine import get_security_engine, init_security_engine
 
@@ -37,6 +38,9 @@ class EventProcessor:
         # DISABLED: SecurityEngine is NOT part of violence detection pipeline
         # self.security_engine = init_security_engine()
         self.security_engine = None
+        
+        # Initialize Credibility Engine
+        self.credibility_engine = get_credibility_engine()
         
         # Active recording sessions: {camera_id: {...}}
         self.active_events: Dict[str, Dict] = {}
@@ -121,6 +125,37 @@ class EventProcessor:
             
             detection_timestamp = alert['timestamp']
             
+            # === CREDIBILITY ADJUSTMENT ===
+            # Adjust confidence based on camera reliability
+            cred_result = self.credibility_engine.adjust_confidence(
+                camera_id,
+                raw_confidence=confidence,
+                alert_context={
+                    "hour": time.localtime(detection_timestamp).tm_hour,
+                    "confidence": confidence,
+                    "duration": 0 # Duration hard to know at start, update later?
+                }
+            )
+            
+            raw_confidence = confidence
+            adjusted_confidence = cred_result['adjusted_confidence']
+            camera_tier = cred_result['camera_tier']
+            
+            # Inject into alert object for persistence/notification
+            alert['raw_confidence'] = raw_confidence
+            alert['confidence'] = adjusted_confidence
+            alert['credibility_score'] = cred_result['camera_credibility']
+            alert['camera_tier'] = camera_tier
+            
+            # Use adjusted confidence for logic
+            confidence = adjusted_confidence
+            
+            # Filter low confidence alerts (noise reduction)
+            # If adjusted confidence < 0.25, ignore completely (unless high raw confidence?)
+            if confidence < 0.25:
+                logger.debug(f"[{camera_id}] Ignored low confidence alert (adj={confidence:.2f}, raw={raw_confidence:.2f})")
+                return
+
             # FIRESTORE-FIRST LOGIC
             if camera_id not in self.active_events:
                 # === FIRST ALERT: CREATE EVENT IN FIRESTORE ===
@@ -148,6 +183,7 @@ class EventProcessor:
                     'event_id': event_id,
                     'timestamp': detection_timestamp,
                     'confidence': confidence,
+                    'raw_confidence': raw_confidence,
                     'snapshot': alert.get('snapshot', ''),
                     'status': 'active'
                 })
@@ -218,6 +254,10 @@ class EventProcessor:
                 
                 # Check if this alert has higher confidence
                 if confidence > event['max_confidence']:
+                    # Preserve snapshot if new alert is missing it
+                    if not alert.get('snapshot') and event['best_alert'].get('snapshot'):
+                        alert['snapshot'] = event['best_alert'].get('snapshot')
+                        
                     event['max_confidence'] = confidence
                     event['best_alert'] = alert
                     
@@ -233,6 +273,7 @@ class EventProcessor:
                         'event_id': event['event_id'],
                         'timestamp': event['start_time'],  # Keep original timestamp
                         'confidence': confidence,
+                        'raw_confidence': raw_confidence,
                         'snapshot': alert.get('snapshot', ''),
                         'status': 'active'
                     })

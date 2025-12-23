@@ -6,6 +6,7 @@ export interface WebSocketMessage {
   camera_id: string;
   timestamp?: number;
   confidence?: number;
+  raw_confidence?: number;
   video_url?: string;
   snapshot?: string;
   violence?: boolean;
@@ -103,8 +104,8 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
         try {
           const data: WebSocketMessage = JSON.parse(event.data);
           // Handle event types from Firestore-first design (no severity)
-          if (data.type === 'alert' || data.type === 'event_started' || 
-              data.type === 'event_updated' || data.type === 'event_completed') {
+          if (data.type === 'alert' || data.type === 'event_started' ||
+            data.type === 'event_updated' || data.type === 'event_completed') {
             setMessages(prev => [...prev, data]);
           }
         } catch (err) {

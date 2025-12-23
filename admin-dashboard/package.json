@@ -13,7 +13,8 @@
     "@types/leaflet": "^1.9.21",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "sweetalert2": "^11.26.17"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

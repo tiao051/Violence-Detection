@@ -4,7 +4,7 @@ Spark Insights Job - Camera Credibility Training Pipeline
 Implements the Camera Intelligence system:
 1. K-Means: Clustering camera behaviors (Noisy/Reliable/Selective)  
 2. FP-Growth: Mining false alarm patterns from verified data
-3. Random Forest: Predicting camera credibility scores (0-1)
+3. Random Forest: Predicting camera credibility tiers (HIGH/MEDIUM/LOW)
 
 Requires verified data with human labels (true_positive/false_positive).
 Artifacts are saved to: /app/ai_service/insights/data/
@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, StringType
+from pyspark.ml.feature import VectorAssembler, StandardScaler, StringIndexer
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.fpm import FPGrowth
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -92,14 +97,24 @@ class SparkInsightsJob:
                     "required": 100
                 }
             
-            # TODO: Implement Camera Credibility Training
-            # Methods to implement:
-            # - _compute_camera_behavior_features(df) -> DataFrame
-            # - _train_kmeans_behavior_clustering(camera_features) -> List[Dict]
-            # - _mine_false_alarm_patterns(df) -> List[Dict]  
-            # - _train_credibility_rf(camera_features, clusters) -> Dict
+            # 2. Compute Camera Behavior Features
+            logger.info("Computing camera behavior features from verified data...")
+            camera_features = self._compute_camera_behavior_features(df_processed)
             
-            logger.info("Camera Credibility training not yet implemented")
+            # 3. Train K-Means Clustering
+            logger.info("Training K-Means clustering on camera behaviors...")
+            clusters = self._train_kmeans_behavior_clustering(camera_features)
+            self._save_json(clusters, "camera_clusters.json")
+            
+            # 4. Mine False Alarm Patterns
+            logger.info("Mining false alarm patterns with FP-Growth...")
+            fp_patterns = self._mine_false_alarm_patterns(df_processed)
+            self._save_json(fp_patterns, "false_alarm_patterns.json")
+            
+            # 5. Train Random Forest for Credibility Prediction
+            logger.info("Training Random Forest for camera credibility prediction...")
+            credibility_data, rf_metrics = self._train_credibility_rf(camera_features, clusters)
+            self._save_json(credibility_data, "camera_credibility.json")
             
             # Keep trends/anomalies for backward compatibility
             trends = self._compute_trends(df_processed)
@@ -112,8 +127,11 @@ class SparkInsightsJob:
             
             return {
                 "success": True,
-                "message": "Camera Credibility training not yet implemented",
                 "verified_count": verified_count,
+                "clusters": clusters,
+                "false_alarm_patterns": len(fp_patterns),
+                "cameras_analyzed": len(credibility_data),
+                "rf_metrics": rf_metrics,
                 "training_time": elapsed,
                 "trends": trends,
                 "anomalies": anomalies
@@ -124,8 +142,20 @@ class SparkInsightsJob:
             return {"success": False, "error": str(e)}
 
     def _load_data(self):
-        path = f"hdfs://{self.hdfs_namenode}{self.hdfs_path}/*.csv"
-        return self.spark.read.option("header", "true").option("inferSchema", "true").csv(path)
+        """Load data from HDFS or local file."""
+        # Try HDFS first
+        try:
+            path = f"hdfs://{self.hdfs_namenode}{self.hdfs_path}/*.csv"
+            df = self.spark.read.option("header", "true").option("inferSchema", "true").csv(path)
+            logger.info(f"Loaded data from HDFS: {path}")
+            return df
+        except Exception as e:
+            # Fallback to local file
+            logger.warning(f"HDFS not available: {e}")
+            local_path = "tmp/verified_scenarios.csv"
+            logger.info(f"Loading from local file: {local_path}")
+            df = self.spark.read.option("header", "true").option("inferSchema", "true").csv(local_path)
+            return df
 
     def _preprocess(self, df: DataFrame):
         df = df.withColumn("confidence", F.col("confidence").cast("double")) \
@@ -165,6 +195,333 @@ class SparkInsightsJob:
         with open(path, 'w') as f:
             json.dump(data, f, indent=2)
         logger.info(f"Saved artifact: {path}")
+
+    # ==================== CAMERA CREDIBILITY TRAINING ====================
+    
+    def _compute_camera_behavior_features(self, df: DataFrame) -> DataFrame:
+        """
+        Compute behavior features per camera from VERIFIED data only.
+        Returns DataFrame with camera-level aggregated features.
+        """
+        # Filter to verified alerts only
+        df_verified = df.filter(F.col("is_verified") == True)
+        
+        # Aggregate per camera
+        camera_features = df_verified.groupBy("camera_id").agg(
+            # True/False positive rates
+            (F.sum(F.when(F.col("verification_status") == "true_positive", 1).otherwise(0)) / F.count("*")).alias("true_positive_rate"),
+            (F.sum(F.when(F.col("verification_status") == "false_positive", 1).otherwise(0)) / F.count("*")).alias("false_positive_rate"),
+            
+            # Confidence metrics
+            F.avg("confidence").alias("avg_confidence"),
+            F.stddev("confidence").alias("confidence_std"),
+            
+            # Duration metrics  
+            F.avg("duration").alias("avg_duration"),
+            F.stddev("duration").alias("duration_std"),
+            
+            # Temporal patterns
+            (F.sum(F.when((F.col("hour") >= 22) | (F.col("hour") < 6), 1).otherwise(0)) / F.count("*")).alias("night_ratio"),
+            (F.sum(F.when(F.col("is_weekend") == 1, 1).otherwise(0)) / F.count("*")).alias("weekend_ratio"),
+            
+            # Volume
+            (F.count("*") / F.countDistinct(F.to_date("dt"))).alias("alerts_per_day"),
+            F.count("*").alias("total_verified")
+        )
+        
+        logger.info(f"Computed features for {camera_features.count()} cameras")
+        return camera_features
+    
+    def _train_kmeans_behavior_clustering(self, camera_features: DataFrame) -> List[Dict]:
+        """
+        K-Means clustering on camera behavior features.
+        Clusters cameras into behavioral groups.
+        """
+        feature_cols = [
+            "true_positive_rate", "false_positive_rate",
+            "avg_confidence", "confidence_std",
+            "alerts_per_day", "night_ratio"
+        ]
+        
+        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+        scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+        kmeans = KMeans(k=4, seed=42, featuresCol="scaled_features")
+        
+        # Build pipeline
+        features_df = assembler.transform(camera_features)
+        scaler_model = scaler.fit(features_df)
+        scaled_df = scaler_model.transform(features_df)
+        model = kmeans.fit(scaled_df)
+        
+        # Get predictions
+        clustered = model.transform(scaled_df)
+        
+        # Interpret clusters
+        clusters = []
+        for cluster_id in range(4):
+            cluster_df = clustered.filter(F.col("prediction") == cluster_id)
+            
+            if cluster_df.count() == 0:
+                continue
+                
+            stats = cluster_df.agg(
+                F.avg("true_positive_rate").alias("avg_tp_rate"),
+                F.avg("false_positive_rate").alias("avg_fp_rate"),
+                F.avg("avg_confidence").alias("avg_conf"),
+                F.collect_list("camera_id").alias("cameras")
+            ).collect()[0]
+            
+            # Name clusters based on characteristics
+            tp_rate = stats["avg_tp_rate"]
+            fp_rate = stats["avg_fp_rate"]
+            
+            if fp_rate > 0.3:
+                name, base_cred = "Noisy Camera", 0.35
+            elif tp_rate > 0.8 and fp_rate < 0.15:
+                name, base_cred = "Reliable Camera", 0.85
+            elif tp_rate > 0.7:
+                name, base_cred = "Selective Camera", 0.75
+            else:
+                name, base_cred = "Overcautious Camera", 0.55
+            
+            clusters.append({
+                "cluster_id": cluster_id,
+                "name": name,
+                "base_credibility": base_cred,
+                "cameras": stats["cameras"],
+                "avg_tp_rate": round(tp_rate, 2),
+                "avg_fp_rate": round(fp_rate, 2),
+                "avg_confidence": round(stats["avg_conf"], 2)
+            })
+        
+        logger.info(f"Created {len(clusters)} clusters")
+        return clusters
+    
+    def _mine_false_alarm_patterns(self, df: DataFrame) -> List[Dict]:
+        """
+        FP-Growth to mine patterns leading to false positives.
+        Only uses VERIFIED data.
+        """
+        df_verified = df.filter(F.col("is_verified") == True)
+        
+        # Create items with verification status
+        def make_items_with_verification(cam, hour, conf, dur, day, verified_status):
+            items = []
+            items.append(f"Cam_{cam}")
+            
+            # Bin hour into periods
+            if hour < 6 or hour >= 22:
+                items.append("Hour_night")
+            elif hour < 12:
+                items.append("Hour_morning")
+            elif hour < 17:
+                items.append("Hour_afternoon")
+            else:
+                items.append("Hour_evening")
+            
+            # Bin confidence
+            if conf < 0.5:
+                items.append("Conf_low")
+            elif conf < 0.75:
+                items.append("Conf_medium")
+            else:
+                items.append("Conf_high")
+            
+            # Bin duration
+            if dur < 3:
+                items.append("Dur_short")
+            elif dur < 15:
+                items.append("Dur_medium")
+            else:
+                items.append("Dur_long")
+            
+            items.append(f"Day_{day}")
+            items.append(f"Verified_{verified_status}")
+            
+            return items
+        
+        make_items_udf = F.udf(make_items_with_verification, ArrayType(StringType()))
+        
+        df_items = df_verified.withColumn(
+            "items",
+            make_items_udf("camera_id", "hour", "confidence", "duration", "day_name", "verification_status")
+        )
+        
+        # Mine patterns
+        fp_growth = FPGrowth(itemsCol="items", minSupport=0.05, minConfidence=0.6)
+        model = fp_growth.fit(df_items)
+        
+        # Extract FALSE POSITIVE patterns
+        fp_rules = model.associationRules.filter(
+            F.array_contains(F.col("consequent"), "Verified_false_positive")
+        ).orderBy(F.col("confidence").desc()).limit(15).collect()
+        
+        patterns = []
+        for rule in fp_rules:
+            # Remove "Verified_false_positive" from antecedent if present
+            antecedent = [item for item in rule["antecedent"] if not item.startswith("Verified_")]
+            
+            patterns.append({
+                "pattern": antecedent,
+                "outcome": "false_positive",
+                "confidence": round(rule["confidence"], 2),
+                "support": round(rule["support"], 2),
+                "lift": round(rule["lift"], 2),
+                "interpretation": f"Pattern {antecedent} often leads to false alarms",
+                "action": "reduce_confidence"
+            })
+        
+        logger.info(f"Found {len(patterns)} false alarm patterns")
+        return patterns
+    
+    def _train_credibility_rf(self, camera_features: DataFrame, clusters: List[Dict]) -> tuple:
+        """
+        Train Random Forest to predict camera credibility tier.
+        Uses verified data features + cluster assignment.
+        
+        Returns:
+            (credibility_data, metrics): List of camera credibility scores and RF training metrics
+        """
+        # Create cluster lookup
+        cluster_lookup = {}
+        for cluster in clusters:
+            for cam in cluster["cameras"]:
+                cluster_lookup[cam] = {
+                    "cluster_id": cluster["cluster_id"],
+                    "cluster_name": cluster["name"],
+                    "base_credibility": cluster["base_credibility"]
+                }
+        
+        # Add cluster_id to camera_features
+        @F.udf(returnType=StringType())
+        def get_cluster_id_udf(cam_id):
+            return str(cluster_lookup.get(cam_id, {}).get("cluster_id", -1))
+        
+        df_with_cluster = camera_features.withColumn(
+            "cluster_id_str",
+            get_cluster_id_udf(F.col("camera_id"))
+        ).withColumn(
+            "cluster_id",
+            F.col("cluster_id_str").cast("int")
+        )
+        
+        # Create credibility tier labels based on TP rate and FP rate
+        def compute_tier_label(tp_rate, fp_rate):
+            if tp_rate >= 0.80 and fp_rate < 0.15:
+                return "HIGH"  # Highly reliable
+            elif tp_rate >= 0.60:
+                return "MEDIUM"  # Moderately reliable
+            else:
+                return "LOW"  # Needs attention
+        
+        tier_udf = F.udf(compute_tier_label, StringType())
+        
+        df_labeled = df_with_cluster.withColumn(
+            "credibility_tier",
+            tier_udf("true_positive_rate", "false_positive_rate")
+        )
+        
+        # Prepare features for RF
+        feature_cols = [
+            "true_positive_rate",
+            "false_positive_rate",
+            "avg_confidence",
+            "confidence_std",
+            "avg_duration",
+            "alerts_per_day",
+            "night_ratio",
+            "weekend_ratio",
+            "cluster_id"
+        ]
+        
+        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+        df_features = assembler.transform(df_labeled)
+        
+        # Index labels
+        indexer = StringIndexer(inputCol="credibility_tier", outputCol="label")
+        df_indexed = indexer.fit(df_features).transform(df_features)
+        
+        # Train Random Forest
+        rf = RandomForestClassifier(
+            featuresCol="features",
+            labelCol="label",
+            numTrees=50,
+            maxDepth=5,
+            seed=42
+        )
+        
+        rf_model = rf.fit(df_indexed)
+        predictions = rf_model.transform(df_indexed)
+        
+        # Evaluate
+        evaluator = MulticlassClassificationEvaluator(
+            labelCol="label",
+            predictionCol="prediction",
+            metricName="accuracy"
+        )
+        accuracy = evaluator.evaluate(predictions)
+        
+        logger.info(f"RF Credibility Model Accuracy: {accuracy:.3f}")
+        
+        # Generate final credibility data
+        credibility_data = []
+        
+        for row in df_labeled.collect():
+            cam_id = row["camera_id"]
+            tp_rate = row["true_positive_rate"]
+            fp_rate = row["false_positive_rate"]
+            tier = row["credibility_tier"]
+            
+            cluster_info = cluster_lookup.get(cam_id, {
+                "cluster_id": -1,
+                "cluster_name": "Unknown",
+                "base_credibility": 0.5
+            })
+            
+            # Compute final credibility score (weighted)
+            # 70% from actual TP rate, 30% from cluster baseline
+            credibility_score = (tp_rate * 0.7) + (cluster_info["base_credibility"] * 0.3)
+            
+            credibility_data.append({
+                "camera_id": cam_id,
+                "camera_name": CAMERA_NAMES.get(cam_id, cam_id),
+                "credibility_score": round(credibility_score, 2),
+                "credibility_tier": tier,
+                "cluster": cluster_info["cluster_name"],
+                "metrics": {
+                    "true_positive_rate": round(tp_rate, 2),
+                    "false_positive_rate": round(fp_rate, 2),
+                    "total_verified": int(row["total_verified"]),
+                    "avg_confidence": round(row["avg_confidence"], 2),
+                    "avg_duration": round(row["avg_duration"], 1),
+                    "alerts_per_day": round(row["alerts_per_day"], 1)
+                },
+                "recommendation": self._generate_recommendation(tier, fp_rate, credibility_score)
+            })
+        
+        metrics = {
+            "algorithm": "Random Forest",
+            "accuracy": round(accuracy, 3),
+            "num_trees": 50,
+            "max_depth": 5,
+            "features_used": feature_cols,
+            "cameras_trained": len(credibility_data)
+        }
+        
+        logger.info(f"Trained credibility RF for {len(credibility_data)} cameras")
+        return credibility_data, metrics
+    
+    def _generate_recommendation(self, tier: str, fp_rate: float, score: float) -> str:
+        """Generate human-readable recommendation based on camera credibility."""
+        if tier == "HIGH":
+            return f"Highly trustworthy (score: {score:.2f}) - prioritize alerts from this camera"
+        elif tier == "LOW":
+            if fp_rate > 0.3:
+                return f"⚠️ High false alarm rate ({fp_rate*100:.0f}%) - needs recalibration or maintenance"
+            else:
+                return f"⚠️ Low credibility (score: {score:.2f}) - verify alerts manually"
+        else:
+            return f"Moderate reliability (score: {score:.2f}) - normal monitoring"
 
     # --- Legacy Helpers for Dashboard Trends ---
     def _compute_trends(self, df: DataFrame) -> Dict[str, List]:
@@ -268,7 +625,6 @@ class SparkInsightsJob:
 
 # Singleton Management  
 _insights_job = None
-_cached_results = None
 
 def get_insights_job_instance():
     global _insights_job
@@ -281,26 +637,6 @@ def warmup_spark():
         get_insights_job_instance()._init_spark()
     except: pass
 
-def get_spark_insights(force_refresh: bool = False) -> Dict[str, Any]:
-    """
-    API Access Point: Reads pre-trained metrics from filesystem.
-    Does NOT trigger training (which is heavy).
-    """
-    results = {
-        "success": True, 
-        "profiles": [], 
-        "rules": [], 
-        "trends": {"weekly": [], "monthly": []}, 
-        "anomalies": []
-    }
-    
-    try:
-        # Load Artifacts if they exist
-        # TODO: Update to load camera_credibility.json, camera_clusters.json, false_alarm_patterns.json
-        return results
-    except Exception as e:
-        logger.error(f"Failed to load artifacts: {e}")
-        return {"success": False, "error": "Insights not available. Run offline training."}
 
 if __name__ == "__main__":
     job = SparkInsightsJob()

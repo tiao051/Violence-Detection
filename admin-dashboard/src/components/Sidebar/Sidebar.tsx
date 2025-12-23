@@ -20,12 +20,7 @@ const Icons = {
       <polyline points="12 6 12 12 16 14" />
     </svg>
   ),
-  BarChart: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="12" y1="2" x2="12" y2="22" />
-      <path d="M17 5v14M7 7v12M4 9v10M20 3v18" />
-    </svg>
-  ),
+
   Map: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
@@ -45,7 +40,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const menuItems = [
     { id: 'live', label: 'Live Monitor', icon: Icons.Camera },
     { id: 'history', label: 'Alert History', icon: Icons.History },
-    { id: 'analytics', label: 'Analytics', icon: Icons.BarChart },
     { id: 'map', label: 'Hotspot Map', icon: Icons.Map },
     { id: 'settings', label: 'Settings', icon: Icons.Settings },
   ];
