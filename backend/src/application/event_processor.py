@@ -9,6 +9,7 @@ import shutil
 from typing import Dict, Optional
 import redis.asyncio as redis
 from src.infrastructure.storage.event_persistence import get_event_persistence_service
+from src.application.security_engine import get_security_engine, init_security_engine
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,14 @@ class EventProcessor:
         self.persistence_service = get_event_persistence_service()
         self.is_running = False
         
+        # Initialize SecurityEngine at startup (loads rules into RAM)
+        self.security_engine = init_security_engine()
+        
         # Active recording sessions: {camera_id: {...}}
         self.active_events: Dict[str, Dict] = {}
+        
+        # Queue for background severity analysis
+        self.severity_queue: asyncio.Queue = asyncio.Queue()
         
         # Config
         self.event_timeout_seconds = 5.0   # Wait 5s after last alert to close event (quick finalize)
@@ -49,8 +56,9 @@ class EventProcessor:
             
         self.is_running = True
         asyncio.create_task(self._run())
-        asyncio.create_task(self._event_monitor_loop()) # New task for monitoring timeouts
-        logger.info("Event Processor started with Debounce & Extend logic")
+        asyncio.create_task(self._event_monitor_loop())  # Task for monitoring timeouts
+        asyncio.create_task(self._severity_worker_loop())  # NEW: Background severity analysis
+        logger.info("Event Processor started with Debounce & Extend logic + SecurityEngine")
 
     async def stop(self) -> None:
         """Stop the event processor."""
@@ -131,13 +139,22 @@ class EventProcessor:
                     'frames_temp_paths': []
                 }
                 
-                # Publish event_started to frontend
+                # Publish event_started to frontend (severity_level: PENDING - yellow)
                 await self._publish_event_notification('event_started', camera_id, {
                     'event_id': event_id,
                     'timestamp': detection_timestamp,
                     'confidence': confidence,
                     'snapshot': alert.get('snapshot', ''),
-                    'status': 'active'
+                    'status': 'active',
+                    'severity_level': 'PENDING'  # Will be updated by background worker
+                })
+                
+                # Queue for background severity analysis (non-blocking)
+                await self.severity_queue.put({
+                    'event_id': event_id,
+                    'camera_id': camera_id,
+                    'confidence': confidence,
+                    'timestamp': detection_timestamp
                 })
                 
             else:
@@ -317,6 +334,106 @@ class EventProcessor:
             except Exception as e:
                 logger.error(f"Event monitor error: {e}")
                 await asyncio.sleep(1.0)
+
+    async def _severity_worker_loop(self) -> None:
+        """
+        Background worker for severity analysis.
+        
+        Picks up events from queue → runs SecurityEngine → updates Firestore → notifies frontend.
+        All rules are cached in RAM, so analysis is sub-millisecond.
+        """
+        logger.info("Severity worker started")
+        
+        while self.is_running:
+            try:
+                # Wait for event with timeout (allows graceful shutdown)
+                try:
+                    event_data = await asyncio.wait_for(
+                        self.severity_queue.get(), 
+                        timeout=1.0
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                
+                event_id = event_data['event_id']
+                camera_id = event_data['camera_id']
+                confidence = event_data['confidence']
+                timestamp = event_data['timestamp']
+                
+                # Run severity analysis (rules cached in RAM - very fast)
+                analysis_result = self.security_engine.analyze_severity(
+                    camera_id=camera_id,
+                    confidence=confidence,
+                    timestamp=timestamp
+                )
+                
+                severity_level = analysis_result['severity_level']
+                severity_score = analysis_result['severity_score']
+                analysis_time_ms = analysis_result['analysis_time_ms']
+                
+                logger.info(
+                    f"[{camera_id}] Severity analysis: {severity_level} "
+                    f"(score={severity_score:.3f}, time={analysis_time_ms:.3f}ms)"
+                )
+                
+                # Update Firestore with severity
+                await self._update_event_severity(
+                    event_id, 
+                    severity_level, 
+                    severity_score,
+                    analysis_result
+                )
+                
+                # Publish severity_updated to frontend
+                await self._publish_event_notification('severity_updated', camera_id, {
+                    'event_id': event_id,
+                    'severity_level': severity_level,
+                    'severity_score': severity_score,
+                    'analysis_time_ms': analysis_time_ms,
+                    'rule_matched': analysis_result.get('rule_matched'),
+                    'risk_profile': analysis_result.get('risk_profile')
+                })
+                
+                self.severity_queue.task_done()
+                
+            except Exception as e:
+                logger.error(f"Severity worker error: {e}")
+                await asyncio.sleep(0.1)
+        
+        logger.info("Severity worker stopped")
+
+    async def _update_event_severity(
+        self, 
+        event_id: str, 
+        severity_level: str, 
+        severity_score: float,
+        analysis_result: Dict
+    ) -> bool:
+        """Update event in Firestore with severity information."""
+        try:
+            if not self.persistence_service.db:
+                return False
+            
+            event_ref = self.persistence_service.db.collection('events').document(event_id)
+            
+            from firebase_admin import firestore as fs
+            event_ref.update({
+                'severityLevel': severity_level,
+                'severityScore': severity_score,
+                'severityAnalysis': {
+                    'ruleMatched': analysis_result.get('rule_matched'),
+                    'riskProfile': analysis_result.get('risk_profile'),
+                    'features': analysis_result.get('features', {})
+                },
+                'updatedAt': fs.SERVER_TIMESTAMP
+            })
+            
+            logger.debug(f"Updated event {event_id} with severity: {severity_level}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update event severity: {e}")
+            return False
 
     async def _publish_event_notification(self, event_type: str, camera_id: str, data: Dict) -> None:
         """Publish event notification to Redis for frontend."""

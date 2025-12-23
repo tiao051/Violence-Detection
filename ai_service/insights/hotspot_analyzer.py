@@ -1,5 +1,6 @@
 """
 Hotspot Analysis using Statistical Methods (No ML Training Required).
+Optimized for performance using Pandas and Caching.
 
 Analyzes camera locations to identify hotspots based on:
 1. Violence event ratio
@@ -11,9 +12,10 @@ Analyzes camera locations to identify hotspots based on:
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import math
-from collections import defaultdict
-import csv
 import os
+import time
+import pandas as pd
+import numpy as np
 
 
 @dataclass
@@ -36,8 +38,7 @@ class CameraStats:
 class HotspotAnalyzer:
     """
     Statistical analyzer for identifying violence hotspots.
-    
-    No training required - works directly on event data.
+    Optimized with Pandas for high performance.
     """
     
     # Weights for scoring
@@ -50,164 +51,153 @@ class HotspotAnalyzer:
     
     def __init__(self):
         self.camera_stats: Dict[str, CameraStats] = {}
-        self.events: List[Dict] = []
+        self.df: Optional[pd.DataFrame] = None
+        self._last_file_mtime = 0
+        self._last_file_path = ""
         
     def load_from_csv(self, csv_path: str) -> "HotspotAnalyzer":
-        """Load events from CSV file."""
+        """Load events from CSV file with caching check."""
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"CSV file not found: {csv_path}")
+            
+        # Check if file has changed
+        mtime = os.path.getmtime(csv_path)
+        if self.df is not None and csv_path == self._last_file_path and mtime == self._last_file_mtime:
+            # Cache hit - file unchanged
+            return self
+            
+        try:
+            # Fast load with pandas
+            # types map for faster parsing
+            dtype = {
+                'cameraId': 'string',
+                'cameraName': 'string',
+                'cameraDescription': 'string',
+                'confidence': 'float32',
+                'label': 'category'
+            }
+            
+            self.df = pd.read_csv(csv_path, dtype=dtype, usecols=dtype.keys())
+            
+            # Normalize column names for internal use
+            self.df = self.df.rename(columns={
+                'cameraId': 'camera_id',
+                'cameraName': 'camera_name',
+                'cameraDescription': 'camera_description'
+            })
+            
+            self._last_file_path = csv_path
+            self._last_file_mtime = mtime
+            
+        except Exception as e:
+            # Fallback for older CSV formats or empty files
+            print(f"Pandas load error: {e}. File might be empty.")
+            self.df = pd.DataFrame(columns=['camera_id', 'camera_name', 'camera_description', 'confidence', 'label'])
         
-        self.events = []
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                self.events.append({
-                    'camera_id': row.get('cameraId', ''),
-                    'camera_name': row.get('cameraName', ''),
-                    'camera_description': row.get('cameraDescription', ''),
-                    'timestamp': row.get('timestamp', ''),
-                    'confidence': float(row.get('confidence', 0)),
-                    'label': row.get('label', 'nonviolence'),
-                })
-        
-        return self
-    
-    def load_from_events(self, events: List[Dict]) -> "HotspotAnalyzer":
-        """Load events from list of dictionaries."""
-        self.events = events
         return self
     
     def analyze(self) -> Dict[str, CameraStats]:
         """
-        Perform hotspot analysis on loaded events.
-        
+        Perform hotspot analysis using vectorized operations.
         Returns dict of camera_id -> CameraStats
         """
-        if not self.events:
+        if self.df is None or self.df.empty:
             return {}
         
-        # Step 1: Aggregate events by camera
-        camera_data = self._aggregate_by_camera()
+        # Step 1: Aggregation by camera (Vectorized)
+        # Group by camera_id and calculate metrics in one pass
+        grouped = self.df.groupby('camera_id')
         
-        # Step 2: Calculate violence ratios
-        for cam_id, data in camera_data.items():
-            total = data['violence'] + data['nonviolence']
-            data['violence_ratio'] = data['violence'] / total if total > 0 else 0
+        # Calculate counts
+        total_counts = grouped.size()
+        violence_counts = self.df[self.df['label'] == 'violence'].groupby('camera_id').size()
         
-        # Step 3: Calculate Z-scores (how each camera compares to mean)
-        ratios = [d['violence_ratio'] for d in camera_data.values()]
-        mean_ratio = sum(ratios) / len(ratios) if ratios else 0
-        std_ratio = self._std_dev(ratios, mean_ratio)
+        # Reindex violence counts to ensure all cameras are present (fill 0)
+        violence_counts = violence_counts.reindex(total_counts.index, fill_value=0)
+        nonviolence_counts = total_counts - violence_counts
         
-        for data in camera_data.values():
-            if std_ratio > 0:
-                data['z_score'] = (data['violence_ratio'] - mean_ratio) / std_ratio
-            else:
-                data['z_score'] = 0
+        # Calculate means
+        avg_confidence = grouped['confidence'].mean()
         
-        # Step 4: Calculate hotspot scores and classify
+        # Get metadata (take first value)
+        meta = grouped[['camera_name', 'camera_description']].first()
+        
+        # Step 2: Vectorized Calculations
+        violence_ratios = violence_counts / total_counts
+        
+        # Step 3: Z-scores
+        mean_ratio = violence_ratios.mean()
+        std_ratio = violence_ratios.std()
+        
+        if std_ratio > 0:
+            z_scores = (violence_ratios - mean_ratio) / std_ratio
+        else:
+            z_scores = pd.Series(0, index=violence_ratios.index)
+            
+        # Sigmoid normalization for Z-score
+        z_normalized = 1 / (1 + np.exp(-z_scores))
+        
+        # Step 4: Weighted Score
+        hotspot_scores = (
+            self.WEIGHT_VIOLENCE_RATIO * violence_ratios +
+            self.WEIGHT_CONFIDENCE * avg_confidence +
+            self.WEIGHT_ZSCORE * z_normalized
+        )
+        
+        # Step 5: Build Result Objects
         self.camera_stats = {}
-        for cam_id, data in camera_data.items():
-            # Normalize z_score to 0-1 range (sigmoid-like)
-            z_normalized = 1 / (1 + math.exp(-data['z_score']))
+        
+        for cam_id in total_counts.index:
+            score = hotspot_scores[cam_id]
             
-            # Calculate weighted score
-            score = (
-                self.WEIGHT_VIOLENCE_RATIO * data['violence_ratio'] +
-                self.WEIGHT_CONFIDENCE * data['avg_confidence'] +
-                self.WEIGHT_ZSCORE * z_normalized
-            )
-            
-            # Classify based on score
             if score >= self.HOTSPOT_THRESHOLD:
                 classification = "hotspot"
-                risk_level = "HIGH"
+                risk = "HIGH"
             elif score >= self.WARNING_THRESHOLD:
                 classification = "warning"
-                risk_level = "MEDIUM"
+                risk = "MEDIUM"
             else:
                 classification = "safe"
-                risk_level = "LOW"
-            
+                risk = "LOW"
+                
             self.camera_stats[cam_id] = CameraStats(
                 camera_id=cam_id,
-                camera_name=data['camera_name'],
-                camera_description=data['camera_description'],
-                total_events=data['violence'] + data['nonviolence'],
-                violence_events=data['violence'],
-                nonviolence_events=data['nonviolence'],
-                avg_confidence=round(data['avg_confidence'], 3),
-                violence_ratio=round(data['violence_ratio'], 3),
-                z_score=round(data['z_score'], 3),
-                hotspot_score=round(score, 3),
+                camera_name=str(meta.loc[cam_id, 'camera_name']),
+                camera_description=str(meta.loc[cam_id, 'camera_description']),
+                total_events=int(total_counts[cam_id]),
+                violence_events=int(violence_counts[cam_id]),
+                nonviolence_events=int(nonviolence_counts[cam_id]),
+                avg_confidence=round(float(avg_confidence[cam_id]), 3),
+                violence_ratio=round(float(violence_ratios[cam_id]), 3),
+                z_score=round(float(z_scores[cam_id]), 3),
+                hotspot_score=round(float(score), 3),
                 classification=classification,
-                risk_level=risk_level,
+                risk_level=risk
             )
-        
+            
         return self.camera_stats
-    
-    def _aggregate_by_camera(self) -> Dict[str, Dict]:
-        """Aggregate events by camera ID."""
-        camera_data = defaultdict(lambda: {
-            'camera_name': '',
-            'camera_description': '',
-            'violence': 0,
-            'nonviolence': 0,
-            'confidences': [],
-        })
-        
-        for event in self.events:
-            cam_id = event['camera_id']
-            camera_data[cam_id]['camera_name'] = event['camera_name']
-            camera_data[cam_id]['camera_description'] = event.get('camera_description', '')
-            
-            if event['label'] == 'violence':
-                camera_data[cam_id]['violence'] += 1
-            else:
-                camera_data[cam_id]['nonviolence'] += 1
-            
-            camera_data[cam_id]['confidences'].append(event['confidence'])
-        
-        # Calculate average confidence
-        for data in camera_data.values():
-            if data['confidences']:
-                data['avg_confidence'] = sum(data['confidences']) / len(data['confidences'])
-            else:
-                data['avg_confidence'] = 0
-        
-        return dict(camera_data)
-    
-    def _std_dev(self, values: List[float], mean: float) -> float:
-        """Calculate standard deviation."""
-        if len(values) < 2:
-            return 0
-        variance = sum((x - mean) ** 2 for x in values) / len(values)
-        return math.sqrt(variance)
-    
-    def get_hotspots(self) -> List[CameraStats]:
-        """Get cameras classified as hotspots."""
-        return [s for s in self.camera_stats.values() if s.classification == "hotspot"]
-    
-    def get_safe_zones(self) -> List[CameraStats]:
-        """Get cameras classified as safe zones."""
-        return [s for s in self.camera_stats.values() if s.classification == "safe"]
-    
-    def get_warnings(self) -> List[CameraStats]:
-        """Get cameras classified as warnings."""
-        return [s for s in self.camera_stats.values() if s.classification == "warning"]
     
     def get_summary(self) -> Dict[str, Any]:
         """Get summary of hotspot analysis."""
         if not self.camera_stats:
             return {"error": "No analysis performed yet"}
         
+        # Calculate totals
+        total_ev = sum(s.total_events for s in self.camera_stats.values())
+        total_viol = sum(s.violence_events for s in self.camera_stats.values())
+        
+        # Group stats
+        hotspots = [s for s in self.camera_stats.values() if s.classification == "hotspot"]
+        warnings = [s for s in self.camera_stats.values() if s.classification == "warning"]
+        safe = [s for s in self.camera_stats.values() if s.classification == "safe"]
+        
         return {
             "total_cameras": len(self.camera_stats),
-            "hotspots": len(self.get_hotspots()),
-            "warnings": len(self.get_warnings()),
-            "safe_zones": len(self.get_safe_zones()),
-            "total_events": sum(s.total_events for s in self.camera_stats.values()),
-            "total_violence_events": sum(s.violence_events for s in self.camera_stats.values()),
+            "hotspots": len(hotspots),
+            "warnings": len(warnings),
+            "safe_zones": len(safe),
+            "total_events": total_ev,
+            "total_violence_events": total_viol,
             "cameras": [
                 {
                     "camera_id": s.camera_id,
@@ -242,14 +232,9 @@ def get_hotspot_analyzer() -> HotspotAnalyzer:
 def analyze_hotspots_from_csv(csv_path: str) -> Dict[str, Any]:
     """
     Convenience function to analyze hotspots from CSV file.
-    
-    Args:
-        csv_path: Path to CSV file with event data
-        
-    Returns:
-        Summary dict with hotspot analysis results
+    Uses singleton to benefit from caching.
     """
-    analyzer = HotspotAnalyzer()
+    analyzer = get_hotspot_analyzer()
     analyzer.load_from_csv(csv_path)
     analyzer.analyze()
     return analyzer.get_summary()

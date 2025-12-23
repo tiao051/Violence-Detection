@@ -13,7 +13,7 @@ const VideoDashboard: React.FC = () => {
   );
 
   // Global Alert History Context (Firestore-first)
-  const { addOrUpdateEvent } = useAlerts();
+  const { addOrUpdateEvent, updateSeverity } = useAlerts();
 
   // State for active alerts per camera (camera_id -> timestamp)
   const [activeAlerts, setActiveAlerts] = React.useState<Record<string, number>>({});
@@ -35,7 +35,19 @@ const VideoDashboard: React.FC = () => {
     processedCountRef.current = messages.length;
 
     newMessages.forEach((msg: WebSocketMessage) => {
-      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status } = msg;
+      const { type, camera_id, timestamp, confidence, snapshot, video_url, event_id, status, severity_level, severity_score, rule_matched, risk_profile } = msg;
+
+      // Handle severity_updated from SecurityEngine background worker
+      if (type === 'severity_updated' && event_id) {
+        updateSeverity(event_id, {
+          severity_level: severity_level || 'MEDIUM',
+          severity_score,
+          rule_matched,
+          risk_profile
+        });
+        console.log(`[Severity] Event ${event_id}: ${severity_level} (score=${severity_score})`);
+        return;
+      }
 
       // Handle Firestore-first event messages
       if ((type === 'event_started' || type === 'event_updated' || type === 'event_completed') && event_id) {
@@ -43,11 +55,12 @@ const VideoDashboard: React.FC = () => {
         addOrUpdateEvent({
           event_id,
           camera_id,
-          timestamp,
+          timestamp: timestamp || Date.now() / 1000,
           confidence: confidence || 0,
           snapshot,
           video_url,
-          status: status || 'active'
+          status: status || 'active',
+          severity_level: severity_level || 'PENDING'  // Default PENDING for new events
         });
 
         // Visual feedback for active alerts
@@ -108,7 +121,7 @@ const VideoDashboard: React.FC = () => {
         }, 5000);
       }
     });
-  }, [messages, addOrUpdateEvent]);
+  }, [messages, addOrUpdateEvent, updateSeverity]);
 
   const handleCameraClick = (cameraId: string) => {
     if (expandedCamera === cameraId) {

@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libgomp1 \
     ffmpeg \
+    default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

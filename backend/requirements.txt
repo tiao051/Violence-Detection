@@ -27,6 +27,7 @@ scikit-learn==1.5.2
 pandas==2.1.3
 mlxtend==0.23.0
 joblib==1.3.2
+pyspark==3.5.0
 
 # Dependency Injection
 dependency-injector==4.41.0
