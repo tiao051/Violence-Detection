@@ -1,23 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-export type SeverityLevel = 'PENDING' | 'HIGH' | 'MEDIUM' | 'LOW';
-
+// Simplified: No severity analysis, just violence detection
 export interface WebSocketMessage {
-  type: 'alert' | 'event_started' | 'event_updated' | 'event_completed' | 'severity_updated';
+  type: 'alert' | 'event_started' | 'event_updated' | 'event_completed';
   camera_id: string;
   timestamp?: number;
   confidence?: number;
+  raw_confidence?: number;
   video_url?: string;
   snapshot?: string;
   violence?: boolean;
   event_id?: string;
   status?: 'active' | 'completed';
-  // Severity fields (from SecurityEngine)
-  severity_level?: SeverityLevel;
-  severity_score?: number;
-  analysis_time_ms?: number;
-  rule_matched?: string;
-  risk_profile?: string;
 }
 
 interface WebSocketHookResult {
@@ -109,10 +103,9 @@ export const useWebSocket = (url: string): WebSocketHookResult => {
       ws.onmessage = (event) => {
         try {
           const data: WebSocketMessage = JSON.parse(event.data);
-          // Handle all event types from Firestore-first design + severity updates
-          if (data.type === 'alert' || data.type === 'event_started' || 
-              data.type === 'event_updated' || data.type === 'event_completed' ||
-              data.type === 'severity_updated') {
+          // Handle event types from Firestore-first design (no severity)
+          if (data.type === 'alert' || data.type === 'event_started' ||
+            data.type === 'event_updated' || data.type === 'event_completed') {
             setMessages(prev => [...prev, data]);
           }
         } catch (err) {

@@ -23,9 +23,7 @@ try:
     from src.core.config import settings
     from src.infrastructure.rtsp import CameraWorker
     from src.infrastructure.kafka import get_kafka_producer
-    from src.presentation.routes import auth_router
-    from src.presentation.routes.websocket_routes import router as websocket_router
-    from src.presentation.routes.analytics_routes import router as analytics_router
+    from src.presentation.routes import auth_router, websocket_router, analytics_router, credibility_router
     from src.infrastructure.firebase.setup import initialize_firebase
     from src.application.event_processor import get_event_processor
 except Exception as e:
@@ -85,13 +83,8 @@ async def startup(app: FastAPI) -> None:
         except Exception as e:
             logger.warning(f"Spark warmup failed to trigger: {e}")
 
-        # B. Initialize InsightsModel (Legacy/Prediction)
-        try:
-            from src.presentation.routes.analytics_routes import init_insights_model
-            logger.info("Initializing InsightsModel for predictions...")
-            init_insights_model()
-        except Exception as e:
-            logger.warning(f"Failed to initialize InsightsModel: {e}")
+        # B. Initialize InsightsModel (Legacy/Prediction) - REMOVED
+        # Analytics system replaced by CredibilityEngine (loaded in EventProcessor)
 
         # 4. Connect Kafka producer
         kafka_producer = get_kafka_producer()
@@ -185,6 +178,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(websocket_router)
 app.include_router(analytics_router)
+app.include_router(credibility_router, prefix="/api/credibility", tags=["credibility"])
 
 
 @app.get("/api/events/lookup")

@@ -9,7 +9,9 @@ import shutil
 from typing import Dict, Optional
 import redis.asyncio as redis
 from src.infrastructure.storage.event_persistence import get_event_persistence_service
-from src.application.security_engine import get_security_engine, init_security_engine
+from src.application.credibility_engine import get_credibility_engine
+# DISABLED: SecurityEngine is not part of violence detection pipeline
+# from src.application.security_engine import get_security_engine, init_security_engine
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +35,12 @@ class EventProcessor:
         self.persistence_service = get_event_persistence_service()
         self.is_running = False
         
-        # Initialize SecurityEngine at startup (loads rules into RAM)
-        self.security_engine = init_security_engine()
+        # DISABLED: SecurityEngine is NOT part of violence detection pipeline
+        # self.security_engine = init_security_engine()
+        self.security_engine = None
+        
+        # Initialize Credibility Engine
+        self.credibility_engine = get_credibility_engine()
         
         # Active recording sessions: {camera_id: {...}}
         self.active_events: Dict[str, Dict] = {}
@@ -57,8 +63,9 @@ class EventProcessor:
         self.is_running = True
         asyncio.create_task(self._run())
         asyncio.create_task(self._event_monitor_loop())  # Task for monitoring timeouts
-        asyncio.create_task(self._severity_worker_loop())  # NEW: Background severity analysis
-        logger.info("Event Processor started with Debounce & Extend logic + SecurityEngine")
+        # DISABLED: Severity analysis is NOT part of violence detection pipeline
+        # asyncio.create_task(self._severity_worker_loop())
+        logger.info("Event Processor started with Debounce & Extend logic")
 
     async def stop(self) -> None:
         """Stop the event processor."""
@@ -118,6 +125,37 @@ class EventProcessor:
             
             detection_timestamp = alert['timestamp']
             
+            # === CREDIBILITY ADJUSTMENT ===
+            # Adjust confidence based on camera reliability
+            cred_result = self.credibility_engine.adjust_confidence(
+                camera_id,
+                raw_confidence=confidence,
+                alert_context={
+                    "hour": time.localtime(detection_timestamp).tm_hour,
+                    "confidence": confidence,
+                    "duration": 0 # Duration hard to know at start, update later?
+                }
+            )
+            
+            raw_confidence = confidence
+            adjusted_confidence = cred_result['adjusted_confidence']
+            camera_tier = cred_result['camera_tier']
+            
+            # Inject into alert object for persistence/notification
+            alert['raw_confidence'] = raw_confidence
+            alert['confidence'] = adjusted_confidence
+            alert['credibility_score'] = cred_result['camera_credibility']
+            alert['camera_tier'] = camera_tier
+            
+            # Use adjusted confidence for logic
+            confidence = adjusted_confidence
+            
+            # Filter low confidence alerts (noise reduction)
+            # If adjusted confidence < 0.25, ignore completely (unless high raw confidence?)
+            if confidence < 0.25:
+                logger.debug(f"[{camera_id}] Ignored low confidence alert (adj={confidence:.2f}, raw={raw_confidence:.2f})")
+                return
+
             # FIRESTORE-FIRST LOGIC
             if camera_id not in self.active_events:
                 # === FIRST ALERT: CREATE EVENT IN FIRESTORE ===
@@ -129,6 +167,7 @@ class EventProcessor:
                 
                 logger.info(f"[{camera_id}] New violence event started (conf={confidence:.2f}, event_id={event_id})")
                 
+                # Store active event (no severity analysis)
                 self.active_events[camera_id] = {
                     'event_id': event_id,  # Firestore document ID
                     'start_time': detection_timestamp,
@@ -139,22 +178,14 @@ class EventProcessor:
                     'frames_temp_paths': []
                 }
                 
-                # Publish event_started to frontend (severity_level: PENDING - yellow)
+                # Publish event_started (no severity - just violence detection)
                 await self._publish_event_notification('event_started', camera_id, {
                     'event_id': event_id,
                     'timestamp': detection_timestamp,
                     'confidence': confidence,
+                    'raw_confidence': raw_confidence,
                     'snapshot': alert.get('snapshot', ''),
-                    'status': 'active',
-                    'severity_level': 'PENDING'  # Will be updated by background worker
-                })
-                
-                # Queue for background severity analysis (non-blocking)
-                await self.severity_queue.put({
-                    'event_id': event_id,
-                    'camera_id': camera_id,
-                    'confidence': confidence,
-                    'timestamp': detection_timestamp
+                    'status': 'active'
                 })
                 
             else:
@@ -196,6 +227,7 @@ class EventProcessor:
                     if new_event_id:
                         logger.info(f"[{camera_id}] New violence event started after max duration (conf={confidence:.2f}, event_id={new_event_id})")
                         
+                        # Store active event (no severity analysis)
                         self.active_events[camera_id] = {
                             'event_id': new_event_id,
                             'start_time': detection_timestamp,
@@ -222,6 +254,10 @@ class EventProcessor:
                 
                 # Check if this alert has higher confidence
                 if confidence > event['max_confidence']:
+                    # Preserve snapshot if new alert is missing it
+                    if not alert.get('snapshot') and event['best_alert'].get('snapshot'):
+                        alert['snapshot'] = event['best_alert'].get('snapshot')
+                        
                     event['max_confidence'] = confidence
                     event['best_alert'] = alert
                     
@@ -237,6 +273,7 @@ class EventProcessor:
                         'event_id': event['event_id'],
                         'timestamp': event['start_time'],  # Keep original timestamp
                         'confidence': confidence,
+                        'raw_confidence': raw_confidence,
                         'snapshot': alert.get('snapshot', ''),
                         'status': 'active'
                     })
@@ -393,6 +430,8 @@ class EventProcessor:
                     'rule_matched': analysis_result.get('rule_matched'),
                     'risk_profile': analysis_result.get('risk_profile')
                 })
+                
+                logger.info(f"[{camera_id}] Published severity_updated: {severity_level} for event {event_id}")
                 
                 self.severity_queue.task_done()
                 

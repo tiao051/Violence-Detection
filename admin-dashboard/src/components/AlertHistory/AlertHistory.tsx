@@ -1,10 +1,33 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useAlerts, Alert } from "../../contexts";
+import Swal from 'sweetalert2';
 import "./AlertHistory.css";
 
 const AlertHistory: React.FC = () => {
   const { alerts, clearAlerts, markAsReviewed } = useAlerts();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [cameraCredibility, setCameraCredibility] = useState<Record<string, any>>({});
+  const [isReporting, setIsReporting] = useState(false);
+
+  // Fetch camera credibility on mount
+  useEffect(() => {
+    const fetchCredibility = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/credibility/camera-intelligence');
+        if (response.ok) {
+          const data = await response.json();
+          const credibilityMap: Record<string, any> = {};
+          data.cameras.forEach((cam: any) => {
+            credibilityMap[cam.camera_id] = cam;
+          });
+          setCameraCredibility(credibilityMap);
+        }
+      } catch (e) {
+        console.error("Failed to fetch camera credibility:", e);
+      }
+    };
+    fetchCredibility();
+  }, []);
 
   // Auto-update selectedAlert when alerts array changes (e.g., event_completed received)
   useEffect(() => {
@@ -65,6 +88,54 @@ const AlertHistory: React.FC = () => {
     setSelectedAlert(alert);
   };
 
+  const handleReportFalseAlarm = async () => {
+    if (!selectedAlert) return;
+    setIsReporting(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/credibility/mark-false-alarm/${selectedAlert.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alert_id: selectedAlert.id,
+          camera_id: selectedAlert.camera_id,
+          reason: "User reported via dashboard"
+        })
+      });
+
+      if (response.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Report Sent',
+          text: 'Alert reported as False Alarm. Thank you for your feedback!',
+          timer: 2500,
+          showConfirmButton: false,
+          background: '#1e293b',
+          color: '#fff'
+        });
+        setSelectedAlert(null); // Close panel
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: 'Failed to report false alarm.',
+          background: '#1e293b',
+          color: '#fff'
+        });
+      }
+    } catch (e) {
+      console.error("Error reporting false alarm:", e);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'System error while reporting.',
+        background: '#1e293b',
+        color: '#fff'
+      });
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
   const checkVideoStatus = async () => {
     if (!selectedAlert) return;
 
@@ -88,6 +159,21 @@ const AlertHistory: React.FC = () => {
     } catch (e) {
       console.error("Error checking video status:", e);
     }
+  };
+
+  const getCredibilityBadge = (cameraId: string) => {
+    const cred = cameraCredibility[cameraId];
+    if (!cred) return null;
+
+    let tierClass = "medium";
+    if (cred.credibility_tier === "HIGH") tierClass = "high";
+    if (cred.credibility_tier === "LOW") tierClass = "low";
+
+    return (
+      <span className={`credibility-badge credibility-${tierClass}`} title={`Score: ${cred.credibility_score} | ${cred.recommendation}`}>
+        {cred.credibility_tier} TRUST
+      </span>
+    );
   };
 
   return (
@@ -162,7 +248,6 @@ const AlertHistory: React.FC = () => {
             <table className="alert-table">
               <thead>
                 <tr>
-                  <th>Severity</th>
                   <th>Status</th>
                   <th>Time</th>
                   <th>Camera</th>
@@ -175,31 +260,31 @@ const AlertHistory: React.FC = () => {
                   <tr
                     key={alert.id}
                     onClick={() => handleRowClick(alert)}
-                    className={`${selectedAlert?.id === alert.id ? 'selected' : ''} severity-${alert.severity_level?.toLowerCase() || 'pending'}`}
+                    className={`${selectedAlert?.id === alert.id ? 'selected' : ''}`}
                   >
-                    <td>
-                      <span className={`severity-badge severity-${alert.severity_level?.toLowerCase() || 'pending'}`}>
-                        {alert.severity_level || 'PENDING'}
-                      </span>
-                    </td>
                     <td>
                       <span className={`status-badge ${alert.is_reviewed ? 'reviewed' : 'new'}`}>
                         {alert.is_reviewed ? 'Reviewed' : 'New'}
                       </span>
                     </td>
                     <td className="time-cell">{formatDate(alert.timestamp)}</td>
-                    <td className="camera-cell">{alert.camera_id}</td>
+                    <td className="camera-cell">
+                      {alert.camera_id}
+                      {getCredibilityBadge(alert.camera_id) && (
+                        <span style={{ marginLeft: '6px', fontSize: '10px' }}>{getCredibilityBadge(alert.camera_id)}</span>
+                      )}
+                    </td>
                     <td>
                       <div className="confidence-bar-wrapper">
                         <div
                           className="confidence-bar"
-                          style={{ width: `${alert.violence_score * 100}%` }}
+                          style={{ width: `${(alert.raw_violence_score || alert.violence_score) * 100}%` }}
                         />
-                        <span>{(alert.violence_score * 100).toFixed(1)}%</span>
+                        <span>{((alert.raw_violence_score || alert.violence_score) * 100).toFixed(1)}%</span>
                       </div>
                     </td>
                     <td>
-                      {alert.image_base64 && (
+                      {alert.image_base64 ? (
                         <img
                           src={
                             alert.image_base64.startsWith("data:")
@@ -209,6 +294,10 @@ const AlertHistory: React.FC = () => {
                           alt="Snapshot"
                           className="table-thumb"
                         />
+                      ) : (
+                        <div className="no-snapshot-thumb" title="No snapshot available">
+                          <span>📷</span>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -254,11 +343,10 @@ const AlertHistory: React.FC = () => {
                         const parent = target.parentElement;
                         if (parent && selectedAlert.image_base64) {
                           parent.innerHTML = `
-                            <img src="${
-                              selectedAlert.image_base64.startsWith("data:")
-                                ? selectedAlert.image_base64
-                                : "data:image/jpeg;base64," +
-                                  selectedAlert.image_base64
+                            <img src="${selectedAlert.image_base64.startsWith("data:")
+                              ? selectedAlert.image_base64
+                              : "data:image/jpeg;base64," +
+                              selectedAlert.image_base64
                             }" alt="Snapshot" style="max-width: 100%; border-radius: 8px;" />
                             <div style="text-align: center; color: #f87171; margin-top: 8px;">⚠️ Video format not supported. Old events may have corrupted videos.</div>
                           `;
@@ -303,39 +391,22 @@ const AlertHistory: React.FC = () => {
                 </div>
                 <div className="info-row">
                   <label>Camera:</label>
-                  <span>{selectedAlert.camera_id}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{selectedAlert.camera_id}</span>
+                    {getCredibilityBadge(selectedAlert.camera_id)}
+                  </div>
                 </div>
                 <div className="info-row">
                   <label>Confidence:</label>
                   <span className="danger-text">
-                    {(selectedAlert.violence_score * 100).toFixed(1)}%
+                    {((selectedAlert.raw_violence_score || selectedAlert.violence_score) * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="info-row">
-                  <label>Severity:</label>
-                  <span className={`severity-badge severity-${selectedAlert.severity_level?.toLowerCase() || 'pending'}`}>
-                    {selectedAlert.severity_level || 'PENDING'}
-                    {selectedAlert.severity_score !== undefined && ` (${(selectedAlert.severity_score * 100).toFixed(0)}%)`}
-                  </span>
-                </div>
-                {selectedAlert.rule_matched && (
-                  <div className="info-row">
-                    <label>Rule:</label>
-                    <span className="mono-text">{selectedAlert.rule_matched}</span>
-                  </div>
-                )}
-                {selectedAlert.risk_profile && (
-                  <div className="info-row">
-                    <label>Risk Profile:</label>
-                    <span>{selectedAlert.risk_profile}</span>
-                  </div>
-                )}
                 <div className="info-row">
                   <label>Status:</label>
                   <span
-                    className={`event-status ${
-                      selectedAlert.status || "completed"
-                    }`}
+                    className={`event-status ${selectedAlert.status || "completed"
+                      }`}
                   >
                     {selectedAlert.status === "active" ? "Active" : "Completed"}
                   </span>
@@ -343,6 +414,29 @@ const AlertHistory: React.FC = () => {
                 <div className="info-row">
                   <label>ID:</label>
                   <span className="mono-text">{selectedAlert.id}</span>
+                </div>
+
+                <div className="detail-actions" style={{ marginTop: '24px', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Is this a false alarm?</p>
+                  <button
+                    className="report-false-btn"
+                    onClick={handleReportFalseAlarm}
+                    disabled={isReporting}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: 'var(--error-color)',
+                      border: '1px solid var(--error-color)',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {isReporting ? "Reporting..." : "🚫 Report False Alarm"}
+                  </button>
                 </div>
               </div>
             </div>

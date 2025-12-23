@@ -3,9 +3,9 @@ import Header from './components/Header'
 import Sidebar from './components/Sidebar/Sidebar'
 import { VideoDashboard } from './components/VideoDashboard'
 import AlertHistory from './components/AlertHistory/AlertHistory'
-import Analytics from './components/Analytics'
+
 import MapDashboard from './components/MapDashboard'
-import { ThemeProvider, AlertProvider, AnalyticsProvider } from './contexts'
+import { ThemeProvider, AlertProvider } from './contexts'
 import './App.css'
 
 const App = () => {
@@ -16,8 +16,7 @@ const App = () => {
     switch (activeTab) {
       case 'history':
         return <AlertHistory />;
-      case 'analytics':
-        return <Analytics />;
+
       case 'map':
         return <MapDashboard />;
       case 'settings':
@@ -30,22 +29,20 @@ const App = () => {
   return (
     <ThemeProvider>
       <AlertProvider>
-        <AnalyticsProvider>
-          <div className="app-container">
-            <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-            <div className="main-content">
-              <Header />
-              <main className="content-area">
-                {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
-                <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
-                  <VideoDashboard />
-                </div>
-                {/* Other tabs render normally */}
-                {activeTab !== 'live' && renderOtherContent()}
-              </main>
-            </div>
+        <div className="app-container">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <div className="main-content">
+            <Header />
+            <main className="content-area">
+              {/* Keep-Alive: VideoDashboard stays mounted, just hidden */}
+              <div style={{ display: activeTab === 'live' ? 'block' : 'none', height: '100%' }}>
+                <VideoDashboard />
+              </div>
+              {/* Other tabs render normally */}
+              {activeTab !== 'live' && renderOtherContent()}
+            </main>
           </div>
-        </AnalyticsProvider>
+        </div>
       </AlertProvider>
     </ThemeProvider>
   )

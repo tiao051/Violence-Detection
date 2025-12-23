@@ -392,10 +392,10 @@ const CameraVideo: React.FC<CameraVideoProps> = ({
         )}
       </button>
 
-      {/* Alert Overlay */}
+      {/* Alert Overlay - Simple violence detection alert */}
       {isAlerting && (
         <div className="alert-overlay">
-          <span className="alert-icon">⚠️</span>
+          <span className="alert-icon">🚨</span>
           <span className="alert-text">VIOLENCE DETECTED</span>
           {alertSnapshot && (
             <div className="alert-snapshot">

@@ -1,0 +1,53 @@
+[
+    {
+        "pattern": [
+            "Cam_cam1",
+            "Hour_night",
+            "Dur_short"
+        ],
+        "outcome": "false_positive",
+        "confidence": 0.82,
+        "support": 0.15,
+        "lift": 2.3,
+        "interpretation": "Pattern ['Cam_cam1', 'Hour_night', 'Dur_short'] often leads to false alarms",
+        "action": "reduce_confidence"
+    },
+    {
+        "pattern": [
+            "Conf_low",
+            "Dur_short"
+        ],
+        "outcome": "false_positive",
+        "confidence": 0.76,
+        "support": 0.28,
+        "lift": 2.1,
+        "interpretation": "Pattern ['Conf_low', 'Dur_short'] often leads to false alarms",
+        "action": "reduce_confidence"
+    },
+    {
+        "pattern": [
+            "Cam_cam4",
+            "Hour_evening",
+            "Conf_medium"
+        ],
+        "outcome": "false_positive",
+        "confidence": 0.71,
+        "support": 0.12,
+        "lift": 1.9,
+        "interpretation": "Pattern ['Cam_cam4', 'Hour_evening', 'Conf_medium'] often leads to false alarms",
+        "action": "reduce_confidence"
+    },
+    {
+        "pattern": [
+            "Cam_cam5",
+            "Day_Saturday",
+            "Dur_short"
+        ],
+        "outcome": "false_positive",
+        "confidence": 0.68,
+        "support": 0.08,
+        "lift": 1.8,
+        "interpretation": "Pattern ['Cam_cam5', 'Day_Saturday', 'Dur_short'] often leads to false alarms",
+        "action": "reduce_confidence"
+    }
+]

@@ -1,160 +1,225 @@
-/* VideoDashboard Styles */
-
+/* Main Dashboard Grid */
 .video-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
   gap: 16px;
-  width: 100%;
-  height: calc(100vh - 80px); /* Subtract header height */
+  height: 100%;
   padding: 16px;
-  box-sizing: border-box;
-  transition: all 0.3s ease;
+  background-color: #0f172a;
+  /* Deep slate background */
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Expanded Layout */
 .video-dashboard-grid.has-expanded {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
 }
 
+/* Individual Camera Container */
 .camera-video-container {
   position: relative;
-  background: var(--bg-secondary);
-  border-radius: 8px;
+  background: #000;
+  border-radius: 12px;
   overflow: hidden;
-  border: 2px solid var(--border-color); /* Increased border width */
-  min-height: 300px;
-  box-shadow: 0 4px 12px var(--shadow-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.camera-video-container:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: scale(1.005);
 }
 
 /* Expanded State */
-.video-dashboard-grid.has-expanded .camera-video-container {
-  width: 32%; /* Small thumbnails */
-  height: 200px;
-  min-height: unset;
-  order: 2;
-}
-
-.video-dashboard-grid.has-expanded .camera-video-container.expanded {
-  width: 100%; /* Full width */
-  height: calc(100vh - 120px); /* Maximize height */
-  order: 1;
-  margin-bottom: 16px;
+.camera-video-container.expanded {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
   border-color: var(--primary-color);
-  z-index: 50;
+  z-index: 10;
 }
 
-/* Replay Controls */
-.replay-controls {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  padding: 10px 20px;
-  border-radius: 30px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  z-index: 100;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: opacity 0.3s;
+/* Hidden cameras when one is expanded */
+.video-dashboard-grid.has-expanded .camera-video-container:not(.expanded) {
+  display: none;
 }
 
-.replay-controls:hover {
-  opacity: 1;
-}
-
-.control-btn {
-  background: transparent;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-}
-
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.control-btn.primary {
-  background: var(--primary-color);
-  padding: 12px;
-}
-
-.control-btn.primary:hover {
-  background: var(--primary-hover);
-}
-
-.control-btn.live-btn {
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-weight: bold;
-  font-size: 12px;
-  background: #dc2626;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.control-btn.live-btn:hover {
-  background: #b91c1c;
-}
-
-.control-icon {
-  width: 24px;
-  height: 24px;
-  fill: currentColor;
-}
-
-/* Alert State - Blinking Red Border */
-@keyframes blink-border {
-  0% { border-color: rgba(255, 0, 0, 1); box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
-  50% { border-color: rgba(255, 0, 0, 0.3); box-shadow: 0 0 0 rgba(255, 0, 0, 0); }
-  100% { border-color: rgba(255, 0, 0, 1); box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
-}
-
+/* Active Alert State */
 .camera-video-container.alert-active {
-  animation: blink-border 1s infinite;
-  border-width: 4px;
-  z-index: 10; /* Bring to front */
+  border: 2px solid #ef4444;
+  animation: alert-pulse 1.5s infinite;
+}
+
+@keyframes alert-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+/* Video Element */
+.camera-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #1a1a1a;
+}
+
+/* Fullscreen object-fit for expanded view */
+.camera-video-container.expanded .camera-video-element {
+  object-fit: contain;
+}
+
+/* Overlays */
+.camera-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.camera-label::before {
+  content: '● REC';
+  color: #ef4444;
+  font-size: 10px;
+  margin-right: 8px;
+  animation: blink 2s infinite;
+}
+
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Connection Status */
+.connection-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  z-index: 6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #9ca3af;
+}
+
+.connection-status.connected .status-dot {
+  background-color: #22c55e;
+  box-shadow: 0 0 4px #22c55e;
+}
+
+.connection-status.connecting .status-dot {
+  background-color: #eab308;
+}
+
+.connection-status.failed .status-dot {
+  background-color: #ef4444;
+}
+
+.connection-status.disconnected .status-dot {
+  background-color: #9ca3af;
+}
+
+.status-text {
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
 }
 
 /* Alert Overlay */
 .alert-overlay {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(220, 38, 38, 0.9); /* Red-600 */
-  color: white;
-  padding: 8px 12px;
-  border-radius: 4px;
+  inset: 0;
+  /* Cover entire video */
   display: flex;
-  flex-direction: column; /* Stack icon/text and image */
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  font-weight: bold;
-  font-size: 14px;
-  z-index: 20;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  animation: pulse 1s infinite;
-  max-width: 200px; /* Limit width */
+  /* background: rgba(239, 68, 68, 0.15); Subtle tint */
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.3) 100%);
+  z-index: 4;
+  pointer-events: none;
+  /* Let clicks pass through */
+  animation: flash 0.5s infinite alternate;
+}
+
+@keyframes flash {
+  from {
+    opacity: 0.5;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.alert-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+
+.alert-text {
+  font-size: 24px;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  background: #ef4444;
+  padding: 4px 16px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .alert-snapshot {
-  width: 100%;
-  border-radius: 4px;
-  overflow: hidden;
+  margin-top: 16px;
+  width: 200px;
   border: 2px solid white;
-  margin-top: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: black;
 }
 
 .alert-snapshot img {
@@ -163,143 +228,130 @@
   display: block;
 }
 
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-.camera-video-element {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-/* Loading overlay */
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 500;
-  z-index: 10;
-}
-
-/* Error overlay */
-.error-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--error-color);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  text-align: center;
-  padding: 20px;
-  z-index: 10;
-}
-
 /* Audio Control Button */
 .audio-control-btn {
   position: absolute;
-  top: 10px;
-  right: 10px; /* Default position */
+  bottom: 16px;
+  left: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   cursor: pointer;
-  z-index: 25; /* Above alert overlay */
+  z-index: 10;
   transition: all 0.2s;
-  font-size: 16px;
+  backdrop-filter: blur(4px);
 }
 
 .audio-control-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.2);
   transform: scale(1.1);
 }
 
 .audio-control-btn.muted {
-  background: rgba(220, 38, 38, 0.8); /* Red when muted */
-  border-color: rgba(220, 38, 38, 1);
+  opacity: 0.7;
 }
 
-/* Adjust connection status position to not overlap with audio button */
-.connection-status {
+/* Loading/Error States */
+.loading-overlay,
+.error-overlay {
   position: absolute;
-  top: 10px;
-  right: 50px; /* Move left to make space for audio button */
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #111827;
+  color: #9ca3af;
+  font-size: 14px;
+  z-index: 2;
+}
+
+.error-overlay {
+  color: #ef4444;
+  background: #1a1010;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Replay Controls (Bottom Center) */
+.replay-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  z-index: 5;
-  border: 1px solid var(--border-color);
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 32px;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
+.replay-controls:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.control-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: var(--border-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.connection-status.connecting .status-dot {
-  background: var(--warning-color);
-  animation: pulse 1s infinite;
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transform: scale(1.1);
 }
 
-.connection-status.connected .status-dot {
-  background: var(--accent-color);
+.control-btn.primary {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.connection-status.failed .status-dot,
-.connection-status.disconnected .status-dot {
-  background: var(--error-color);
+.control-btn.primary:hover {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-.status-text {
-  text-transform: capitalize;
+.control-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.live-btn {
+  width: auto;
+  padding: 0 16px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-/* Camera label */
-.camera-label {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 600;
-  z-index: 5;
-  border: 1px solid var(--border-color);
+.live-btn:hover {
+  background: #ef4444;
+  color: white;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
 }
