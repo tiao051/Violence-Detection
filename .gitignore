@@ -71,6 +71,7 @@ backend/firebase-service-account.json
 # Dataset
 dataset/
 outputs/
+.csv
 
 # Docker volumes and data
 docker-data/
