@@ -94,6 +94,7 @@ class AuthProvider with ChangeNotifier {
       _errorMessage = e.toString();
       _isLoadingGoogle = false;
       notifyListeners();
+      rethrow; // <--- RETHROW to let UI handle the error
     }
   }
 

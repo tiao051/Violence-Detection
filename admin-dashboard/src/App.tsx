@@ -6,6 +6,7 @@ import AlertHistory from './components/AlertHistory/AlertHistory'
 import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard'
 
 import MapDashboard from './components/MapDashboard'
+import UserManagement from './components/UserManagement/UserManagement'
 import { ThemeProvider, AlertProvider } from './contexts'
 import './App.css'
 
@@ -19,6 +20,10 @@ const App = () => {
         return <AlertHistory />;
       case 'analytics':
         return <AnalyticsDashboard />;
+      case 'users':
+        return <UserManagement />;
+      case 'map':
+        return <MapDashboard />;
       case 'settings':
         return <div className="placeholder-view"><h2>⚙️ Settings</h2><p>Coming soon...</p></div>;
       default:

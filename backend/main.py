@@ -23,7 +23,7 @@ try:
     from src.core.config import settings
     from src.infrastructure.rtsp import CameraWorker
     from src.infrastructure.kafka import get_kafka_producer
-    from src.presentation.routes import auth_router, websocket_router, analytics_router, credibility_router
+    from src.presentation.routes import auth_router, websocket_router, analytics_router, credibility_router, admin_router
     from src.infrastructure.firebase.setup import initialize_firebase
     from src.application.event_processor import get_event_processor
 except Exception as e:
@@ -179,6 +179,7 @@ app.include_router(auth_router)
 app.include_router(websocket_router)
 app.include_router(analytics_router)
 app.include_router(credibility_router, prefix="/api/credibility", tags=["credibility"])
+app.include_router(admin_router)
 
 
 @app.get("/api/events/lookup")

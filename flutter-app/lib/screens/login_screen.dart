@@ -38,24 +38,52 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Uses context.read() instead of context.watch() because we only need
   /// to call the provider, not rebuild when state changes.
   Future<void> _handleLogin() async {
-    final authProvider = context.read<AuthProvider>();
+    // 1. Dismiss keyboard
+    FocusManager.instance.primaryFocus?.unfocus();
 
-    await authProvider.loginWithEmail(
-      email: _emailController.text,
-      password: _passwordController.text,
-    );
+    final authProvider = context.read<AuthProvider>();
+    String? errorMsg;
+
+    try {
+      print("[DEBUG] Calling loginWithEmail...");
+      await authProvider.loginWithEmail(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      print("[DEBUG] Login success, no exception thrown.");
+    } catch (e) {
+      print("[DEBUG] Caught exception in LoginScreen: $e");
+      // Clean up the exception string "Exception: ..."
+      errorMsg = e.toString().replaceAll("Exception: ", "");
+    }
+
+    // 2. Add small delay to allow UI (keyboard) to settle
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // 3. Fallback to provider error if local catch missed it
+    errorMsg ??= authProvider.errorMessage;
+
+    print("[DEBUG] Final Error Message: '$errorMsg'");
 
     // Check mounted before using context after async operation
-    if (mounted && authProvider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(authProvider.errorMessage!),
-          backgroundColor: Colors.red,
+    if (mounted && errorMsg != null) {
+      print("[DEBUG] Showing Dialog...");
+      showDialog(
+        context: context,
+        barrierDismissible: false, // User must tap OK
+        builder: (context) => AlertDialog(
+          title:
+              const Text('Login Failed', style: TextStyle(color: Colors.red)),
+          content: Text(errorMsg!),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
         ),
       );
     }
-
-    // GoRouter redirect will automatically navigate to /home on successful login
   }
 
   /// Shows a dialog to send password reset email
@@ -329,15 +357,40 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         onPressed: () async {
-                          await context
-                              .read<AuthProvider>()
-                              .signInWithGoogleProvider();
+                          // 1. Dismiss keyboard just in case
+                          FocusManager.instance.primaryFocus?.unfocus();
 
-                          if (mounted && auth.errorMessage != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(auth.errorMessage!),
-                                backgroundColor: kErrorColor,
+                          final provider = context.read<AuthProvider>();
+                          String? errorMsg;
+
+                          try {
+                            await provider.signInWithGoogleProvider();
+                          } catch (e) {
+                            errorMsg =
+                                e.toString().replaceAll("Exception: ", "");
+                          }
+
+                          // 2. Add small delay
+                          await Future.delayed(
+                              const Duration(milliseconds: 300));
+
+                          // 3. Fallback to provider error
+                          errorMsg ??= provider.errorMessage;
+
+                          if (mounted && errorMsg != null) {
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Login Failed',
+                                    style: TextStyle(color: Colors.red)),
+                                content: Text(errorMsg!),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
                               ),
                             );
                           }

@@ -6,6 +6,8 @@ import 'package:security_app/providers/settings_provider.dart';
 import 'package:security_app/screens/tabs/camera_tab.dart';
 import 'package:security_app/screens/tabs/event_tab.dart';
 import 'package:security_app/services/notification_service.dart';
+import 'package:security_app/providers/auth_provider.dart'
+    as package_auth_provider;
 
 /// Home screen that exposes the app's primary tabs (Cameras, Events).
 ///
@@ -40,30 +42,36 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // Initialize notifications with deep link handler for event details
-    _notificationService.initialize(
-      onNotificationTap: (eventId) async {
-        // Navigate to event detail when notification is tapped
-        // Use context.push() to add to navigation stack
-        if (mounted) {
-          // Find the event in provider and navigate to it
-          final eventProvider = context.read<EventProvider>();
-          try {
-            final event = eventProvider.events.firstWhere(
-              (e) => e.id == eventId,
-            );
-            await context.push('/event_detail', extra: event);
-            // Force EventTab rebuild when back
-            setState(() {
-              _rebuildKey++;
-            });
-          } catch (e) {
-            // Event not found in list, could be loading or not yet fetched
-            debugPrint('Event $eventId not found in provider');
+    // Initialize notifications after build frame to access Provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<package_auth_provider.AuthProvider>();
+
+      _notificationService.initialize(
+        accessToken: authProvider.accessToken,
+        onNotificationTap: (eventId) async {
+          // Navigate to event detail when notification is tapped
+          if (mounted) {
+            final eventProvider = context.read<EventProvider>();
+            try {
+              // Try to find event if already loaded
+              final event = eventProvider.events.firstWhere(
+                (e) => e.id == eventId,
+                orElse: () => throw Exception("Event not loaded"),
+              );
+              await context.push('/event_detail', extra: event);
+              setState(() {
+                _rebuildKey++;
+              });
+            } catch (e) {
+              // If not found, just go to event tab (simple fallback)
+              // Ideally fetch event by ID from backend
+              debugPrint('Event $eventId not found locally, opening Event Tab');
+              _onItemTapped(1);
+            }
           }
-        }
-      },
-    );
+        },
+      );
+    });
   }
 
   void _onItemTapped(int index) {

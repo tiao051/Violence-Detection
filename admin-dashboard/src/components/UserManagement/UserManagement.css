@@ -1,0 +1,443 @@
+﻿/* User Management Container - matches AlertHistory pattern */
+.user-management-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  opacity: 0;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Header - matches history-header */
+.user-header {
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-title-group h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.user-count {
+  background-color: rgba(74, 222, 128, 0.1);
+  color: var(--accent-color);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.refresh-btn {
+  padding: 8px 16px;
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.refresh-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* Table Container */
+.table-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* Table - matches alert-table pattern */
+.user-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.user-table th {
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.user-table tbody tr {
+  background-color: var(--bg-primary);
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.user-table tbody tr:hover {
+  transform: translateY(-2px);
+  background-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.user-table td {
+  padding: 16px;
+  vertical-align: middle;
+}
+
+.user-table td:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.user-table td:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* Cells */
+.email-cell {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.name-cell {
+  color: var(--text-secondary);
+}
+
+/* Badges */
+.cameras-badge {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cameras-badge.has-cameras {
+  background-color: rgba(74, 222, 128, 0.1);
+  color: var(--accent-color);
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.active {
+  background-color: rgba(74, 222, 128, 0.1);
+  color: var(--accent-color);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.status-badge.disabled {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: var(--error-color);
+  border: 1px solid rgba(220, 53, 69, 0.2);
+}
+
+/* Action Buttons */
+.actions-cell {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--border-color);
+  background-color: transparent;
+  color: var(--text-secondary);
+}
+
+.action-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.action-btn.assign {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.action-btn.assign:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.action-btn.disable:hover {
+  background-color: rgba(220, 53, 69, 0.2);
+  color: var(--error-color);
+  border-color: var(--error-color);
+}
+
+.action-btn.enable {
+  background-color: rgba(74, 222, 128, 0.1);
+  color: var(--accent-color);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+/* Loading & Error States */
+.loading-state,
+.error-state,
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-secondary);
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-icon,
+.empty-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.retry-btn {
+  padding: 8px 20px;
+  background-color: var(--accent-color);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.retry-btn:hover {
+  opacity: 0.9;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.modal-user-info {
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.modal-user-info span {
+  color: var(--text-secondary);
+}
+
+/* Camera List */
+.camera-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.camera-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid transparent;
+}
+
+.camera-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.camera-item.selected {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.camera-item.assigned-other {
+  opacity: 0.5;
+  
+}
+
+.camera-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: #3b82f6;
+  width: 18px;
+  height: 18px;
+}
+
+.camera-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.camera-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.camera-location {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.camera-owner {
+  font-size: 12px;
+  color: var(--warning-color);
+  margin-top: 4px;
+}
+
+/* Modal Actions */
+.modal-actions {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-cancel,
+.btn-save {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.btn-cancel {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-cancel:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn-save {
+  background-color: #3b82f6;
+  border: none;
+  color: white;
+}
+
+.btn-save:hover {
+  background-color: #2563eb;
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  
+}
+
