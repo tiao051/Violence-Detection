@@ -190,14 +190,15 @@ class SparkInsightsJob:
         except Exception as e:
             # Fallback to local file
             logger.warning(f"HDFS not available: {e}")
-            local_path = "tmp/verified_scenarios.csv"
+            local_path = "ai_service/tmp/verified_scenarios.csv"
             logger.info(f"Loading from local file: {local_path}")
             df = self.spark.read.option("header", "true").option("inferSchema", "true").csv(local_path)
             return df
 
     def _preprocess(self, df: DataFrame):
         df = df.withColumn("confidence", F.col("confidence").cast("double")) \
-               .withColumn("duration", F.col("duration").cast("double"))
+               .withColumn("duration", F.col("duration").cast("double")) \
+               .withColumn("is_verified", F.col("is_verified").cast("boolean"))
 
         # 1. Convert Timestamp
         df = df.withColumn("dt", F.from_unixtime(F.col("timestamp") / 1000).cast("timestamp"))
