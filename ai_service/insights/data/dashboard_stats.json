@@ -1,0 +1,282 @@
+{
+  "generated_at": "2025-10-25T08:30:00Z",
+  "trends": {
+    "weekly": [
+      {
+        "camera_id": "cam1",
+        "camera_name": "Luy Ban Bich Street",
+        "current_count": 1850,
+        "previous_count": 1200,
+        "change_pct": 54.2,
+        "trend": "up"
+      },
+      {
+        "camera_id": "cam4",
+        "camera_name": "Tan Phu Market",
+        "current_count": 450,
+        "previous_count": 410,
+        "change_pct": 9.8,
+        "trend": "up"
+      },
+      {
+        "camera_id": "cam5",
+        "camera_name": "Dam Sen Park",
+        "current_count": 380,
+        "previous_count": 375,
+        "change_pct": 1.3,
+        "trend": "stable"
+      },
+      {
+        "camera_id": "cam3",
+        "camera_name": "Tan Ky Tan Quy Street",
+        "current_count": 305,
+        "previous_count": 310,
+        "change_pct": -1.6,
+        "trend": "stable"
+      },
+      {
+        "camera_id": "cam2",
+        "camera_name": "Au Co Junction",
+        "current_count": 240,
+        "previous_count": 245,
+        "change_pct": -2.0,
+        "trend": "stable"
+      }
+    ],
+    "monthly": [
+      {
+        "camera_id": "cam1",
+        "camera_name": "Luy Ban Bich Street",
+        "current_count": 7800,
+        "previous_count": 5000,
+        "change_pct": 56.0,
+        "trend": "up"
+      },
+      {
+        "camera_id": "cam4",
+        "camera_name": "Tan Phu Market",
+        "current_count": 1900,
+        "previous_count": 1750,
+        "change_pct": 8.5,
+        "trend": "up"
+      },
+      {
+        "camera_id": "cam5",
+        "camera_name": "Dam Sen Park",
+        "current_count": 1600,
+        "previous_count": 1650,
+        "change_pct": -3.0,
+        "trend": "stable"
+      },
+      {
+        "camera_id": "cam3",
+        "camera_name": "Tan Ky Tan Quy Street",
+        "current_count": 1300,
+        "previous_count": 1280,
+        "change_pct": 1.5,
+        "trend": "stable"
+      },
+      {
+        "camera_id": "cam2",
+        "camera_name": "Au Co Junction",
+        "current_count": 1050,
+        "previous_count": 1100,
+        "change_pct": -4.5,
+        "trend": "down"
+      }
+    ]
+  },
+  "anomalies": [
+    {
+      "camera_id": "cam1",
+      "camera_name": "Luy Ban Bich Street",
+      "event_count": 95400,
+      "z_score": 3.8,
+      "is_anomaly": true,
+      "severity": "critical"
+    },
+    {
+      "camera_id": "cam4",
+      "camera_name": "Tan Phu Market",
+      "event_count": 38000,
+      "z_score": 1.6,
+      "is_anomaly": true,
+      "severity": "warning"
+    }
+  ],
+  "forecast": {
+    "forecast": [
+      {
+        "date": "2025-10-25",
+        "predicted_count": 310.5,
+        "day": "Saturday"
+      },
+      {
+        "date": "2025-10-26",
+        "predicted_count": 350.0,
+        "day": "Sunday"
+      },
+      {
+        "date": "2025-10-27",
+        "predicted_count": 180.2,
+        "day": "Monday"
+      },
+      {
+        "date": "2025-10-28",
+        "predicted_count": 175.0,
+        "day": "Tuesday"
+      },
+      {
+        "date": "2025-10-29",
+        "predicted_count": 182.0,
+        "day": "Wednesday"
+      },
+      {
+        "date": "2025-10-30",
+        "predicted_count": 190.5,
+        "day": "Thursday"
+      },
+      {
+        "date": "2025-10-31",
+        "predicted_count": 250.0,
+        "day": "Friday"
+      }
+    ],
+    "history": [
+      {
+        "date": "2025-10-24",
+        "count": 280
+      },
+      {
+        "date": "2025-10-23",
+        "count": 190
+      }
+    ],
+    "total_predicted_next_week": 1638.2,
+    "trend_direction": "increasing"
+  },
+  "heatmap": [
+    {
+      "day": "Mon",
+      "total_events": 1800,
+      "hours": [
+        {"hour": 0, "count": 120, "level": "high"},
+        {"hour": 1, "count": 115, "level": "high"},
+        {"hour": 2, "count": 80, "level": "high"},
+        {"hour": 3, "count": 40, "level": "medium"},
+        {"hour": 19, "count": 60, "level": "medium"},
+        {"hour": 20, "count": 90, "level": "high"},
+        {"hour": 21, "count": 100, "level": "high"},
+        {"hour": 22, "count": 130, "level": "high"},
+        {"hour": 23, "count": 140, "level": "high"}
+      ]
+    },
+    {
+      "day": "Tue",
+      "total_events": 1750,
+      "hours": [
+        {"hour": 0, "count": 110, "level": "high"},
+        {"hour": 1, "count": 90, "level": "high"},
+        {"hour": 2, "count": 50, "level": "medium"},
+        {"hour": 20, "count": 85, "level": "high"},
+        {"hour": 21, "count": 95, "level": "high"},
+        {"hour": 22, "count": 120, "level": "high"},
+        {"hour": 23, "count": 135, "level": "high"}
+      ]
+    },
+    {
+      "day": "Wed",
+      "total_events": 1820,
+      "hours": [
+        {"hour": 0, "count": 115, "level": "high"},
+        {"hour": 1, "count": 100, "level": "high"},
+        {"hour": 2, "count": 60, "level": "medium"},
+        {"hour": 20, "count": 88, "level": "high"},
+        {"hour": 21, "count": 98, "level": "high"},
+        {"hour": 22, "count": 125, "level": "high"},
+        {"hour": 23, "count": 138, "level": "high"}
+      ]
+    },
+    {
+      "day": "Thu",
+      "total_events": 1900,
+      "hours": [
+        {"hour": 0, "count": 125, "level": "high"},
+        {"hour": 1, "count": 110, "level": "high"},
+        {"hour": 2, "count": 70, "level": "medium"},
+        {"hour": 20, "count": 95, "level": "high"},
+        {"hour": 21, "count": 105, "level": "high"},
+        {"hour": 22, "count": 130, "level": "high"},
+        {"hour": 23, "count": 145, "level": "high"}
+      ]
+    },
+    {
+      "day": "Fri",
+      "total_events": 2500,
+      "hours": [
+        {"hour": 0, "count": 150, "level": "high"},
+        {"hour": 1, "count": 130, "level": "high"},
+        {"hour": 2, "count": 90, "level": "high"},
+        {"hour": 18, "count": 80, "level": "medium"},
+        {"hour": 19, "count": 120, "level": "high"},
+        {"hour": 20, "count": 150, "level": "high"},
+        {"hour": 21, "count": 180, "level": "high"},
+        {"hour": 22, "count": 200, "level": "high"},
+        {"hour": 23, "count": 210, "level": "high"}
+      ]
+    },
+    {
+      "day": "Sat",
+      "total_events": 3100,
+      "hours": [
+        {"hour": 0, "count": 220, "level": "high"},
+        {"hour": 1, "count": 180, "level": "high"},
+        {"hour": 2, "count": 120, "level": "high"},
+        {"hour": 18, "count": 150, "level": "high"},
+        {"hour": 19, "count": 200, "level": "high"},
+        {"hour": 20, "count": 250, "level": "high"},
+        {"hour": 21, "count": 280, "level": "high"},
+        {"hour": 22, "count": 300, "level": "high"},
+        {"hour": 23, "count": 320, "level": "high"}
+      ]
+    },
+    {
+      "day": "Sun",
+      "total_events": 3500,
+      "hours": [
+        {"hour": 0, "count": 310, "level": "high"},
+        {"hour": 1, "count": 250, "level": "high"},
+        {"hour": 2, "count": 180, "level": "high"},
+        {"hour": 18, "count": 160, "level": "high"},
+        {"hour": 19, "count": 210, "level": "high"},
+        {"hour": 20, "count": 260, "level": "high"},
+        {"hour": 21, "count": 290, "level": "high"},
+        {"hour": 22, "count": 310, "level": "high"},
+        {"hour": 23, "count": 330, "level": "high"}
+      ]
+    }
+  ],
+  "strategies": [
+    {
+      "type": "maintenance",
+      "priority": "CRITICAL",
+      "title": "Malfunction at Luy Ban Bich",
+      "message": "Camera Cam1 shows extreme anomaly (Z-Score: 3.8) and high night-time false positives (likely glare/noise).",
+      "action": "Schedule Tech Support Immediately"
+    },
+    {
+      "type": "deployment",
+      "priority": "HIGH",
+      "title": "Weekend Crowd Control",
+      "message": "Forecast indicates violence surge (350 events/day) this weekend, centered around Tan Phu Market and Dam Sen Park.",
+      "action": "Deploy Mobile Patrol Unit to Sector A"
+    },
+    {
+      "type": "deployment",
+      "priority": "MEDIUM",
+      "title": "Evening Patrol Shift",
+      "message": "Heatmap shows consistent high risk between 20:00 - 02:00 daily. Shift change recommended.",
+      "action": "Adjust Patrol Schedule"
+    }
+  ]
+}
