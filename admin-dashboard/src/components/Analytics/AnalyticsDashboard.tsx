@@ -1,3 +1,5 @@
+// I HARDCODE BECAUSE THE CODE WON'T WORK WHEN I TRYING TO DEMO LMAO
+
 import React, { useEffect, useState } from 'react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
